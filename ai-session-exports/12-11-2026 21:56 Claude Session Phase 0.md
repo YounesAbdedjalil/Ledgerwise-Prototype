@@ -1,245 +1,480 @@
-Claude
-Build passes, but the CSS warning needs fixing
+You are my senior full-stack engineer and product builder. Help me build a working “AI Sales Assistant” platform for Ledgerwise, a bookkeeping company, within 72 hours.
+ 
+Your job is to guide me step by step, write production-quality code, explain decisions in plain English, and never invent facts, integrations, data, or completed features.
+ 
+## Project context
+ 
+Ledgerwise is a bookkeeping company. Its sales team needs a web platform where they can:
+ 
+1. Find at least 30 real US e-commerce companies that fit Ledgerwise’s customer profile.
+2. Score and qualify those companies, with clear reasons and real source links.
+3. Generate short personalized first-email drafts for qualified companies.
+4. Reply to prospect messages while following strict rules.
+5. Book calls using real available calendar slots.
+ 
+The sales team must remain in control:
+- They must be able to view companies, scores, reasons, and sources.
+- They must approve, edit, or reject email drafts before anything is sent.
+- They must be able to read conversations and take over any thread.
+- They must see booked calls.
+ 
+## Non-negotiable rules
+ 
+The AI must never:
+- Quote a price or make pricing promises.
+- Invent company facts, revenue, employee counts, funding, contact details, or claims.
+- Continue contacting someone after they say “stop,” “unsubscribe,” “not interested,” or similar.
+- Pretend to be human; if asked whether it is a bot, it must honestly disclose that it is an AI assistant.
+- Handle uncertain, sensitive, legal, pricing, or unusual requests autonomously; it must escalate them to a human.
+ 
+Implement these rules as application-level guardrails, not only as prompt instructions.
+ 
+## Technology decisions
+ 
+Use this stack unless you identify a materially better simple alternative:
+ 
+- Frontend and backend: Next.js App Router.
+- Database and authentication: Supabase, with email/password login.
+- Hosting: Vercel.
+- Code repository: GitHub.
+- Calendar: Cal.com.
+- AI model: Use the most suitable available model/API for research, drafting, classification, and reply handling.
+- Email: Start with an approval queue. Only implement real sending if I provide verified API credentials and explicitly approve it. Otherwise label it clearly as “Simulated send — demo path.”
+ 
+Do not use complex infrastructure. Optimize for a working, explainable, testable product.
+ 
+## Required product screens
+ 
+Build these four main screens:
+ 
+1. **Prospects**
+   - List of companies.
+   - Company name, website, category, score, qualification status.
+   - Company detail page with score breakdown, qualification reasons, source links, contact information, and research notes.
+ 
+2. **Email review**
+   - AI-generated email drafts.
+   - Show the source facts beside the draft.
+   - Let the salesperson edit, approve, reject, or request a revision.
+   - Show status: Draft, Needs review, Approved, Rejected, Sent/Simulated send.
+   - Maintain an audit trail.
+ 
+3. **Conversations**
+   - Inbox/thread view.
+   - Show prospect messages, AI-drafted replies, and human replies.
+   - Allow the salesperson to take over a thread.
 
-The routes list shows every page built, so the Cache Components fix worked. The build exits cleanly.
 
-The new warning matters, though: Unknown at rule: @theme means Tailwind v4 isn’t being processed. Your pages will render, but the Tailwind classes I wrote (bg-blue-600, flex, w-56 and so on) probably won’t apply, so the login page and sidebar would look unstyled. Check this before deploying: run npm run dev and see whether the login page looks like a styled card or plain HTML.
-Likely cause
+Ledgerwise AI Sales Assistant: Phase 0 kickoff
 
-Tailwind v4 needs postcss.config.mjs with the @tailwindcss/postcss plugin, and the packages installed. Check:
-bash
-
-ls postcss.config.mjs
-cat postcss.config.mjs
-npm ls tailwindcss @tailwindcss/postcss
-
-A working setup looks like this:
-js
-
-const config = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-
-export default config;
-
-Fix if it’s missing or wrong
-bash
-
-npm install -D tailwindcss @tailwindcss/postcss
-cat > postcss.config.mjs <<'EOF'
-const config = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-
-export default config;
-EOF
-npm run build
-
-The warning should disappear. Also confirm app/globals.css starts with @import "tailwindcss"; as its first line.
-
-If the warning persists, paste me the output of the three diagnostic commands plus the first 10 lines of app/globals.css, and I’ll go from there.
-Then deploy
-bash
-
-git add -A
-git commit -m "Fix build: disable Cache Components, fix Tailwind config"
-git push
-
-Vercel redeploys automatically. Then run through the gate checklist and tell me which items pass or fail:
-
-    Live URL loads a styled login page
-    Login works with your Supabase user
-    Logged-out visits to /prospects redirect to login
-    Sidebar, four pages and logout work
-    Repo is public
-
-If the live site works, we’ll do the middleware → proxy rename next. It’s a single codemod command, and I’d rather do it while the deploy is green than leave a deprecation warning in the submitted repo.
-
-┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
-└─$ npm run build
-
-    ledgerwise-prototype@0.1.0 build
-    next build
-
-▲ Next.js 16.4.6 (Turbopack)
-- Environments: .env.local
-✓ Running next.config.ts took 23ms
-
-⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
-
-  To migrate automatically, run:
-  npx @next/codemod@canary middleware-to-proxy .
-
-  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
-  Creating an optimized production build ...
-✓ Compiled successfully in 600ms
-  Running TypeScript ...
-  Finished TypeScript in 1325ms ...
-  Collecting page data using 7 workers ...
-✓ Collecting page data using 7 workers in 809ms
-  Generating static pages using 7 workers (0/10) ...
-  Generating static pages using 7 workers (2/10) 
-  Generating static pages using 7 workers (4/10) 
-  Generating static pages using 7 workers (7/10) 
-✓ Generating static pages using 7 workers (10/10) in 282ms
-  Finalizing page optimization ...
-✓ Finalizing page optimization in 18ms
-
-Route (app)
-┌ ○ /
-├ ○ /_not-found
-├ ƒ /auth/signout
-├ ƒ /calendar
-├ ƒ /conversations
-├ ƒ /emails
-├ ○ /login
-└ ƒ /prospects
-
-ƒ Proxy (Middleware)
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
-OK done
-Clean build
-
-The CSS warning is gone, so Tailwind is now being processed. The only message left is the middleware deprecation, which we’ll handle after the deploy is confirmed.
+Let’s do this in small, testable steps. I’ll start with the five questions, then give you actions you can begin right away so no time is lost.
 Status board
 Status	Item
-Completed	Local build passes with no errors or CSS warnings
-In progress	Push, Vercel deploy, gate check
-Blocked	Nothing
-Next action	Commit, push, and test the live URL
-Do now
-bash
+Completed	Nothing yet
+In progress	Phase 0 setup
+Blocked	Waiting on your answers below
+Next action	You answer the 5 questions; start account creation in parallel
+Questions (reply in one message)
 
-git add -A
-git commit -m "Fix build: disable Cache Components, fix Tailwind config"
-git push
+    Accounts: Do you already have GitHub, Vercel, Supabase, and Cal.com accounts? (Say which ones are missing.)
+    OS: Windows, macOS, or Linux?
+    Language: TypeScript or JavaScript? My recommendation is TypeScript. It catches many bugs before deploy, and I’ll write all the code so you won’t need to be fluent in it.
+    Credentials: Do you have any API keys (Anthropic, OpenAI, an email provider such as Resend or SendGrid, Cal.com)? If not, that’s fine. Email stays “Simulated send — demo path” until you provide verified credentials and explicitly approve real sending.
+    Names: Preferred project name and GitHub repo name? If you have no preference, I suggest ledgerwise-sales-assistant.
 
-Vercel redeploys automatically. In Vercel, open Deployments and wait for the new one to show Ready. If it fails, paste the log lines containing Error, not just the top of the log.
+Things to start now (no need to wait)
 
-Before testing the live site, confirm the two environment variables exist in Vercel under Settings → Environment Variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY. They are only baked in at build time, so if you add or change them now, trigger a redeploy.
-Gate checklist (test on the live URL, not localhost)
+A. Install the basics. Run node -v and git --version in a terminal. You need Node.js 20 or newer and Git. If either is missing, install Node LTS from nodejs.org and Git from git-scm.com.
 
-    Login page loads and looks styled (a white card on a gray background, not plain HTML)
-    Login works with your Supabase user
-    Visiting /prospects while logged out redirects to /login
-    Sidebar shows all four pages, and your email appears at the bottom
-    Log out returns you to the login page
-    GitHub repo is public (open it in a private/incognito window to verify)
-    ai-session-exports/ is in the repo with no secrets
+B. Create accounts that are missing.
 
-Tell me which items pass or fail. If login fails on the live site but works locally, the cause is almost always the environment variables, and the exact error message on the login page will tell us.
-After the gate passes
+    GitHub: github.com
+    Vercel: vercel.com. Choose “Continue with GitHub” so the two are linked.
+    Supabase: supabase.com, also via GitHub login
+    Cal.com: cal.com (used in Phase 5, but sign up now so you can configure availability early)
 
-    The middleware → proxy rename. One codemod command, which I’ll walk you through.
-    The one-page scope note for docs/SCOPE.md.
-    Supabase database schema. SQL for all 12 tables, with row-level security, so Phase 1 can start.
+C. Start the AI session export folder. Create this structure now, because the submission requires unedited exports of every meaningful AI interaction:
 
-Report back with the results.
+ai-session-exports/
+  README.md
+  2026-11-12_phase0_kickoff.md
 
-OK the gate checklist on the LIVE URL is working, all is set
-Now, What are the next steps ?
-Phase 0 wrap-up, then Phase 1 prep
+Paste this conversation, unedited, into that first file when we finish Phase 0. Don’t summarize or clean it up. I’ll remind you at the end of every phase.
+Decisions I’ve made (flag any you disagree with)
 
-Good. Before we call Phase 0 done, there are three small items left (about 15 minutes). Then we start building the data layer.
+    Stack: Next.js App Router + Supabase + Vercel + Cal.com, as specified. I see no materially better simple alternative.
+    AI model: I’ll build with the Anthropic API behind a single lib/ai.ts wrapper. Swapping providers later means changing one file. I’ll confirm the exact current model name against Anthropic’s docs before we write that code rather than guessing it.
+    Guardrails will be plain code that runs on every AI input and output, separate from any prompt. The prompt is only a second layer.
+    Email: approval queue first. No real sending without your verified credentials and explicit approval.
+    Research integrity: the AI can help structure and score research, but company facts must come from sources you or I actually retrieve and you verify. Anything unverified is stored as unknown. I can’t browse for you in this setup, so in Phase 1 you’ll collect URLs and evidence (I’ll give you a template), and I’ll help you structure, validate, and score them.
+
+What I’ll deliver once you answer
+
+    Exact commands to create the repo and scaffold Next.js
+    Supabase project setup: where to click, which keys to copy, and the SQL for the users, audit_logs and other tables (Phase 0 only needs auth, but I’ll lay out the full schema next)
+    .env.local template and Vercel environment variable steps
+    Complete code for: login page, protected dashboard layout, four empty pages (Prospects, Emails, Conversations, Calendar), navigation, and logout
+    Deployment steps and a gate checklist: live URL, working login, public repo, and a one-page scope note (I’ll draft that for you)
+
+Send your answers and we’ll go straight into the commands.
+
+1.I have GitHub, but no Vercel, Supabase and Cal.com
+2.OS: I am using Linux, Kali Linux
+3.Language: I will go with TypeScript
+4.Nah sadly, I have no API keys
+5.I would use Ledgerwise-Prototype as a name
+
+I will create the required accounts in a jeffy (Vercel, Supabase, and Cal.com)
+
+And good call, I will also create the AI session export folder
+Phase 0: Setup for Ledgerwise-Prototype
+
+Linux and TypeScript are both fine. No API keys is OK for now. Phase 0 needs none, but I’ll tell you when each one becomes necessary.
 Status board
 Status	Item
-Completed	Live URL, login, protected dashboard, four empty pages, logout, public repo
-In progress	Phase 0 cleanup: proxy rename, scope note, session export
-Blocked	Nothing
-Next action	Step 1 below
-Step 1: Rename middleware to proxy
+Completed	Questions answered
+In progress	Phase 0: accounts, repo, skeleton
+Blocked	Vercel, Supabase and Cal.com accounts (you’re creating them)
+Next action	Steps 1 to 3 below. Do them while your accounts are being created.
+One naming change
 
-Next 16 renamed the convention. Run the codemod, then check what it changed:
+npm doesn’t allow capital letters in package names, and create-next-app will reject Ledgerwise-Prototype. I suggest using ledgerwise-prototype (lowercase) for both the GitHub repo and the folder. The product name in the UI can still be “Ledgerwise Prototype”.
+Step 1: Install Node and Git (Kali)
 bash
 
-npx @next/codemod@canary middleware-to-proxy .
-git status
-git diff
-npm run build
+sudo apt update && sudo apt install -y git curl
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+source ~/.bashrc    # use ~/.zshrc if you're on zsh (Kali's default shell is zsh)
+nvm install --lts
+node -v   # should print v20 or higher
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
 
-You should see middleware.ts become proxy.ts, with the exported function renamed to proxy. The build should now print no deprecation warning. If anything looks different, paste the output to me.
-Step 2: Scope note
+Step 2: Create the GitHub repo
 
-Create docs/SCOPE.md. The “Not built yet” list is deliberately honest, and I’ll update it as features land.
+    Go to github.com/new.
+    Name it ledgerwise-prototype and set it to Public.
+    Do not tick “Add a README”, .gitignore or license, so the repo starts empty.
+    Copy the repo URL. For pushing, HTTPS needs a personal access token (GitHub → Settings → Developer settings → Tokens). Alternatively, set up an SSH key.
+
+Step 3: Scaffold the app
 bash
 
-cat > docs/SCOPE.md <<'EOF'
-# Ledgerwise Prototype: Scope Note
+cd ~
+npx create-next-app@latest ledgerwise-prototype --ts --tailwind --eslint --app --no-src-dir --import-alias "@/*" --use-npm
+cd ledgerwise-prototype
+npm install @supabase/supabase-js @supabase/ssr
+mkdir -p ai-session-exports docs
+git remote add origin https://github.com/YOUR_USERNAME/ledgerwise-prototype.git
+git branch -M main
+git push -u origin main
 
-## Goal
-An AI sales assistant for Ledgerwise's sales team: find and qualify US e-commerce
-prospects, draft first emails, handle replies under strict rules, and book calls.
-The sales team stays in control at every step.
+Accept defaults for any extra prompts. Move your ai-session-exports folder into the project, or recreate it there so it’s versioned in the public repo. Before committing exports, check that they contain no API keys or passwords.
+Step 4: Supabase project (after your account exists)
 
-## Stack
-Next.js (App Router, TypeScript), Supabase (auth + Postgres), Vercel, Cal.com.
+    Click New project. Name it ledgerwise-prototype, set a strong database password and save it in a password manager, and pick a region near you.
+    Wait about 2 minutes for provisioning.
+    Go to Project Settings → API and copy the Project URL and the anon / publishable key. Never use the service_role key in frontend code.
+    Go to Authentication → Sign In / Providers → Email. Turn Confirm email off for the demo, which avoids needing an email provider. Also disable new signups, since this is an internal sales tool and you should control who gets access.
+    Go to Authentication → Users → Add user → Create new user. Enter your email and password and tick Auto Confirm User. This is your login.
 
-## Hard rules (enforced in application code, not only in prompts)
-- Never quote prices or make pricing promises
-- Never invent company facts; unverified facts are stored as "unknown"
-- Never contact anyone after an opt-out; suppression is permanent
-- Always disclose being an AI when asked
-- Escalate anything uncertain, sensitive, legal, or unusual to a human
+Create .env.local in the project root. It’s already gitignored.
 
-## Screens
-1. Prospects (list + company detail with sources)
-2. Email review (approve / edit / reject, audit trail)
-3. Conversations (threads, takeover, opt-out suppression)
-4. Calendar / Bookings (Cal.com)
+NEXT_PUBLIC_SUPABASE_URL=https://YOURPROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-or-publishable-key
 
-## Current status
-- Built: login, protected dashboard shell, four empty pages, deployment
-- Not built yet: database schema, research data, scoring, email drafts,
-  reply handling, guardrails, Cal.com integration
+Step 5: The skeleton code
 
-## Email sending
-Approval queue only. Any send is labeled "Simulated send: demo path"
-unless verified provider credentials are supplied and explicitly approved.
+Run this one block from the project root. It creates every file.
+bash
 
-## Research integrity
-Every company fact needs a source URL, title, retrieval date and evidence.
-Unverifiable facts are marked "unknown".
+mkdir -p lib/supabase "app/login" "app/auth/signout" "app/(dashboard)/prospects" "app/(dashboard)/emails" "app/(dashboard)/conversations" "app/(dashboard)/calendar" components
+
+cat > lib/supabase/client.ts <<'EOF'
+import { createBrowserClient } from "@supabase/ssr";
+
+export function createClient() {
+  return createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 EOF
 
-Step 3: Save this session’s export
+cat > lib/supabase/server.ts <<'EOF'
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
-Paste this full conversation, unedited, into ai-session-exports/2026-11-12_phase0_setup.md. Check it for secrets first (Supabase keys, passwords). Then:
+export async function createClient() {
+  const cookieStore = await cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(list) {
+          try {
+            list.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Called from a Server Component; the middleware refreshes sessions.
+          }
+        },
+      },
+    }
+  );
+}
+EOF
+
+cat > middleware.ts <<'EOF'
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(list) {
+          list.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          list.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+
+  if (!user && path !== "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+  if (user && path === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/prospects";
+    return NextResponse.redirect(url);
+  }
+  return response;
+}
+
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
+EOF
+
+cat > app/page.tsx <<'EOF'
+import { redirect } from "next/navigation";
+
+export default function Home() {
+  redirect("/prospects");
+}
+EOF
+
+cat > app/login/page.tsx <<'EOF'
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+    router.push("/prospects");
+    router.refresh();
+  }
+
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-sm bg-white p-8 rounded-lg shadow space-y-4"
+      >
+        <h1 className="text-2xl font-semibold">Ledgerwise Prototype</h1>
+        <p className="text-sm text-gray-500">Sign in to the sales assistant.</p>
+        <input
+          type="email"
+          required
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border rounded px-3 py-2"
+        />
+        <input
+          type="password"
+          required
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full border rounded px-3 py-2"
+        />
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-blue-600 text-white rounded py-2 disabled:opacity-50"
+        >
+          {loading ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+    </main>
+  );
+}
+EOF
+
+cat > app/auth/signout/route.ts <<'EOF'
+import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+}
+EOF
+
+cat > components/NavLink.tsx <<'EOF'
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+export default function NavLink({ href, label }: { href: string; label: string }) {
+  const active = usePathname().startsWith(href);
+  return (
+    <Link
+      href={href}
+      className={`block rounded px-3 py-2 text-sm ${
+        active ? "bg-blue-100 text-blue-800 font-medium" : "text-gray-700 hover:bg-gray-100"
+      }`}
+    >
+      {label}
+    </Link>
+  );
+}
+EOF
+
+cat > "app/(dashboard)/layout.tsx" <<'EOF'
+import { createClient } from "@/lib/supabase/server";
+import NavLink from "@/components/NavLink";
+
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return (
+    <div className="min-h-screen flex">
+      <aside className="w-56 border-r bg-white p-4 flex flex-col">
+        <div className="font-semibold mb-6">Ledgerwise Prototype</div>
+        <nav className="space-y-1 flex-1">
+          <NavLink href="/prospects" label="Prospects" />
+          <NavLink href="/emails" label="Email review" />
+          <NavLink href="/conversations" label="Conversations" />
+          <NavLink href="/calendar" label="Calendar / Bookings" />
+        </nav>
+        <div className="text-xs text-gray-500 mb-2 break-all">{user?.email}</div>
+        <form action="/auth/signout" method="post">
+          <button className="w-full border rounded px-3 py-2 text-sm hover:bg-gray-50">
+            Log out
+          </button>
+        </form>
+      </aside>
+      <main className="flex-1 p-8 bg-gray-50">{children}</main>
+    </div>
+  );
+}
+EOF
+
+make_page () {
+  cat > "app/(dashboard)/$1/page.tsx" <<EOF
+export default function Page() {
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold mb-2">$2</h1>
+      <p className="text-gray-500">Nothing here yet. This screen is built in a later phase.</p>
+    </div>
+  );
+}
+EOF
+}
+make_page prospects "Prospects"
+make_page emails "Email review"
+make_page conversations "Conversations"
+make_page calendar "Calendar / Bookings"
+
+Test locally:
+bash
+
+npm run dev
+
+Open http://localhost:3000. You should be redirected to /login. Sign in with the user you created and confirm you see the sidebar and the four empty pages. Then confirm Log out returns you to the login page, and that visiting /prospects while logged out redirects to login.
+
+Version note: if npm run dev warns that middleware is deprecated (newer Next.js versions renamed it to proxy), tell me the exact message and I’ll give you the one-line rename. Don’t guess.
+Step 6: Commit, then deploy on Vercel
 bash
 
 git add -A
-git commit -m "Phase 0 complete: proxy rename, scope note, session export"
+git commit -m "Phase 0: auth skeleton with protected dashboard"
 git push
 
-Confirm the Vercel deploy is still green and login still works. That closes the Phase 0 gate.
-What comes next: Phase 1
+    In Vercel, click Add New → Project, import ledgerwise-prototype, and leave the framework preset on Next.js.
+    Open Environment Variables and add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY with the same values as .env.local.
+    Click Deploy. You get a URL like ledgerwise-prototype.vercel.app.
+    Log in on the live URL.
 
-Phase 1 has two halves. I can do the first half now, and you do the second.
+Gate checklist
 
-My half: database schema. I’ll give you SQL for all 12 tables, to paste into Supabase’s SQL Editor. It includes row-level security so only logged-in users can read or write, and constraints that enforce your integrity rules at the database level (for example, a company fact can’t be saved without a source URL and retrieval date).
+    Live URL loads the login page
+    Login works with your Supabase user
+    Dashboard is protected, and logged-out visits redirect to login
+    Four empty pages, navigation and logout work
+    Public GitHub repo has the code
+    ai-session-exports/ exists in the repo, with no secrets in it
+    One-page scope note (I’ll draft it once the rest is confirmed)
 
-Your half: the research. This is the part I can’t do for you. I can’t browse the web here, and inventing companies would break the core rule of the project. You’ll find real US e-commerce companies and record evidence for each one. To make it fast, I’ll give you:
+Coming up
 
-    An ideal customer profile (ICP) draft for Ledgerwise to approve or adjust
-    A research template (a CSV) with one row per fact: company, website, claim, source URL, source title, date retrieved, evidence quote
-    Sourcing tips for finding candidates quickly: public e-commerce directories, “fastest-growing” lists, Shopify and BigCommerce store showcases, and press coverage of funding rounds
-    An import page in the app that validates the CSV and rejects rows missing sources
+Phase 1 needs an AI API key if you want the AI to help structure and score research. Anthropic’s console (console.anthropic.com) requires adding credits. Decide whether you want to do that. If not, I can build the pipeline so it works with manual research entry and rule-based scoring, and add AI later. Phase 5 needs a Cal.com API key (free to create).
 
-Research gets the most hours, so I suggest you start it as soon as the template exists, while I build the scoring and Prospects UI in parallel.
-One decision I need from you now
-
-Do you want to add AI credits (Anthropic console, usually a $5 minimum) so the AI can draft emails and classify replies from Phase 3 onward? If not, I’ll build those parts with a clearly labeled mock model so the whole flow still works. The guardrails are plain code and don’t need an API key either way.
-
-Reply with the results of Steps 1 to 3 and your answer on AI credits, and I’ll send the schema SQL and the ICP draft next.
-
-No, I do not want to add AI credits.
-All is set with Phase 0 ? shall we proceed to Phase 1 ?
+Tell me which steps pass or fail, and paste the exact error text for any failure. Don’t paraphrase it.
 Writing the schema tables and the audit setup
 Almost: I need your confirmation on Steps 1 to 3
 
@@ -658,8 +893,3 @@ Next, once these are confirmed
 I’ll send the CSV import page, which rejects any row missing a source, followed by the scoring model with criteria and weights for you to approve. You can start collecting research with docs/research-template.csv right away. Even 5 companies with 3 facts each will let us test the import end to end.
 
 Reply with the export result, the live check, the SQL result, and your ICP decision.
-Claude works directly with your codebase
-
-
-Claude is AI and can make mistakes. Please double-check responses.
-Claude finished the response
