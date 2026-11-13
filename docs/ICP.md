@@ -28,6 +28,7 @@ Founder, COO, or whoever runs finance.
 |---|---|
 | `us_ecommerce` | Evidence of a US storefront, US shipping, or US pricing |
 | `category` | What the company sells |
+| `size_fit` | A sourced statement that the company is inside the band ($1M-$10M revenue, 5-50 employees). Quote the figure the source gives. |
 | `growth_signal` | Finance/accounting/ops hiring, funding, or a new channel |
 | `pain_signal` | A sourced sign of bookkeeping or finance-ops strain |
 | `disqualifier` | Sourced evidence the company is excluded (see above) |
@@ -38,4 +39,4 @@ Founder, COO, or whoever runs finance.
   They are the negative test set for scoring.
 - Every row needs a source URL, title, retrieval date and evidence.
 - A fact that can't be verified is left out and shows as "unknown".
-- Size is recorded only when a source states it. Out-of-band size is a `disqualifier`.
+- Size is recorded only when a source states it. In-band evidence is `size_fit`; out-of-band evidence is a `disqualifier`.

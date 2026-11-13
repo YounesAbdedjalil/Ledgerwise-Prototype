@@ -1,0 +1,11 @@
+company_name,website,claim_type,claim,source_url,source_title,retrieved_at,evidence
+ZZ TEST Alpha,zz-alpha.example,us_ecommerce,Ships to US customers,https://example.com/shipping,Shipping policy,2026-11-12,Fixture row for import test only
+ZZ TEST Alpha,zz-alpha.example,category,Home goods,https://example.com/about,About page,2026-11-12,Fixture row for import test only
+ZZ TEST Alpha,zz-alpha.example,size_fit,About 4M revenue and 12 staff,https://example.com/press,Press article,2026-11-12,Fixture row for import test only
+ZZ TEST Alpha,zz-alpha.example,growth_signal,Hiring a bookkeeper,https://example.com/careers,Careers page,2026-11-12,Fixture row for import test only
+ZZ TEST Alpha,zz-alpha.example,pain_signal,Sells on several channels,https://example.com/stores,Where to buy,2026-11-12,Fixture row for import test only
+ZZ TEST Alpha,zz-alpha.example,contact,Jane Doe | Founder,https://example.com/team,Team page,2026-11-12,Fixture row for import test only
+ZZ TEST Beta,zz-beta.example,disqualifier,Outside revenue band,https://example.com/press,Press article,2026-11-12,Fixture row for import test only
+ZZ TEST Gamma,zz-gamma.example,us_ecommerce,Ships to US customers,https://example.com/shipping,Shipping policy,2026-11-12,Fixture row for import test only
+ZZ TEST Gamma,zz-gamma.example,disqualifier,Marketplace-only with no own site,https://example.com/store,Store page,2026-11-12,Fixture row for import test only
+ZZ TEST Delta,zz-delta.example,size,5-50 employees,https://example.com/about,About page,2026-11-12,Fixture row for import test only
