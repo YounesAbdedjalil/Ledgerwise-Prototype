@@ -73,7 +73,12 @@ export function validateRow(raw: RawRow): RowResult {
 
   const retrieved_at = get("retrieved_at");
   const today = new Date().toISOString().slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(retrieved_at) || isNaN(Date.parse(retrieved_at))) {
+  const retrievedDate = new Date(`${retrieved_at}T00:00:00Z`);
+  const realDate =
+    /^\d{4}-\d{2}-\d{2}$/.test(retrieved_at) &&
+    !isNaN(retrievedDate.getTime()) &&
+    retrievedDate.toISOString().slice(0, 10) === retrieved_at;
+  if (!realDate) {
     errors.push("retrieved_at must be a real date as YYYY-MM-DD");
   } else if (retrieved_at > today) {
     errors.push("retrieved_at cannot be in the future");

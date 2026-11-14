@@ -8,6 +8,9 @@ export type SourceRow = {
   source_title: string;
   retrieved_at: string;
   evidence: string;
+  verification_status?: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
 };
 
 export type CriterionResult = {

@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
 import ScoreBreakdown, { SourceItem } from "@/components/ScoreBreakdown";
+import SourceReviewTable, {
+  type SourceReviewRow,
+} from "@/components/prospects/SourceReviewTable";
 
 export default async function CompanyPage({
   params,
@@ -21,7 +24,9 @@ export default async function CompanyPage({
 
   const { data } = await supabase
     .from("company_sources")
-    .select("id,claim,claim_type,source_url,source_title,retrieved_at,evidence")
+    .select(
+      "id,company_id,claim,claim_type,source_url,source_title,retrieved_at,evidence,verification_status,imported_by,reviewed_by,reviewed_at,verification_note,created_at"
+    )
     .eq("company_id", id)
     .order("retrieved_at", { ascending: false });
 
@@ -68,6 +73,26 @@ export default async function CompanyPage({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Score breakdown</h2>
         <ScoreBreakdown score={score} />
+      </section>
+
+      <section className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Source verification</h2>
+          <Link
+            href={`/prospects/review?company=${company.id}`}
+            className="text-sm text-blue-700 underline"
+          >
+            Open review queue for this company
+          </Link>
+        </div>
+        <p className="text-sm text-gray-600">
+          Imported sources start as pending review. Only sources a human has
+          explicitly verified can support email personalization.
+        </p>
+        <SourceReviewTable
+          rows={sources as unknown as SourceReviewRow[]}
+          showCompany={false}
+        />
       </section>
 
       {categorySources.length > 0 && (

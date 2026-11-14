@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { newImportFields } from "@/lib/sources/verification";
 import { validateRow, type RawRow, type ValidRow } from "@/lib/import-schema";
 
 export type ImportResult = {
@@ -91,7 +92,7 @@ export async function importRows(rows: RawRow[]): Promise<ImportResult> {
         source_title: r.source_title,
         retrieved_at: r.retrieved_at,
         evidence: r.evidence,
-        verified_by: user.id,
+        ...newImportFields(user.id),
       }));
 
     if (toInsert.length > 0) {
@@ -130,6 +131,7 @@ export async function importRows(rows: RawRow[]): Promise<ImportResult> {
       rows_received: rows.length,
       companies_created: result.companiesCreated,
       sources_added: result.sourcesAdded,
+      sources_pending_review: result.sourcesAdded,
       duplicates_skipped: result.duplicatesSkipped,
       rows_rejected: result.rejected.length,
     },

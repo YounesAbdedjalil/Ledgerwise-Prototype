@@ -12,22 +12,37 @@ type Row = {
 
 export default async function ProspectsPage() {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("companies")
-    .select("id,name,website,category,qualification_status,company_sources(count)")
-    .order("name");
+  const [{ data, error }, pendingReview] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id,name,website,category,qualification_status,company_sources(count)")
+      .order("name"),
+    supabase
+      .from("company_sources")
+      .select("*", { count: "exact", head: true })
+      .eq("verification_status", "pending_review"),
+  ]);
   const companies = (data ?? []) as Row[];
+  const pendingCount = pendingReview.count ?? 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Prospects ({companies.length})</h1>
-        <Link
-          href="/prospects/import"
-          className="bg-blue-600 text-white rounded px-4 py-2 text-sm"
-        >
-          Import CSV
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/prospects/review"
+            className="rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900"
+          >
+            Review sources ({pendingCount})
+          </Link>
+          <Link
+            href="/prospects/import"
+            className="rounded bg-blue-600 px-4 py-2 text-sm text-white"
+          >
+            Import CSV
+          </Link>
+        </div>
       </div>
       {error && <p className="text-red-600 text-sm">{error.message}</p>}
       {companies.length === 0 ? (

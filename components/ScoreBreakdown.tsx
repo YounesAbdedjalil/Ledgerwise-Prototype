@@ -1,17 +1,29 @@
 import type { ScoreResult, SourceRow } from "@/lib/scoring/score";
+import { isHttpUrl } from "@/lib/validation";
+import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
 
 export function SourceItem({ s }: { s: SourceRow }) {
   return (
     <li className="text-xs text-gray-600">
-      <a
-        href={s.source_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-blue-700 underline"
-      >
-        {s.source_title}
-      </a>{" "}
+      {isHttpUrl(s.source_url) ? (
+        <a
+          href={s.source_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-700 underline"
+        >
+          {s.source_title}
+        </a>
+      ) : (
+        <span className="text-red-700">{s.source_title || "Invalid source URL"}</span>
+      )}{" "}
       · retrieved {s.retrieved_at}
+      {s.verification_status && (
+        <>
+          {" "}
+          <SourceStatusBadge status={s.verification_status} />
+        </>
+      )}
       <div>Evidence: {s.evidence}</div>
     </li>
   );

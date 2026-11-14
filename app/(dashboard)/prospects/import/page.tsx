@@ -50,6 +50,11 @@ export default function ImportPage() {
           One row per sourced fact. Rows missing a source URL, title, date or evidence are
           rejected. Nothing is guessed or filled in for you.
         </p>
+        <p className="mt-2 rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Imported sources start as <b>pending review</b>. Importing checks the row
+          structure only. A human must review the source URL, claim, and evidence
+          before a source can support an email.
+        </p>
       </div>
 
       <input

@@ -44,6 +44,12 @@ test("disqualifier rows still need a source", () => {
   assert.equal(r.ok, false);
 });
 
+test("retrieved_at must be a real calendar date", () => {
+  assert.equal(validateRow(row({ retrieved_at: "2026-02-31" })).ok, false);
+  assert.equal(validateRow(row({ retrieved_at: "2026-13-01" })).ok, false);
+  assert.equal(validateRow(row({ retrieved_at: "2026-02-28" })).ok, true);
+});
+
 test("contact must be Name | Role", () => {
   assert.equal(validateRow(row({ claim_type: "contact", claim: "Jane Doe" })).ok, false);
 });

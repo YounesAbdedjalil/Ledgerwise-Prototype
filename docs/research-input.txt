@@ -1,0 +1,5 @@
+# One company per line:
+# Company Name | https://company-homepage.com | optional https://company-homepage.com/about
+#
+# Extra URLs must belong to the same website as the homepage.
+# Leave this file with comments only until we are ready for controlled research.
