@@ -15,7 +15,9 @@ export function SourceItem({ s }: { s: SourceRow }) {
           {s.source_title}
         </a>
       ) : (
-        <span className="text-red-700">{s.source_title || "Invalid source URL"}</span>
+        <span className="text-red-700">
+          {s.source_title || "Invalid source URL"}
+        </span>
       )}{" "}
       · retrieved {s.retrieved_at}
       {s.verification_status && (
@@ -35,14 +37,14 @@ export default function ScoreBreakdown({ score }: { score: ScoreResult }) {
       {score.disqualifiers.length > 0 && (
         <div className="border border-red-300 bg-red-50 rounded p-4 space-y-2">
           <p className="text-sm font-medium text-red-800">
-            Disqualifier evidence recorded. Review before any outreach.
+            Verified disqualifier evidence recorded. Review before any outreach.
           </p>
           <ul className="space-y-2">
-            {score.disqualifiers.map((s) => (
-              <li key={s.id} className="text-sm text-red-900">
-                {s.claim}
+            {score.disqualifiers.map((source) => (
+              <li key={source.id} className="text-sm text-red-900">
+                {source.claim}
                 <ul className="mt-1">
-                  <SourceItem s={s} />
+                  <SourceItem s={source} />
                 </ul>
               </li>
             ))}
@@ -50,46 +52,60 @@ export default function ScoreBreakdown({ score }: { score: ScoreResult }) {
         </div>
       )}
 
-      <div className="bg-white border rounded p-4 text-sm">
+      <div className="bg-white border rounded p-4 text-sm flex flex-wrap items-center justify-between gap-2">
         {score.total === null ? (
           <span className="text-gray-600">
-            Score not computed: weights are not set yet.
+            Score not computed: weights are incomplete.
           </span>
         ) : (
           <span>
             Score: <b>{score.total}</b> / {score.maxTotal}
           </span>
         )}
+        {score.provisional && (
+          <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+            Provisional — evidence incomplete
+          </span>
+        )}
+        {!score.provisional && (
+          <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+            All criteria supported
+          </span>
+        )}
       </div>
 
-      {score.criteria.map((r) => (
-        <div key={r.criterion.key} className="bg-white border rounded p-4 space-y-2">
+      {score.criteria.map((result) => (
+        <div
+          key={result.criterion.key}
+          className="bg-white border rounded p-4 space-y-2"
+        >
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="font-medium">{r.criterion.label}</h3>
-              <p className="text-xs text-gray-500">{r.criterion.measures}</p>
+              <h3 className="font-medium">{result.criterion.label}</h3>
+              <p className="text-xs text-gray-500">
+                {result.criterion.measures}
+              </p>
             </div>
             <div className="text-right text-xs shrink-0">
               <div>
-                Weight:{" "}
-                <b>{r.criterion.weight === null ? "not set" : r.criterion.weight}</b>
+                Weight: <b>{result.criterion.weight ?? "not set"}</b>
               </div>
               <div>
-                Points: <b>{r.points === null ? "n/a" : r.points}</b>
+                Points: <b>{result.points ?? "n/a"}</b>
               </div>
-              <div className={r.met ? "text-green-700" : "text-gray-500"}>
-                {r.met ? "Evidence found" : "Unknown"}
+              <div className={result.met ? "text-green-700" : "text-amber-700"}>
+                {result.met ? "Verified evidence" : "Unknown"}
               </div>
             </div>
           </div>
           <p className="text-sm">
             <span className="text-gray-500">Reason: </span>
-            {r.reason}
+            {result.reason}
           </p>
-          {r.sources.length > 0 && (
+          {result.sources.length > 0 && (
             <ul className="space-y-1 border-t pt-2">
-              {r.sources.map((s) => (
-                <SourceItem key={s.id} s={s} />
+              {result.sources.map((source) => (
+                <SourceItem key={source.id} s={source} />
               ))}
             </ul>
           )}

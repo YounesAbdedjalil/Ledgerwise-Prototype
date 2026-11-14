@@ -4,36 +4,31 @@ export type Criterion = {
   key: string;
   label: string;
   measures: string;
-  // Which claim_type of sourced rows counts as evidence for this criterion.
   claimType: Exclude<ClaimType, "disqualifier" | "category">;
-  // Positive whole number once supplied. null = not set yet.
   weight: number | null;
 };
 
-// WEIGHTS ARE INTENTIONALLY BLANK. Fill them in after reviewing the first
-// 5 companies on the Prospects page. Until every weight is set, no score
-// is computed.
 export const CRITERIA: Criterion[] = [
   {
     key: "us_ecommerce",
     label: "US e-commerce presence",
     measures: "Sells online to US customers (Shopify, Amazon, or own site)",
     claimType: "us_ecommerce",
-    weight: null,
+    weight: 30,
   },
   {
     key: "size_fit",
-    label: "Right size",
+    label: "Revenue and employee-size fit",
     measures: "Sourced evidence of $1M-$10M yearly revenue and 5-50 employees",
     claimType: "size_fit",
-    weight: null,
+    weight: 25,
   },
   {
     key: "contact_target",
     label: "Reachable decision-maker",
     measures: "Publicly listed founder, COO, or whoever runs finance",
     claimType: "contact",
-    weight: null,
+    weight: 15,
   },
   {
     key: "growth_signal",
@@ -41,13 +36,13 @@ export const CRITERIA: Criterion[] = [
     measures:
       "Finance/accounting/ops hiring, recent funding, or a new channel (wholesale, Amazon, retail, new countries)",
     claimType: "growth_signal",
-    weight: null,
+    weight: 15,
   },
   {
     key: "pain_signal",
     label: "Bookkeeping pain signal",
     measures: "Sourced evidence of bookkeeping or finance-operations strain",
     claimType: "pain_signal",
-    weight: null,
+    weight: 15,
   },
 ];
