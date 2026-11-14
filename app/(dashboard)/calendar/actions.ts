@@ -3,11 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
-import { writeAudit } from "@/lib/server/audit";
 import { isSuppressed } from "@/lib/suppression";
 import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
 import {
-  OCCUPYING_BOOKING_STATUSES,
   validateBookingInput,
   validateSlotInput,
 } from "@/lib/calendar/time";
@@ -108,30 +106,18 @@ async function recordGoogleSync(
   result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
   deleted = false
 ): Promise<void> {
-  if (result.status === "not_configured") return;
-  if (result.status === "synced") {
-    await supabase
-      .from("bookings")
-      .update(
-        deleted
-          ? {
-              google_event_id: null,
-              calendar_sync_status: "deleted",
-              calendar_synced_at: new Date().toISOString(),
-            }
-          : {
-              ...(result.eventId ? { google_event_id: result.eventId } : {}),
-              calendar_sync_status: "synced",
-              calendar_synced_at: new Date().toISOString(),
-            }
-      )
-      .eq("id", bookingId);
-    return;
-  }
-  await supabase
-    .from("bookings")
-    .update({ calendar_sync_status: "failed" })
-    .eq("id", bookingId);
+  const status =
+    result.status === "not_configured"
+      ? "not_configured"
+      : deleted && result.status === "synced"
+        ? "deleted"
+        : result.status;
+  const { error } = await supabase.rpc("record_google_calendar_sync", {
+    p_booking_id: bookingId,
+    p_status: status,
+    p_event_id: result.status === "synced" && !deleted ? result.eventId ?? null : null,
+  });
+  if (error) console.error("Calendar sync metadata could not be recorded:", error.message);
 }
 
 async function checkSuppressed(
@@ -157,33 +143,6 @@ async function checkSuppressed(
   }
 }
 
-async function checkSlotFree(
-  supabase: ServerSupabase,
-  slot: SlotRow,
-  ignoreBookingId?: string
-): Promise<{ ok: boolean; error?: string }> {
-  const { data: overlappingSlots, error: slotError } = await supabase
-    .from("calendar_slots")
-    .select("id")
-    .lt("start_time", slot.end_time)
-    .gt("end_time", slot.start_time);
-  if (slotError) return { ok: false, error: slotError.message };
-
-  const slotIds = Array.from(
-    new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
-  );
-  const { data, error } = await supabase
-    .from("bookings")
-    .select("id")
-    .in("slot_id", slotIds)
-    .in("status", [...OCCUPYING_BOOKING_STATUSES]);
-  if (error) return { ok: false, error: error.message };
-  const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
-  if (conflict) {
-    return { ok: false, error: "That time is already held by another booking." };
-  }
-  return { ok: true };
-}
 
 export async function createSlot(input: {
   startTime: string;
@@ -197,43 +156,21 @@ export async function createSlot(input: {
   const validation = validateSlotInput(input);
   if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
 
-  const { data, error } = await supabase
-    .from("calendar_slots")
-    .insert({
-      start_time: input.startTime,
-      end_time: input.endTime,
-      timezone: input.timezone,
-      source: "internal",
-      external_id: null,
-      is_available: true,
-      fetched_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  const { data, error } = await supabase.rpc("create_calendar_slot", {
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_timezone: input.timezone,
+  });
   if (error || !data) {
     return {
       ok: false,
-      error:
-        error?.message ??
-        "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+      error: error?.message ?? "The slot could not be created.",
     };
   }
-
-  await writeAudit(supabase, {
-    actorId: user.id,
-    action: "calendar_slot_created",
-    entityType: "calendar_slots",
-    entityId: data.id,
-    detail: {
-      start_time: input.startTime,
-      end_time: input.endTime,
-      timezone: input.timezone,
-      source: "internal",
-    },
-  });
+  const slotId = data as string;
 
   revalidateCalendar();
-  return { ok: true, slotId: data.id, message: "Internal slot created." };
+  return { ok: true, slotId, message: "Internal slot created." };
 }
 
 export async function deleteSlot(slotId: string): Promise<CalendarActionResult> {
@@ -245,36 +182,12 @@ export async function deleteSlot(slotId: string): Promise<CalendarActionResult> 
   const loaded = await loadSlot(supabase, slotId);
   if (!loaded.slot) return { ok: false, error: loaded.error };
 
-  const { data: active, error } = await supabase
-    .from("bookings")
-    .select("id")
-    .eq("slot_id", slotId)
-    .in("status", [...OCCUPYING_BOOKING_STATUSES])
-    .limit(1);
-  if (error) return { ok: false, error: error.message };
-  if ((active ?? []).length > 0) {
-    return {
-      ok: false,
-      error: "Cancel or reschedule the active booking before deleting this slot.",
-    };
-  }
-
-  const { error: deleteError } = await supabase
-    .from("calendar_slots")
-    .delete()
-    .eq("id", slotId);
+  const { data: deleted, error: deleteError } = await supabase.rpc(
+    "delete_calendar_slot",
+    { p_slot_id: slotId }
+  );
   if (deleteError) return { ok: false, error: deleteError.message };
-
-  await writeAudit(supabase, {
-    actorId: user.id,
-    action: "calendar_slot_deleted",
-    entityType: "calendar_slots",
-    entityId: slotId,
-    detail: {
-      start_time: loaded.slot.start_time,
-      end_time: loaded.slot.end_time,
-    },
-  });
+  if (!deleted) return { ok: false, error: "The slot could not be deleted." };
 
   revalidateCalendar();
   return { ok: true, slotId, message: "Slot deleted." };
@@ -292,43 +205,49 @@ export async function bookSlot(input: {
   const user = await getSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+  if (input.companyId && !isUuid(input.companyId)) {
+    return { ok: false, error: "Invalid company ID." };
+  }
+  if (input.conversationId && !isUuid(input.conversationId)) {
+    return { ok: false, error: "Invalid conversation ID." };
+  }
 
-  let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
-  const conversationId =
-    input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+  let companyId = input.companyId ?? null;
+  const conversationId = input.conversationId ?? null;
   let prospectName = input.prospectName;
   let prospectEmail = normalizeEmail(input.prospectEmail);
 
   if (conversationId) {
-    const { data: conversation } = await supabase
+    const { data: conversation, error: conversationError } = await supabase
       .from("conversations")
       .select("id,company_id,contact_email,status")
       .eq("id", conversationId)
       .maybeSingle();
+    if (conversationError) return { ok: false, error: conversationError.message };
     if (!conversation) return { ok: false, error: "Conversation not found." };
     if (conversation.status === "suppressed") {
-      return {
-        ok: false,
-        error: "This contact is suppressed. A booking cannot be created.",
-      };
+      return { ok: false, error: "This contact is suppressed. A booking cannot be created." };
+    }
+    if (companyId && companyId !== conversation.company_id) {
+      return { ok: false, error: "Company does not match the conversation." };
     }
     companyId = companyId ?? conversation.company_id;
     if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
   }
 
   if (companyId) {
-    const { data: company } = await supabase
+    const { data: company, error: companyError } = await supabase
       .from("companies")
       .select("name,contact_name,contact_email")
       .eq("id", companyId)
       .maybeSingle();
-    if (company) {
-      if (!prospectName.trim() && company.contact_name !== "unknown") {
-        prospectName = company.contact_name;
-      }
-      if (!prospectEmail && company.contact_email) {
-        prospectEmail = normalizeEmail(company.contact_email);
-      }
+    if (companyError) return { ok: false, error: companyError.message };
+    if (!company) return { ok: false, error: "Company not found." };
+    if (!prospectName.trim() && company.contact_name !== "unknown") {
+      prospectName = company.contact_name;
+    }
+    if (!prospectEmail && company.contact_email) {
+      prospectEmail = normalizeEmail(company.contact_email);
     }
   }
 
@@ -339,9 +258,7 @@ export async function bookSlot(input: {
   if (!suppression.ok) return { ok: false, error: suppression.error };
 
   const cleanProspectName = trimText(prospectName, 200);
-  if (!cleanProspectName) {
-    return { ok: false, error: "A prospect name is required." };
-  }
+  if (!cleanProspectName) return { ok: false, error: "A prospect name is required." };
 
   const validation = validateBookingInput({
     prospectName: cleanProspectName,
@@ -352,58 +269,25 @@ export async function bookSlot(input: {
 
   const loaded = await loadSlot(supabase, input.slotId);
   if (!loaded.slot) return { ok: false, error: loaded.error };
-  const { slot } = loaded;
-  if (!slot.is_available) {
-    return { ok: false, error: "That slot is marked unavailable." };
-  }
+  const slot = loaded.slot;
+  if (!slot.is_available) return { ok: false, error: "That slot is marked unavailable." };
   if (Date.parse(slot.end_time) <= Date.now()) {
     return { ok: false, error: "That slot is in the past." };
   }
 
-  const free = await checkSlotFree(supabase, slot);
-  if (!free.ok) return { ok: false, error: free.error };
-
-  const { data: inserted, error } = await supabase
-    .from("bookings")
-    .insert({
-      company_id: companyId,
-      conversation_id: conversationId,
-      slot_id: input.slotId,
-      prospect_name: cleanProspectName,
-      prospect_email: prospectEmail,
-      timezone: input.timezone,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (error || !inserted) {
-    if (error?.code === "23505") {
-      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
-    }
+  // The RPC repeats the critical checks under the shared database transaction lock.
+  const { data: createdBookingId, error } = await supabase.rpc("book_slot", {
+    p_slot_id: input.slotId,
+    p_company_id: companyId,
+    p_conversation_id: conversationId,
+    p_prospect_name: cleanProspectName,
+    p_prospect_email: prospectEmail,
+    p_timezone: input.timezone,
+  });
+  if (error || !createdBookingId) {
     return { ok: false, error: error?.message ?? "The booking could not be created." };
   }
-
-  if (conversationId) {
-    await supabase
-      .from("conversations")
-      .update({ status: "human_takeover", booking_request: false })
-      .eq("id", conversationId);
-  }
-
-  await writeAudit(supabase, {
-    actorId: user.id,
-    action: "booking_created",
-    entityType: "bookings",
-    entityId: inserted.id,
-    detail: {
-      slot_id: input.slotId,
-      company_id: companyId,
-      conversation_id: conversationId,
-      prospect_email: prospectEmail,
-      status: "pending",
-    },
-  });
+  const bookingId = createdBookingId as string;
 
   const google = await syncBookingToGoogle({
     summary: `Ledgerwise call: ${cleanProspectName}`,
@@ -417,14 +301,13 @@ export async function bookSlot(input: {
     endTime: slot.end_time,
     timezone: slot.timezone,
   });
-
-  await recordGoogleSync(supabase, inserted.id, google);
+  await recordGoogleSync(supabase, bookingId, google);
 
   revalidateCalendar();
-  revalidatePath(`/conversations/${conversationId ?? ""}`);
+  if (conversationId) revalidatePath(`/conversations/${conversationId}`);
   return {
     ok: true,
-    bookingId: inserted.id,
+    bookingId,
     slotId: input.slotId,
     message:
       google.status === "synced"
@@ -457,30 +340,19 @@ export async function confirmBooking(
     };
   }
 
-  const { data: updated, error } = await supabase
-    .from("bookings")
-    .update({ status: "confirmed" })
-    .eq("id", bookingId)
-    .eq("status", booking.status)
-    .select("id")
-    .maybeSingle();
+  const { data: updated, error } = await supabase.rpc("confirm_booking", {
+    p_booking_id: bookingId,
+  });
   if (error) return { ok: false, error: error.message };
-  if (!updated) {
-    return {
-      ok: false,
-      error: "The booking changed while you were confirming it. Refresh and try again.",
-    };
-  }
+  if (!updated) return { ok: false, error: "The booking could not be confirmed." };
 
   let syncNote = "";
-  let syncStatus = "not_attempted";
   if (!booking.google_event_id && booking.slot_id) {
     const loadedSlot = await loadSlot(supabase, booking.slot_id);
     if (loadedSlot.slot) {
       const google = await syncBookingToGoogle(
         bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
       );
-      syncStatus = google.status;
       await recordGoogleSync(supabase, bookingId, google);
       syncNote =
         google.status === "synced"
@@ -490,18 +362,6 @@ export async function confirmBooking(
             : "";
     }
   }
-
-  await writeAudit(supabase, {
-    actorId: user.id,
-    action: "booking_confirmed",
-    entityType: "bookings",
-    entityId: bookingId,
-    detail: {
-      previous_status: booking.status,
-      slot_id: booking.slot_id,
-      google_sync_status: booking.google_event_id ? "already_linked" : syncStatus,
-    },
-  });
 
   revalidateCalendar();
   return { ok: true, bookingId, message: `Booking confirmed.${syncNote}` };
@@ -530,29 +390,18 @@ export async function cancelBooking(
     return { ok: false, error: "This booking is already cancelled or rescheduled." };
   }
 
-  const { data: updated, error } = await supabase
-    .from("bookings")
-    .update({ status: "cancelled" })
-    .eq("id", bookingId)
-    .eq("status", booking.status)
-    .select("id")
-    .maybeSingle();
+  const { data: updated, error } = await supabase.rpc("cancel_booking", {
+    p_booking_id: bookingId,
+    p_reason: cleanReason,
+  });
   if (error) return { ok: false, error: error.message };
-  if (!updated) {
-    return {
-      ok: false,
-      error: "The booking changed while you were cancelling it. Refresh and try again.",
-    };
-  }
+  if (!updated) return { ok: false, error: "The booking could not be cancelled." };
 
   let syncNote = "";
   if (booking.google_event_id) {
     const google = await deleteGoogleEvent(booking.google_event_id);
     if (google.status === "not_configured") {
-      await supabase
-        .from("bookings")
-        .update({ calendar_sync_status: "failed" })
-        .eq("id", bookingId);
+      await recordGoogleSync(supabase, bookingId, { status: "failed" });
       syncNote =
         " The internal booking is cancelled, but the Google event could not be removed because sync is not operational.";
     } else {
@@ -563,19 +412,6 @@ export async function cancelBooking(
           : " The internal booking is cancelled, but Google Calendar deletion failed.";
     }
   }
-
-  await writeAudit(supabase, {
-    actorId: user.id,
-    action: "booking_cancelled",
-    entityType: "bookings",
-    entityId: bookingId,
-    detail: {
-      previous_status: booking.status,
-      slot_id: booking.slot_id,
-      reason: cleanReason,
-      google_event_id: booking.google_event_id,
-    },
-  });
 
   revalidateCalendar();
   return {
@@ -630,28 +466,13 @@ export async function rescheduleBooking(
     return { ok: false, error: "The new slot is in the past." };
   }
 
-  const free = await checkSlotFree(supabase, loadedSlot.slot, bookingId);
-  if (!free.ok) return { ok: false, error: free.error };
-
-  const { data: updated, error } = await supabase
-    .from("bookings")
-    .update({ slot_id: newSlotId, status: "pending" })
-    .eq("id", bookingId)
-    .eq("status", booking.status)
-    .select("id")
-    .maybeSingle();
-  if (error) {
-    if (error.code === "23505") {
-      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
-    }
-    return { ok: false, error: error.message };
-  }
-  if (!updated) {
-    return {
-      ok: false,
-      error: "The booking changed while you were rescheduling it. Refresh and try again.",
-    };
-  }
+  const { data: updated, error } = await supabase.rpc("reschedule_booking", {
+    p_booking_id: bookingId,
+    p_new_slot_id: newSlotId,
+    p_reason: cleanReason,
+  });
+  if (error) return { ok: false, error: error.message };
+  if (!updated) return { ok: false, error: "The booking could not be rescheduled." };
 
   const google = booking.google_event_id
     ? await updateGoogleEvent(
@@ -662,10 +483,7 @@ export async function rescheduleBooking(
         bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
       );
   if (google.status === "not_configured" && booking.google_event_id) {
-    await supabase
-      .from("bookings")
-      .update({ calendar_sync_status: "failed" })
-      .eq("id", bookingId);
+    await recordGoogleSync(supabase, bookingId, { status: "failed" });
   } else {
     await recordGoogleSync(supabase, bookingId, google);
   }
@@ -678,19 +496,7 @@ export async function rescheduleBooking(
           ? " The Google event was not updated because sync is not operational."
           : "";
 
-  await writeAudit(supabase, {
-    actorId: user.id,
-    action: "booking_rescheduled",
-    entityType: "bookings",
-    entityId: bookingId,
-    detail: {
-      old_slot_id: booking.slot_id,
-      new_slot_id: newSlotId,
-      previous_status: booking.status,
-      reason: cleanReason,
-      google_sync: google.status,
-    },
-  });
+
 
   revalidateCalendar();
   return {
