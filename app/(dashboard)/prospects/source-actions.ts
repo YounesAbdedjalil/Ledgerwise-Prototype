@@ -86,6 +86,46 @@ export async function verifySource(sourceId: string): Promise<SourceActionResult
     return { ok: false, error: "The source changed while you were reviewing it. Refresh and try again." };
   }
 
+  // Only approved evidence may populate company summary fields.
+  let summarySyncError: string | null = null;
+
+  const { data: company, error: companyReadError } = await supabase
+    .from("companies")
+    .select("id,category,growth_signal,contact_name,contact_role,contact_email")
+    .eq("id", source.company_id)
+    .maybeSingle();
+
+  if (companyReadError || !company) {
+    summarySyncError = companyReadError?.message ?? "Company not found.";
+  } else {
+    const summaryUpdate: Record<string, string> = {};
+
+    if (source.claim_type === "category" && company.category === "unknown") {
+      summaryUpdate.category = source.claim;
+    }
+
+    if (source.claim_type === "growth_signal" && company.growth_signal === "unknown") {
+      summaryUpdate.growth_signal = source.claim;
+    }
+
+    if (source.claim_type === "contact" && company.contact_name === "unknown") {
+      const [name, role, email] = source.claim.split("|").map((part) => part.trim());
+
+      if (name) summaryUpdate.contact_name = name;
+      if (role) summaryUpdate.contact_role = role;
+      if (email && !company.contact_email) summaryUpdate.contact_email = email;
+    }
+
+    if (Object.keys(summaryUpdate).length > 0) {
+      const { error: summaryUpdateError } = await supabase
+        .from("companies")
+        .update(summaryUpdate)
+        .eq("id", source.company_id);
+
+      if (summaryUpdateError) summarySyncError = summaryUpdateError.message;
+    }
+  }
+
   await writeAudit(supabase, {
     actorId: user.id,
     action: "source_verified",
@@ -94,6 +134,7 @@ export async function verifySource(sourceId: string): Promise<SourceActionResult
     detail: {
       company_id: source.company_id,
       previous_status: source.verification_status,
+      summary_sync_error: summarySyncError,
     },
   });
 

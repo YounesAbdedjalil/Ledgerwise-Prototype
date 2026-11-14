@@ -1,4 +1,5 @@
 import Link from "next/link";
+import DiscoverCompaniesButton from "@/components/DiscoverCompaniesButton";
 import { createClient } from "@/lib/supabase/server";
 import ScoreGenerationButton from "./ScoreGenerationButton";
 
@@ -84,6 +85,7 @@ export default async function ProspectsPage() {
           Prospects ({companies.length})
         </h1>
         <div className="flex flex-wrap items-center gap-2">
+          <DiscoverCompaniesButton />
           <Link
             href="/prospects/review"
             className="rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900"

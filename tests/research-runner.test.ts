@@ -222,3 +222,47 @@ test("runResearch rejects extra pages from another hostname", async () => {
   assert.equal(result.companies[0].pagesRead.length, 1);
   assert.match(result.companies[0].errors.join(" "), /same website/);
 });
+
+
+test("runResearch limits concurrent companies and preserves input order", async () => {
+  const entries: ResearchInputEntry[] = [
+    { companyName: "First", website: "https://first.example/", extraUrls: [] },
+    { companyName: "Second", website: "https://second.example/", extraUrls: [] },
+    { companyName: "Third", website: "https://third.example/", extraUrls: [] },
+    { companyName: "Fourth", website: "https://fourth.example/", extraUrls: [] },
+  ];
+
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+
+  const result = await runResearch(entries, {
+    concurrency: 2,
+    fetchPage: async (url) => {
+      activeFetches++;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+
+      try {
+        // Different completion times ensure results cannot rely on finish order.
+        const delay = url.includes("first") ? 30 : url.includes("second") ? 5 : 1;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        return {
+          url,
+          title: "Example",
+          text: "Example company website.",
+        };
+      } finally {
+        activeFetches--;
+      }
+    },
+    discoverLinks: () => [],
+    extract: async () => [],
+  });
+
+  assert.equal(maxActiveFetches, 2);
+  assert.deepEqual(
+    result.companies.map((company) => company.companyName),
+    ["First", "Second", "Third", "Fourth"],
+  );
+  assert.equal(result.companies.length, 4);
+});

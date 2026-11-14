@@ -19,7 +19,10 @@ const empty: ImportResult = {
   duplicatesSkipped: 0,
 };
 
-export async function importRows(rows: RawRow[]): Promise<ImportResult> {
+export async function importRows(
+  rows: RawRow[],
+  source: "csv" | "autonomous_discovery" = "csv",
+): Promise<ImportResult> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -104,30 +107,15 @@ export async function importRows(rows: RawRow[]): Promise<ImportResult> {
       result.sourcesAdded += toInsert.length;
     }
 
-    // Fill summary fields from sourced rows. Only overwrite values still "unknown".
-    const update: Record<string, string> = {};
-    if (groupRows.some((r) => r.claim_type === "us_ecommerce")) update.us_ecommerce = "verified";
-    const cat = groupRows.find((r) => r.claim_type === "category");
-    if (cat && company.category === "unknown") update.category = cat.claim;
-    const growth = groupRows.find((r) => r.claim_type === "growth_signal");
-    if (growth && company.growth_signal === "unknown") update.growth_signal = growth.claim;
-    const contact = groupRows.find((r) => r.claim_type === "contact");
-    if (contact && company.contact_name === "unknown") {
-      const [name, role, email] = contact.claim.split("|").map((p) => p.trim());
-      update.contact_name = name;
-      update.contact_role = role;
-      if (email && !company.contact_email) update.contact_email = email;
-    }
-    if (Object.keys(update).length > 0) {
-      await supabase.from("companies").update(update).eq("id", company.id);
-    }
+
   }
 
   await supabase.from("audit_logs").insert({
     actor_id: user.id,
-    action: "csv_import",
+    action: source === "autonomous_discovery" ? "company_discovery_completed" : "csv_import",
     entity_type: "company_sources",
     detail: {
+      import_source: source,
       rows_received: rows.length,
       companies_created: result.companiesCreated,
       sources_added: result.sourcesAdded,

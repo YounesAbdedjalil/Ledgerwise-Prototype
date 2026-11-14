@@ -46,6 +46,7 @@ type RunnerDeps = {
   ) => Promise<ProposedClaim[]>;
   discoverLinks?: (text: string, baseUrl: string, maxLinks?: number) => string[];
   now?: () => Date;
+  concurrency?: number;
 };
 
 function validateHttpUrl(value: string, lineNumber: number): URL {
@@ -125,10 +126,14 @@ export async function runResearch(
   const discoverLinks = deps.discoverLinks ?? discoverSameSiteLinks;
   const now = deps.now ?? (() => new Date());
 
-  const rows: ResearchOutputRow[] = [];
-  const companies: CompanyResearchReport[] = [];
+  const requestedConcurrency = Number.isFinite(deps.concurrency)
+    ? Math.floor(deps.concurrency!)
+    : 4;
+  const concurrency = Math.max(1, Math.min(8, requestedConcurrency));
 
-  for (const entry of entries) {
+  const researchCompany = async (
+    entry: ResearchInputEntry,
+  ): Promise<{ rows: ResearchOutputRow[]; report: CompanyResearchReport }> => {
     const report: CompanyResearchReport = {
       companyName: entry.companyName,
       website: entry.website,
@@ -186,16 +191,13 @@ export async function runResearch(
       ? discoverLinks(pages[0].text, entry.website, 3)
       : [];
 
-    const additionalUrls = [...entry.extraUrls, ...discovered];
-
-    for (const url of additionalUrls) {
-      await readPage(url);
-    }
+    // Fetch additional pages concurrently, after the homepage is available.
+    const additionalUrls = [...new Set([...entry.extraUrls, ...discovered])];
+    await Promise.all(additionalUrls.map(readPage));
 
     if (!pages.length) {
       report.errors.push("No pages could be read; extraction was skipped");
-      companies.push(report);
-      continue;
+      return { rows: [], report };
     }
 
     let proposals: ProposedClaim[];
@@ -209,8 +211,7 @@ export async function runResearch(
           error instanceof Error ? error.message : String(error)
         }`,
       );
-      companies.push(report);
-      continue;
+      return { rows: [], report };
     }
 
     const verification = verifyClaims(proposals, pages);
@@ -223,21 +224,42 @@ export async function runResearch(
       reason: item.reason,
     }));
 
-    for (const claim of verification.accepted) {
-      rows.push({
-        company_name: entry.companyName,
-        website: entry.website,
-        claim_type: claim.claim_type,
-        claim: claim.claim,
-        source_url: claim.source_url,
-        source_title: claim.source_title,
-        retrieved_at: retrievedAt,
-        evidence: claim.evidence,
-      });
+    const rows = verification.accepted.map((claim) => ({
+      company_name: entry.companyName,
+      website: entry.website,
+      claim_type: claim.claim_type,
+      claim: claim.claim,
+      source_url: claim.source_url,
+      source_title: claim.source_title,
+      retrieved_at: retrievedAt,
+      evidence: claim.evidence,
+    }));
+
+    return { rows, report };
+  };
+
+  // A bounded worker pool prevents one slow company from blocking all others.
+  // Store by input index so returned reports and rows remain deterministic.
+  const results: Array<{
+    rows: ResearchOutputRow[];
+    report: CompanyResearchReport;
+  } | undefined> = new Array(entries.length);
+
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= entries.length) return;
+      results[index] = await researchCompany(entries[index]);
     }
+  };
 
-    companies.push(report);
-  }
+  const workerCount = Math.min(concurrency, entries.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-  return { rows, companies };
+  return {
+    rows: results.flatMap((result) => result?.rows ?? []),
+    companies: results.flatMap((result) => result ? [result.report] : []),
+  };
 }
