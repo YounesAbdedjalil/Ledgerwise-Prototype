@@ -124,16 +124,36 @@ function parseExtraction(text: string): ExtractionResponse {
   return { claims };
 }
 
+export type ExtractOptions = {
+  generate?: Generate;
+  /**
+   * Autonomous discovery only: read at most this many chunks (9k characters
+   * each) per page. Default: all chunks, which is what manual research wants.
+   */
+  maxChunksPerPage?: number;
+  /**
+   * Autonomous discovery only: when the model returns unparseable output for
+   * one chunk, skip that chunk instead of discarding every claim already
+   * extracted for the company. Provider outages (AiUnavailableError) are still
+   * thrown so the caller can stop spending candidates on a dead provider.
+   */
+  skipMalformedChunks?: boolean;
+};
+
 export async function extractClaims(
   companyName: string,
   pages: ResearchPage[],
-  deps: { generate?: Generate } = {},
+  deps: ExtractOptions = {},
 ): Promise<ProposedClaim[]> {
   const runGenerate = deps.generate ?? generate;
   const proposals: ProposedClaim[] = [];
+  const chunkCap =
+    deps.maxChunksPerPage && deps.maxChunksPerPage > 0
+      ? Math.floor(deps.maxChunksPerPage)
+      : Infinity;
 
   for (const page of pages) {
-    const chunks = splitText(page.text);
+    const chunks = splitText(page.text).slice(0, chunkCap);
 
     for (const chunk of chunks) {
       const response = await runGenerate({
@@ -155,7 +175,13 @@ export async function extractClaims(
         maxTokens: 1200,
       });
 
-      const result = parseExtraction(response.text);
+      let result: ExtractionResponse;
+      try {
+        result = parseExtraction(response.text);
+      } catch (error) {
+        if (deps.skipMalformedChunks) continue;
+        throw error;
+      }
 
       for (const claim of result.claims) {
         proposals.push({

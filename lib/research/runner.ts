@@ -2,6 +2,13 @@ import { discoverSameSiteLinks, fetchResearchPage, validateResearchUrl } from ".
 import { extractClaims } from "./extract";
 import { verifyClaims, type ProposedClaim, type ResearchPage } from "./verify";
 import { assessEcommerceEligibility } from "./eligibility";
+import { AiUnavailableError } from "../ai";
+import {
+  pagesHaveUsEvidence,
+  rankPagesByUsEvidence,
+  selectEnrichmentPages,
+  usEvidenceExcerpt,
+} from "./usSignals";
 
 export type ResearchInputEntry = {
   companyName: string;
@@ -20,9 +27,29 @@ export type ResearchOutputRow = {
   evidence: string;
 };
 
+export type ResearchOutcome = "qualified" | "rejected" | "failed";
+
+/**
+ * Where a candidate left the funnel. "rejected" stages are judgements about the
+ * company (safe to remember); "failed" stages are infrastructure problems
+ * (fetch, AI) and must be retried later rather than remembered.
+ */
+export type ResearchStage =
+  | "fetch"
+  | "early_service"
+  | "eligibility"
+  | "no_us_signal"
+  | "us_evidence"
+  | "extraction"
+  | "ai_unavailable"
+  | "no_claims"
+  | "complete";
+
 export type CompanyResearchReport = {
   companyName: string;
   website: string;
+  outcome?: ResearchOutcome;
+  stage?: ResearchStage;
   pagesRead: string[];
   proposed: number;
   accepted: number;
@@ -37,6 +64,8 @@ export type CompanyResearchReport = {
 export type ResearchRunResult = {
   rows: ResearchOutputRow[];
   companies: CompanyResearchReport[];
+  /** Entries never started because deps.shouldStop() returned true. */
+  notStarted?: ResearchInputEntry[];
 };
 
 type RunnerDeps = {
@@ -49,7 +78,17 @@ type RunnerDeps = {
   now?: () => Date;
   concurrency?: number;
   requireEcommerceEligibility?: boolean;
+  /** Checked before each company starts; lets a caller enforce a time budget. */
+  shouldStop?: () => boolean;
+  /** Page cap per company (default 8). */
+  maxPagesPerCompany?: number;
 };
+
+// Autonomous discovery spends LLM calls gate-first: at most GATE_PAGE_LIMIT
+// calls to find verified US evidence, and only candidates that pass get up to
+// ENRICHMENT_PAGE_LIMIT further calls for contacts/growth/size claims.
+const GATE_PAGE_LIMIT = 2;
+const ENRICHMENT_PAGE_LIMIT = 2;
 
 function validateHttpUrl(value: string, lineNumber: number): URL {
   try {
@@ -189,8 +228,26 @@ export async function runResearch(
     // Start with the homepage, then prioritize useful internal pages. A second
     // discovery pass from those pages catches deeper About/Team/Press links.
     // The hard cap keeps free-tier search/AI usage predictable per company.
-    const MAX_PAGES_PER_COMPANY = 8;
+    const MAX_PAGES_PER_COMPANY = Math.max(
+      1,
+      Math.min(8, Math.floor(deps.maxPagesPerCompany ?? 8)),
+    );
     await readPage(entry.website);
+
+    // Cheap early exit: a homepage with no storefront signal at all and several
+    // service-business signals (bookkeeping, CFO, consulting...) is not worth
+    // another five page fetches.
+    if (deps.requireEcommerceEligibility && pages.length) {
+      const early = assessEcommerceEligibility([pages[0]]);
+      if (early.commerceSignals.length === 0 && early.serviceSignals.length >= 2) {
+        report.errors.push(
+          `Autonomous discovery rejected this candidate: the homepage shows no storefront signals and several service-business signals (${early.serviceSignals.join(", ")}).`
+        );
+        report.outcome = "rejected";
+        report.stage = "early_service";
+        return { rows: [], report };
+      }
+    }
 
     const homepageLinks = pages.length
       ? discoverLinks(pages[0].text, entry.website, 6)
@@ -208,6 +265,8 @@ export async function runResearch(
 
     if (!pages.length) {
       report.errors.push("No pages could be read; extraction was skipped");
+      report.outcome = "failed";
+      report.stage = "fetch";
       return { rows: [], report };
     }
 
@@ -220,14 +279,58 @@ export async function runResearch(
           `Storefront signals: ${eligibility.commerceSignals.join(", ") || "none"}. ` +
           `Service signals: ${eligibility.serviceSignals.join(", ") || "none"}.`
         );
+        report.outcome = "rejected";
+        report.stage = "eligibility";
+        return { rows: [], report };
+      }
+
+      // Necessary condition for the US gate below, checked for free before any
+      // LLM call: the extractor only emits us_ecommerce claims backed by an
+      // explicit US quotation, so pages with no US wording cannot pass.
+      if (!pagesHaveUsEvidence(pages)) {
+        report.errors.push(
+          "Autonomous discovery rejected this candidate: no US-business wording (United States, USA, a US state address, US shipping...) appears anywhere in the first-party pages that were read."
+        );
+        report.outcome = "rejected";
+        report.stage = "no_us_signal";
         return { rows: [], report };
       }
     }
 
+    const extractGateFirst = async (): Promise<ProposedClaim[]> => {
+      const collected: ProposedClaim[] = [];
+      const used = new Set<string>();
+      let passed = false;
+
+      for (const page of rankPagesByUsEvidence(pages).slice(0, GATE_PAGE_LIMIT)) {
+        used.add(page.url);
+        collected.push(...(await extract(entry.companyName, [usEvidenceExcerpt(page)])));
+        if (
+          verifyClaims(collected, pages).accepted.some(
+            (claim) => claim.claim_type === "us_ecommerce",
+          )
+        ) {
+          passed = true;
+          break;
+        }
+      }
+
+      if (!passed) return collected;
+
+      // Gate passed: now spend calls on what a salesperson needs. The homepage
+      // stays eligible because the gate only read its US-evidence excerpt.
+      used.delete(pages[0].url);
+      const enrichment = selectEnrichmentPages(pages, used, ENRICHMENT_PAGE_LIMIT);
+      if (enrichment.length) collected.push(...(await extract(entry.companyName, enrichment)));
+      return collected;
+    };
+
     let proposals: ProposedClaim[];
 
     try {
-      proposals = await extract(entry.companyName, pages);
+      proposals = deps.requireEcommerceEligibility
+        ? await extractGateFirst()
+        : await extract(entry.companyName, pages);
       report.proposed = proposals.length;
     } catch (error) {
       report.errors.push(
@@ -235,6 +338,8 @@ export async function runResearch(
           error instanceof Error ? error.message : String(error)
         }`,
       );
+      report.outcome = "failed";
+      report.stage = error instanceof AiUnavailableError ? "ai_unavailable" : "extraction";
       return { rows: [], report };
     }
 
@@ -255,6 +360,8 @@ export async function runResearch(
       report.errors.push(
         "Autonomous discovery rejected this candidate: no verified first-party evidence of US business presence or US e-commerce operations."
       );
+      report.outcome = "rejected";
+      report.stage = "us_evidence";
       return { rows: [], report };
     }
 
@@ -269,6 +376,8 @@ export async function runResearch(
       evidence: claim.evidence,
     }));
 
+    report.outcome = rows.length ? "qualified" : "rejected";
+    report.stage = rows.length ? "complete" : "no_claims";
     return { rows, report };
   };
 
@@ -280,9 +389,14 @@ export async function runResearch(
   } | undefined> = new Array(entries.length);
 
   let nextIndex = 0;
+  let stopped = false;
 
   const worker = async () => {
     while (true) {
+      if (stopped || deps.shouldStop?.()) {
+        stopped = true;
+        return;
+      }
       const index = nextIndex++;
       if (index >= entries.length) return;
       results[index] = await researchCompany(entries[index]);
@@ -295,5 +409,6 @@ export async function runResearch(
   return {
     rows: results.flatMap((result) => result?.rows ?? []),
     companies: results.flatMap((result) => result ? [result.report] : []),
+    notStarted: entries.filter((_, index) => !results[index]),
   };
 }

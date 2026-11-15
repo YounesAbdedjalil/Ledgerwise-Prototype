@@ -2,73 +2,75 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { runResearch } from "@/lib/research/runner";
+import { extractClaims } from "@/lib/research/extract";
 import { discoverSameSiteLinks } from "@/lib/research/pages";
+import {
+  BLOCKED_DOMAINS,
+  buildQueryPlan,
+  runDiscovery,
+  type PersistResult,
+  type SearchHit,
+} from "@/lib/research/discovery";
 import { hostFromUrl, type RawRow } from "@/lib/import-schema";
 import { importRows } from "@/app/(dashboard)/prospects/import/actions";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-type TavilyResult = {
-  title?: string;
-  url?: string;
-  content?: string;
-  score?: number;
-};
+// ---- Budgets (one request = at most maxDuration seconds) -----------------
+// Batches are persisted as they finish, so a platform timeout can lose at most
+// the batch in flight. No new batch starts after START_BATCHES_UNTIL_MS, and
+// the research runner stops starting new companies after RUNNER_STOP_MS.
+const START_BATCHES_UNTIL_MS = 185_000;
+const RUNNER_STOP_MS = 230_000;
+const DEFAULT_TARGET = 30;
+const MAX_TARGET = 30;
+const BATCH_SIZE = 4; // matches the runner's default concurrency
+const QUERIES_PER_ROUND = 2;
+const MAX_SEARCH_CALLS = 10; // Tavily credits per request (basic search = 1 each)
+const MAX_RESEARCHED = 80;
+const MAX_PAGES_PER_COMPANY = 6;
+const NEGATIVE_CACHE_DAYS = 30;
 
-// Keep discovery to a small number of focused basic-search calls so a normal
-// run remains practical on free-tier Tavily quotas.
-const QUERIES = [
-  'US direct-to-consumer ecommerce brands official website Shopify -directory',
-  'United States online retail consumer brands hiring careers expansion official',
-  'American ecommerce brands founder team about us online store',
-];
+async function searchTavily(query: string, excludeDomains: string[]): Promise<SearchHit[]> {
+  const call = (withExclude: boolean) =>
+    fetch("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query,
+        search_depth: "basic",
+        max_results: 20, // Tavily's per-call maximum; the old code asked for 10
+        include_answer: false,
+        include_raw_content: false,
+        ...(withExclude && excludeDomains.length ? { exclude_domains: excludeDomains } : {}),
+      }),
+      signal: AbortSignal.timeout(25_000),
+    });
 
-const BLOCKED_DOMAINS = [
-  "google.com", "youtube.com", "facebook.com", "instagram.com",
-  "linkedin.com", "tiktok.com", "wikipedia.org", "reddit.com",
-  "crunchbase.com", "pitchbook.com", "owler.com", "zoominfo.com",
-  "shopify.com", "amazon.com", "walmart.com", "etsy.com",
-  "forbes.com", "bloomberg.com", "techcrunch.com", "businessinsider.com",
-  "medium.com", "substack.com", "yelp.com", "trustpilot.com",
-  "clutch.co", "g2.com", "capterra.com",
-];
+  let response = await call(true);
+  // If the exclude list is ever rejected, degrade to an unfiltered search
+  // rather than losing the whole round.
+  if (response.status === 400 && excludeDomains.length) response = await call(false);
 
-function isBlocked(host: string) {
-  return BLOCKED_DOMAINS.some(
-    (domain) => host === domain || host.endsWith(`.${domain}`)
-  );
-}
-
-function nameFromTitle(title: string) {
-  return title
-    .split(/\s(?:\||—|–|-)\s/)[0]
-    .replace(/\s+(official website|official site|homepage)$/i, "")
-    .trim()
-    .slice(0, 100);
-}
-
-async function searchTavily(query: string): Promise<TavilyResult[]> {
-  const response = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      api_key: process.env.TAVILY_API_KEY,
-      query,
-      search_depth: "basic",
-      max_results: 10,
-      include_answer: false,
-      include_raw_content: false,
-    }),
-    signal: AbortSignal.timeout(25_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Tavily search failed: HTTP ${response.status}`);
-  }
+  if (!response.ok) throw new Error(`Tavily search failed: HTTP ${response.status}`);
 
   const data = await response.json();
   return Array.isArray(data.results) ? data.results : [];
+}
+
+// PostgREST caps a response (1000 rows by default), so page through it.
+async function fetchAll<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await page(from, from + 999);
+    if (error) throw new Error(error.message);
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) return out;
+  }
 }
 
 export async function POST(request: Request) {
@@ -88,128 +90,163 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "TAVILY_API_KEY is not configured." }, { status: 503 });
   }
 
+  const body = await request.json().catch(() => ({}));
+  const requested = Number.parseInt(String(body?.target ?? ""), 10);
+  const target = Math.min(MAX_TARGET, Math.max(1, Number.isFinite(requested) ? requested : DEFAULT_TARGET));
+
+  const startedAt = Date.now();
+  let negativeCache: "active" | "unavailable" = "active";
+
   try {
-    const searchResults = await Promise.allSettled(
-      QUERIES.map(searchTavily)
-    );
-
-    const candidates = new Map<string, { companyName: string; website: string }>();
-    let searchFailures = 0;
-
-    for (const result of searchResults) {
-      if (result.status === "rejected") {
-        searchFailures++;
-        continue;
-      }
-
-      for (const item of result.value) {
-        if (!item.url || !item.title) continue;
-
-        try {
-          const url = new URL(item.url);
-          if (url.protocol !== "https:" || url.pathname !== "/" || url.search) continue;
-
-          const host = url.hostname.toLowerCase().replace(/^www\./, "");
-          if (!host.includes(".") || isBlocked(host)) continue;
-          if (typeof item.score === "number" && item.score < 0.3) continue;
-
-          const companyName = nameFromTitle(item.title);
-          if (!companyName || companyName.length < 2) continue;
-
-          const website = `https://${host}`;
-          candidates.set(host, { companyName, website });
-        } catch {
-          // Ignore malformed search results.
-        }
-      }
-    }
-
-    const { data: existing, error: existingError } = await supabase
-      .from("companies")
-      .select("website");
-
-    if (existingError) throw new Error(existingError.message);
-
-    const existingHosts = new Set(
-      (existing ?? [])
-        .map((row) => hostFromUrl(row.website))
-        .filter((host): host is string => Boolean(host))
-    );
-
-    const newCandidates = [...candidates.entries()]
-      .filter(([host]) => !existingHosts.has(host))
-      .slice(0, 12)
-      .map(([, candidate]) => candidate);
-
-    if (!newCandidates.length) {
-      return NextResponse.json({
-        message: "No new candidate websites were found. Try again later.",
-        candidatesFound: candidates.size,
-        researched: 0,
-        companiesCreated: 0,
-        sourcesAdded: 0,
-        searchFailures,
-      });
-    }
-
-    const research = await runResearch(
-      newCandidates.map((candidate) => ({
-        ...candidate,
-        extraUrls: [],
-      })),
+    const run = await runDiscovery(
       {
-        // The research runner caps each company at eight pages; twelve
-        // companies per request bounds free-tier AI and reader usage.
-        discoverLinks: (text, baseUrl) =>
-          discoverSameSiteLinks(text, baseUrl, 1),
-        requireEcommerceEligibility: true,
+        target,
+        batchSize: BATCH_SIZE,
+        queriesPerRound: QUERIES_PER_ROUND,
+        maxSearchCalls: MAX_SEARCH_CALLS,
+        maxResearched: MAX_RESEARCHED,
+        stopStartingBatchesAt: startedAt + START_BATCHES_UNTIL_MS,
+      },
+      {
+        now: Date.now,
+        // A fresh seed each request means each click draws different queries;
+        // the old code sent the same three queries every time.
+        queryPlan: buildQueryPlan(startedAt, MAX_SEARCH_CALLS),
+        blockedDomains: BLOCKED_DOMAINS,
+        search: searchTavily,
+
+        loadKnownHosts: async () => {
+          const companies = await fetchAll<{ website: string }>((from, to) =>
+            supabase.from("companies").select("website").range(from, to)
+          );
+          const hosts = new Set(
+            companies
+              .map((row) => hostFromUrl(row.website))
+              .filter((host): host is string => Boolean(host))
+          );
+
+          // Remembered rejections (see supabase/migrations/..._06). If the
+          // migration has not been applied the run still works, but rejected
+          // sites will be re-researched on the next run.
+          try {
+            const cutoff = new Date(Date.now() - NEGATIVE_CACHE_DAYS * 86_400_000).toISOString();
+            const rejected = await fetchAll<{ host: string }>((from, to) =>
+              supabase.from("discovery_candidates").select("host").gte("checked_at", cutoff).range(from, to)
+            );
+            rejected.forEach((row) => hosts.add(row.host));
+          } catch (error) {
+            negativeCache = "unavailable";
+            console.warn("discovery_candidates unavailable:", error);
+          }
+          return hosts;
+        },
+
+        research: (entries) =>
+          runResearch(entries, {
+            requireEcommerceEligibility: true,
+            maxPagesPerCompany: MAX_PAGES_PER_COMPANY,
+            shouldStop: () => Date.now() - startedAt >= RUNNER_STOP_MS,
+            // BUG FIX: the previous wrapper ignored the runner's maxLinks
+            // argument and always returned ONE link, which capped every
+            // company at three pages (homepage + one about-type page + one
+            // more) and starved the eligibility and US-evidence checks.
+            discoverLinks: (text, baseUrl, maxLinks) =>
+              discoverSameSiteLinks(text, baseUrl, maxLinks ?? 3),
+            extract: (name, pages) =>
+              extractClaims(name, pages, { maxChunksPerPage: 1, skipMalformedChunks: true }),
+          }),
+
+        persist: async (research): Promise<PersistResult> => {
+          const rows: RawRow[] = research.rows.map((row) => ({
+            company_name: row.company_name,
+            website: row.website,
+            claim_type: row.claim_type,
+            claim: row.claim,
+            source_url: row.source_url,
+            source_title: row.source_title,
+            retrieved_at: row.retrieved_at,
+            evidence: row.evidence,
+          }));
+          const imported = await importRows(rows, "autonomous_discovery");
+          return {
+            companiesCreated: imported.companiesCreated,
+            sourcesAdded: imported.sourcesAdded,
+            duplicatesSkipped: imported.duplicatesSkipped,
+            rejected: imported.rejected.length,
+            error: imported.error ?? null,
+          };
+        },
+
+        remember: async (rejections) => {
+          if (negativeCache === "unavailable") return;
+          const { error } = await supabase.from("discovery_candidates").upsert(
+            rejections.map((r) => ({
+              host: r.host,
+              company_name: r.companyName.slice(0, 200),
+              status: "rejected",
+              stage: r.stage,
+              reason: r.reason.slice(0, 500),
+              query: r.query.slice(0, 300),
+              checked_at: new Date().toISOString(),
+              checked_by: user.id,
+            })),
+            { onConflict: "host" }
+          );
+          if (error) {
+            negativeCache = "unavailable";
+            console.warn("Could not record discovery rejections:", error.message);
+          }
+        },
       }
     );
-
-    const rows: RawRow[] = research.rows.map((row) => ({
-      company_name: row.company_name,
-      website: row.website,
-      claim_type: row.claim_type,
-      claim: row.claim,
-      source_url: row.source_url,
-      source_title: row.source_title,
-      retrieved_at: row.retrieved_at,
-      evidence: row.evidence,
-    }));
-
-    const imported = rows.length
-      ? await importRows(rows, "autonomous_discovery")
-      : {
-          companiesCreated: 0,
-          sourcesAdded: 0,
-          duplicatesSkipped: 0,
-          rejected: [],
-        };
 
     revalidatePath("/prospects");
     revalidatePath("/prospects/review");
 
+    const remaining = Math.max(0, run.target - run.imported);
+
     return NextResponse.json({
-      candidatesFound: candidates.size,
-      researched: newCandidates.length,
-      companiesWithEvidence: new Set(research.rows.map((row) => row.website)).size,
-      companiesCreated: imported.companiesCreated,
-      sourcesAdded: imported.sourcesAdded,
-      duplicatesSkipped: imported.duplicatesSkipped,
-      rejected: imported.rejected.length,
-      searchFailures,
-      reports: research.companies.map((company) => ({
-        company: company.companyName,
-        website: company.website,
-        pagesRead: company.pagesRead.length,
-        accepted: company.accepted,
-        rejected: company.rejected,
-        errors: company.errors,
+      // Outcome of THIS request. The client may call again for the remainder.
+      target: run.target,
+      imported: run.imported,
+      remaining,
+      stopReason: run.stopReason,
+      canContinue:
+        remaining > 0 &&
+        ["deadline", "research_limit", "candidates_exhausted"].includes(run.stopReason),
+      elapsedMs: run.elapsedMs,
+      negativeCache,
+
+      // Where candidates were lost, stage by stage, and which queries paid off.
+      funnel: run.funnel,
+      searches: run.searches,
+
+      // Fields the existing button already reads.
+      candidatesFound: run.funnel.newCandidates,
+      researched: run.funnel.researched,
+      companiesWithEvidence: run.funnel.qualified,
+      companiesCreated: run.imported,
+      sourcesAdded: run.sourcesAdded,
+      duplicatesSkipped: run.duplicatesSkipped,
+      rejected: run.importIssues,
+      searchFailures: run.searches.failures,
+      importError: run.importError,
+
+      reports: run.reports.map((report) => ({
+        company: report.companyName,
+        website: report.website,
+        outcome: report.outcome,
+        stage: report.stage,
+        query: report.query,
+        pagesRead: report.pagesRead.length,
+        accepted: report.accepted,
+        rejected: report.rejected,
+        errors: report.errors.map((message) => message.slice(0, 400)),
       })),
-      importError: imported.error ?? null,
     });
   } catch (error) {
     console.error("Company discovery failed:", error);
+    revalidatePath("/prospects");
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Company discovery failed." },
       { status: 500 }
