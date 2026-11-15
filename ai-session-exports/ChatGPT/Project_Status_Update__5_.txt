@@ -1,0 +1,1566 @@
+Project Status Update (5)
+=========================
+
+ChatGPT:
+OpenCode has produced a strong, detailed plan. It has correctly understood the project state, preserved the Phase 4 deferral, and proposed sensible safeguards for simulated email, human handoff, and atomic bookings.
+I would not approve it unchanged, though. I spotted three important issues that should be corrected before implementation:
+
+Source verification is not trustworthy yet. The importer automatically sets verified_by = user.id on imported rows. That does not prove a human reviewed the source. Treating verified_by IS NOT NULL as sufficient would allow unreviewed research to qualify for email generation. Add a genuine manual-verification step and only allow verified sources to support generated emails.
+The booking uniqueness rule has a rescheduling bug. The proposed partial unique index includes rescheduled bookings. But the reschedule process keeps the old booking with that status, so its old slot could remain blocked. Historical rescheduled records should not count as active bookings.
+The calendar source constraint needs updating. The existing database only permits calcom and demo for calendar_slots.source. The plan should explicitly define how internally created slots are represented, preferably by adding an internal value through a migration.
+
+There is also an important security distinction: authenticated-only RLS policies do not provide individual-user or tenant isolation. That may be acceptable for this single-team prototype, but OpenCode must document that limitation rather than describe the data as individually protected.
+My recommended response to OpenCode
+I've answered its ten decisions below, with the corrections included. You can paste this into OpenCode while still in Plan mode.
+Thanks. The plan is strong, and I want to proceed with Phases 5, 6, and 7 together. Before switching to Build mode, revise the plan to incorporate the following corrections and decisions.
+1. Decisions
+
+Email eligibility: Approve the recommended approach. Allow drafting for new, needs_review, and qualified companies, provided all other eligibility checks pass. Do not require qualified because scoring weights are intentionally unset.
+
+Source verification: Do NOT treat verified_by IS NOT NULL as proof of human verification. The current importer automatically stamps verified_by on imported rows, so that field is not reliable evidence of an actual review.
+Instead:
+
+Introduce an explicit source-verification state, such as pending_review and verified.
+Provide a simple UI for a human to inspect the source URL, claim, and evidence before marking it verified.
+Record who verified it and when.
+Only explicitly human-verified sources may support generated email personalization.
+Make the distinction between imported, structurally validated, and human-verified sources visible.
+Correct the importer so newly imported records are not automatically marked as human-verified.
+Do not modify or remediate the existing research CSV as part of this work.
+
+This source-verification functionality is part of making Phase 5 safe. It does not mean Phase 4 is being resumed.
+
+Email generation style: Approve the verified hybrid approach: AI generates personalized lines, code validates their evidence, and code assembles the final email.
+
+Sender signature: Use The Ledgerwise team as the default. Support LEDGERWISE_SENDER_NAME as an optional override.
+
+Google Calendar: Implement the Google Calendar integration as planned, but make it optional. The internal Ledgerwise calendar must work independently when Google credentials are unavailable. Do not block completion of the internal calendar on Google OAuth setup.
+
+RLS migration: Prepare the migration and provide the existing-policy export query. I will inspect and apply the migration manually in Supabase. Do not execute remote SQL or claim the remote database has changed.
+Important: authenticated-only policies do not provide per-user or tenant isolation. Document the single-team prototype assumption accurately. Do not claim individual-user data isolation unless it is actually implemented.
+
+Demo data: Do not create fictional companies or fake research. Show useful empty states when no eligible companies exist.
+
+Conversation release: Allow a human to return a conversation to AI handling, but require an explicit action and write an audit event. Suppression must remain permanent and must never be reversed by this action.
+
+Calendar defaults: Approve:
+
+America/New_York
+30-minute default slots
+9:00–17:00 default business hours
+Allow configurable slot durations between 15 and 120 minutes.
+
+
+Real email sending: Keep all email sending simulated. Do not add SMTP, Resend, SendGrid, or any other real email-sending provider.
+
+
+2. Required corrections to the technical plan
+A. Source verification
+The current verified_by field is not sufficient because the importer automatically populates it.
+Please revise the database design and implementation so that:
+
+imported sources begin as unverified;
+human verification is an explicit action;
+verification is attributable to an authenticated user and timestamp;
+email generation only uses explicitly verified sources;
+the UI clearly distinguishes unverified and verified evidence.
+
+Do not let a structurally valid URL or a quote appearing on a fetched page automatically become proof that the underlying company claim is true.
+B. Booking uniqueness and rescheduling
+Correct the partial unique index and rescheduling implementation.
+The current proposal includes rescheduled in the active-booking index, but the old booking is retained with that status after a reschedule. This can prevent the old slot from becoming bookable again.
+Design the status transitions so historical rescheduled bookings do not block slots. The database must still prevent two active bookings from occupying the same slot.
+Please explain the final status/index design before implementation.
+C. Calendar slot source
+The existing calendar_slots.source constraint only permits calcom and demo.
+Define a clear representation for internally created slots. Prefer adding internal through a migration rather than silently using demo for normal internal calendar functionality.
+Ensure the migration updates the constraint without destroying existing records.
+D. Booking transaction safety
+The booking, cancellation, and rescheduling RPCs must be transactionally safe.
+In particular:
+
+lock affected slot and booking rows;
+validate availability and suppression inside the transaction;
+prevent duplicate active bookings;
+ensure slot availability and booking status cannot become inconsistent;
+make cancellation and rescheduling safe under concurrent requests.
+
+Do not rely on frontend checks or separate Supabase calls for atomicity.
+E. Existing uncommitted work
+Do not commit the research-agent changes as part of this implementation.
+Preserve every existing uncommitted change. Do not run git reset, git clean, or broad destructive commands. Do not overwrite or rewrite lib/research/, its tests, or the research input files.
+Inspect git status before and after implementation and clearly distinguish your new changes from the existing research-agent changes.
+3. Implementation priorities
+Proceed in this order after I switch to Build mode:
+
+Shared server utilities, validation, suppression, audit, and source-verification foundation.
+Phase 5: source-backed email generation, review, approval, rejection, and simulated sending.
+Phase 6: conversation inbox, simulated inbound messages, deterministic guardrails, AI replies, suppression, and human takeover.
+Phase 7: internal calendar, timezone handling, atomic booking, cancellation, and rescheduling.
+Phase 7: optional Google OAuth, encrypted token storage, availability checks, event synchronization, and retry handling.
+Responsive UI, documentation, regression testing, and final verification.
+
+Keep each stage small enough to test before moving on.
+4. Implementation and safety requirements
+
+Do not perform real email sending.
+Do not fabricate research, sources, contacts, bookings, or test results.
+Do not expose secrets or ask me to paste secrets into chat.
+Do not change or delete existing research-agent work.
+Do not set qualification scoring weights.
+Do not automatically promote companies to qualified.
+Do not execute Supabase migrations remotely.
+Provide complete SQL migration files and exact instructions for me to apply them.
+Clearly identify Google Cloud setup and environment variables that require my action.
+Do not claim Google Calendar is connected until OAuth and actual synchronization have been tested.
+Do not claim database concurrency protection is verified until the migration has been applied and the behavior has been tested.
+Keep the internal calendar usable without Google credentials.
+
+5. Documentation and submission
+Create or update HOW_I_WORKED.md accurately.
+Preserve the previously documented AI mistakes and corrections. Add any further mistakes discovered during implementation. Do not remove inconvenient mistakes or invent successful tests.
+Include:
+
+tools and why they were used;
+original plan and changes;
+rules and context given to AI;
+AI mistakes and corrections;
+actual numerical QA results;
+costs and free-tier limitations;
+remaining work and deployment steps.
+
+The full AI session exports must remain unedited.
+6. Final instruction
+Revise your plan to incorporate these corrections. Identify any remaining decisions that genuinely require my input.
+Do not begin implementation yet. I will review the revised plan and explicitly switch you to Build mode when ready.
+Project status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Existing foundation implemented
+
+
+Phase 4
+Postponed Research CSV quality
+
+
+Phase 5
+Planned — not implemented
+
+
+Phase 6
+Planned — not implemented
+
+
+Phase 7
+Planned — not implemented
+
+
+Research agent
+Existing uncommitted changes preserved
+
+
+Last verified tests
+79 passed
+
+
+Last TypeScript / lint checks
+Passed
+
+
+My recommendation: have OpenCode revise the plan first. Once it confirms the source-verification, rescheduling, and calendar-source corrections, we can move into Build mode.
+
+
+You:
+Well, Opencode told me this right now:
+
+Remaining Decisions Requiring Your Input
+Rejected source state: I recommend verification_status values pending_review, verified, and rejected, with a required rejection note. Confirm, or keep only pending/verified.
+Existing-source backfill: I recommend setting all existing sources to pending_review and clearing the old verified_by value, because it was auto-stamped and cannot be trusted. This means no company is email-eligible until sources are reviewed. Confirm.
+Dedicated review queue: I recommend adding /prospects/review in addition to per-company source review, because there may be many pending sources. Confirm, or keep review only on prospect detail pages.
+Reset/undo verification: I recommend allowing a verified/rejected source to be explicitly reset to pending_review with an audit event. Confirm.
+needs_human bookings: I recommend treating needs_human as an occupying status so the slot remains held until a human cancels or reschedules. Confirm.
+Everything else is treated as approved. I will not begin implementation until you explicitly switch me to Build Mode.
+
+
+
+ChatGPT:
+I agree with OpenCode's five recommendations, with one important clarification about booking semantics.
+Here are my decisions:
+
+
+
+Decision
+My answer
+
+
+
+1. Rejected source state
+Approve — pending_review, verified, rejected, with a required rejection note.
+
+
+2. Existing-source backfill
+Approve — reset all existing sources to pending_review and clear the old verified_by values.
+
+
+3. Dedicated review queue
+Approve — add /prospects/review, while retaining source review on individual prospect pages.
+
+
+4. Reset/undo verification
+Approve — allow resetting verified or rejected sources to pending, with an audit event and recorded reason.
+
+
+5. needs_human bookings
+Approve, with clarification — a booking in needs_human holds its slot until a human explicitly cancels or reschedules it. It must not silently release the slot.
+
+
+For decision 5, make sure the application distinguishes a booking that is awaiting human intervention from a conversation that merely contains a booking request. A prospect asking for a meeting must not automatically reserve a slot.
+Send this to OpenCode
+I approve all five recommendations, with the following details:
+
+Rejected source state: Approved. Use pending_review, verified, and rejected. Require a non-empty rejection note when rejecting a source.
+
+Existing-source backfill: Approved. Set all existing sources to pending_review and clear the old verified_by values because the importer automatically populated them. Preserve all existing claims, URLs, evidence, and other source data.
+
+Dedicated review queue: Approved. Implement /prospects/review as a centralized queue, while retaining source verification controls on individual prospect detail pages.
+
+Reset/undo verification: Approved. Allow verified or rejected sources to be reset to pending_review. Require a reason and record the action in audit_logs. Clear the previous verification/rejection metadata appropriately.
+
+needs_human bookings: Approved, with this clarification:
+
+A booking already occupying a slot must continue to hold that slot while its status is needs_human.
+The slot can only be released through an explicit cancellation or rescheduling operation.
+A conversation containing a booking request must NOT reserve a slot merely because the prospect asked to book.
+Clearly distinguish a booking requiring human intervention from a conversation requiring human intervention.
+Ensure the partial unique index and all booking RPCs treat needs_human as an active, slot-occupying status.
+
+
+
+Please incorporate these decisions into the final plan.
+Do not begin implementation until I explicitly switch you to Build Mode.
+Updated project status
+
+Phases 1–3: foundation implemented.
+Phase 4: Postponed Research CSV remediation.
+Phases 5–7: plan approved, implementation not started.
+Research-agent changes: preserve all uncommitted work.
+Last verified baseline: 79 tests passing, TypeScript and lint clean.
+
+My advice: once OpenCode confirms these five decisions are incorporated, switch to Build mode. Don't ask it to revisit the architecture again unless it identifies a genuinely new blocker.
+When OpenCode finishes implementation, I can review its changes and test results with you before you deploy.
+
+
+You:
+Here's his answer:
+Final Plan — Approved Decisions Incorporated
+Plan mode remains active. No files, database, or configuration have been changed.
+All five recommendations are approved and now locked into the plan, including the needs_human booking clarification and the distinction between a booking request and an actual booking.
+
+Locked Decisions
+Area	Final decision
+Email eligibility	Allow new, needs_review, and qualified when all other checks pass
+Source verification	Explicit human workflow using pending_review, verified, rejected
+Rejection	Requires a non-empty rejection note
+Existing sources	Backfill to pending_review; clear old auto-populated verified_by; preserve all claims, URLs, evidence, and source data
+Review UI	Central /prospects/review queue plus controls on each prospect detail page
+Reset/undo	Allowed from verified or rejected to pending_review; requires a reason; clears review metadata; writes audit
+Email generation	Verified hybrid: AI writes grounded lines, code verifies, code assembles
+Sender	The Ledgerwise team; optional LEDGERWISE_SENDER_NAME override
+Google Calendar	Optional external sync; internal calendar independently complete
+RLS	Authenticated-only single-team policies; no per-user/tenant isolation claim
+
+Demo data	None; useful empty states only
+Conversation release	Explicit, audited return to AI; suppression stays permanent
+Calendar defaults	America/New_York, 30-minute slots, 9:00–17:00, durations 15–120 minutes
+Email sending	Simulated only; no real provider
+needs_human bookings	Active and slot-occupying until explicit cancel or reschedule
+Booking requests	Conversation-level only; never reserves a slot
+2. Source Verification — Final Design
+Database columns added to company_sources
+
+imported_by uuid references public.users(id) — who imported the row.
+verification_status text not null default 'pending_review' — pending_review, verified, or rejected.
+reviewed_by uuid references public.users(id) — who verified, rejected, or reset it.
+reviewed_at timestamptz — when the review decision was made.
+verification_note text — rejection note when rejected.
+The existing verified_by column is deprecated:
+Migration copies its value into imported_by.
+Migration clears it for existing rows because it was auto-stamped by the importer.
+The application stops writing it.
+The column is retained to avoid destructive schema changes.
+Migration behavior for existing sources
+Set every existing source to verification_status = 'pending_review'.
+Clear reviewed_by, reviewed_at, verification_note.
+Backfill imported_by from the old verified_by.
+Clear old verified_by.
+Preserve every claim, URL, title, retrieval date, evidence, and relation.
+Run this backfill only when the new columns are first added so re-running the migration cannot erase later human decisions.
+Consequence: after migration, no source is email-usable until a human verifies it. The UI will explain this and link to the review queue. This is intentional and safe.
+Importer correction
+app/(dashboard)/prospects/import/actions.ts will insert new sources with:
+imported_by: user.id,
+verification_status: "pending_review",
+reviewed_by: null,
+reviewed_at: null,
+verification_note: null,
+verified_by: null,
+The importer remains a structural validator only. A valid URL or an evidence quote appearing in fetched page text does not make the claim true.
+Human review actions
+app/(dashboard)/prospects/source-actions.ts:
+verifySource(sourceId)
+authenticate and validate,
+set verified, reviewed_by = user.id, reviewed_at = now(), clear note,
+audit source_verified,
+revalidate prospect, review queue, and email pages.
+rejectSource(sourceId, note)
+authenticate and validate,
+require a non-empty note,
+set rejected, reviewed_by, reviewed_at, verification_note = note,
+audit source_rejected,
+revalidate.
+resetSourceToPending(sourceId, reason)
+authenticate and validate,
+require a non-empty reason,
+set pending_review,
+clear reviewed_by, reviewed_at, verification_note,
+audit source_reset_to_pending with previous status and reason,
+revalidate.
+Any authenticated team member may review sources. This matches the documented single-team assumption; there is no per-user source ownership.
+Verification UI
+New/modified:
+app/(dashboard)/prospects/review/page.tsx
+app/(dashboard)/prospects/source-actions.ts
+components/prospects/SourceReviewTable.tsx
+components/prospects/SourceStatusBadge.tsx
+app/(dashboard)/prospects/[id]/page.tsx
+app/(dashboard)/prospects/page.tsx
+components/ScoreBreakdown.tsx
+The review queue will:
+list pending sources across companies,
+support a company filter,
+show company, claim type, claim, evidence, source URL, source title, retrieved date, and imported date,
+show the source link for inspection,
+provide Verify, Reject with note, and Reset with reason actions,
+paginate or limit to a reasonable page size.
+Prospect detail pages will show all sources with status badges, review metadata, and the same controls.
+The UI will clearly distinguish:
+
+
+Imported — stored by the importer.
+Structurally valid — passed URL/evidence checks.
+Human-verified — explicitly reviewed and marked verified.
+Only human-verified sources may support email personalization.
+Email gate
+The verified-source catalog for Phase 5 requires all of:
+
+
+verification_status = 'verified',
+reviewed_by IS NOT NULL,
+reviewed_at IS NOT NULL,
+valid HTTP(S) URL, not UNVERIFIED,
+non-empty claim and evidence.
+Pending and rejected sources are excluded. Approval and simulated send re-check that every draft source_ids entry is still verified.
+
+
+Phase 5 — Final
+
+
+Eligibility: new, needs_review, or qualified; valid contact email; no suppression; no disqualifier; at least one verified usable source.
+Ineligible companies are shown with reasons such as “no verified sources,” “sources pending review,” “missing contact email,” “suppressed,” or “disqualifier present.”
+AI returns structured personalization lines with source_id and quote.
+Code verifies:
+source belongs to the company and is verified,
+quote appears in stored claim/evidence,
+quote appears in the generated line,
+no currency/price terms,
+no invented digits,
+no false claims of being human,
+subject rules and length limits.
+Code assembles the final email from a fixed safe template plus verified lines.
+Draft status flow:
+needs_review -> approved -> sent_simulated
+needs_review -> rejected
+approved     -> rejected
+approved     -> needs_review   (on edit)
+Simulated send creates/finds the conversation and an outbound simulated message. No real provider is called.
+Emails page shows approved/ineligible states and a clear “Simulated send” label.
+Tests cover all previously listed email, suppression, state, source-ownership, and fabrication cases.
+
+
+Phase 6 — Final
+Guardrail order
+Existing suppression — record message, never reply.
+Opt-out — suppress permanently, set conversation suppressed, no outbound message.
+Human takeover / needs human — record message, no AI.
+Bot/AI question — deterministic honest answer.
+Pricing question — deterministic safe answer, no price; conversation needs_human.
+Booking request — conversation needs_human with booking_request flag; no slot reservation.
+Legal/sensitive/unusual — conversation needs_human, no AI reply.
+Routine question — AI only when status is ai_handling; verify JSON, confidence, and safety before inserting a reply.
+Booking request vs booking requiring human intervention
+These are distinct and will be labeled distinctly in the UI and audit logs:
+
+
+Conversation booking request
+flag: booking_request,
+conversation status: needs_human,
+no bookings row,
+no calendar_slots change,
+UI: “Prospect asked to book — no slot reserved,” with a link to the calendar prefilled with company/conversation.
+audit: conversation_booking_request.
+Booking requiring human intervention
+a real bookings row exists with status needs_human,
+the slot remains occupied,
+UI: “Booking needs human attention — slot held,” with cancel/reschedule controls.
+audit: booking_needs_human.
+The AI never creates a booking or reserves a slot from a message. Booking creation is only through the explicit calendar action/RPC.
+Conversation states
+ai_handling -> needs_human
+ai_handling -> human_takeover
+needs_human -> human_takeover
+human_takeover -> ai_handling   (explicit, audited)
+any non-suppressed -> closed     (optional)
+any -> suppressed                (permanent)
+AI replies only in ai_handling. Returning to AI never reverses suppression.
+Concurrency
+conversations.ai_processing_at is claimed atomically before AI generation and cleared in finally. Concurrent inbound events cannot generate duplicate replies.
+Tests
+opt-out variants and false positives,
+duplicate suppression safety,
+suppressed contacts never receive AI replies,
+bot question honesty,
+pricing never quotes a price,
+booking request creates no booking/slot change,
+legal/sensitive/uncertain escalation,
+low confidence/AI unavailable/invalid JSON escalation,
+takeover prevents AI,
+release to AI is explicit and audited,
+messages, flags, statuses, and audit rows recorded,
+concurrent processing claim prevents double replies.
+
+
+Phase 7 — Final
+Internal calendar
+
+
+Internal slots use source = 'internal'.
+Default timezone America/New_York.
+Default duration 30 minutes; allowed 15–120 minutes.
+Default business hours 9:00–17:00.
+Timezone conversion via tested Intl helpers; reject nonexistent/ambiguous DST times.
+Slot create/edit/delete; deletion blocked when an active booking references the slot.
+Bookings link to company/conversation when provided.
+Clear empty states when no slots/bookings exist.
+Booking statuses and slot occupancy
+Status	Occupies slot?
+pending	Yes
+confirmed	Yes
+needs_human	Yes
+rescheduled	No
+cancelled	No
+Partial unique index
+create unique index bookings_active_slot_unique
+on public.bookings (slot_id)
+where slot_id is not null
+and status in ('pending', 'confirmed', 'needs_human');
+rescheduled and cancelled are excluded, so an old booking cannot block its former slot. needs_human is included, so an existing held booking prevents a second active booking.
+RPC transaction safety
+book_slot, cancel_booking, and reschedule_booking are plpgsql RPCs, each a single transaction:
+lock affected slots in ascending UUID order, then the booking row,
+validate availability, future time, active booking, and suppression inside the transaction,
+insert/update booking and slot availability together,
+write audit inside the transaction,
+use the unique index as the final concurrency guard.
+Additional triggers enforce:
+an active booking requires an available slot and no other active booking,
+a slot cannot be freed while an active booking references it.
+needs_human is treated as active by:
+the partial unique index,
+book_slot conflict checks,
+cancel/reschedule source-status validation,
+slot deletion protection,
+availability/free-slot checks.
+Cancellation and rescheduling are the only operations that release a needs_human slot. A conversation booking request never touches either table.
+Google Calendar — optional
+Internal calendar is complete without Google credentials.
+OAuth start/callback routes; tokens encrypted server-side and never exposed.
+Calendar selection, freeBusy checks, event creation, update, cancellation, retry.
+Deterministic event ID for idempotency.
+Sync states: not_configured, pending, synced, failed, cancelled.
+Failures never produce false success.
+I will not claim Google is connected until OAuth and real synchronization are tested.
+
+
+Migrations — Final
+supabase/migrations/20261114_01_source_verification_and_security.sql
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+supabase/migrations/20261114_03_google_calendar.sql
+01 — Source verification and security
+
+
+add source verification columns,
+backfill imported_by, set all existing sources to pending_review, clear old verified_by,
+add status check constraint and indexes,
+add conversations.ai_processing_at,
+replace RLS policies with authenticated-only policies,
+add append-only triggers for suppressed_contacts and audit_logs,
+add suppression RPCs,
+add supporting indexes.
+02 — Calendar source and booking
+replace the calendar_slots.source constraint to allow calcom, demo, internal,
+abort if duplicate active bookings already exist,
+add the partial unique index with pending, confirmed, needs_human,
+add book_slot, cancel_booking, reschedule_booking,
+add booking/slot consistency triggers,
+add active-booking slot-delete trigger,
+add indexes.
+03 — Google Calendar
+create google_calendar_connections,
+add booking Google sync columns and constraints,
+add partial unique index on google_event_id,
+add own-row RLS policies.
+Application
+I will provide the existing-policy export query, constraint/trigger export queries, and exact Supabase SQL Editor instructions.
+You inspect and apply the migrations manually.
+I will not execute remote SQL or claim the remote database changed.
+After you apply them, I will verify behavior through the app and the manual concurrency test.
+
+
+RLS Documentation
+The migration will provide authenticated-only policies, not per-user or tenant isolation. Any signed-in team member can access the team’s data. This is acceptable only under the single-team prototype assumption.
+docs/SECURITY.md will state:
+
+
+the single-team assumption,
+that no per-user/tenant isolation is implemented,
+what would be required for multi-tenant isolation,
+append-only protections for suppression and audit,
+server-only Google token handling,
+simulated-email-only design,
+suppression permanence.
+
+
+Implementation Order
+Shared server utilities, validation, audit, suppression, source-verification foundation, migration files, source review UI and tests.
+Phase 5 email workflow and tests.
+Phase 6 conversations, guardrails, booking-request distinction, suppression, takeover/release, tests.
+Phase 7 internal calendar, timezone handling, atomic booking, cancellation, rescheduling, tests, manual concurrency test.
+Phase 7 optional Google OAuth, encrypted tokens, availability, idempotent sync, retry, tests.
+Responsive UI, documentation, regression testing, final verification.
+Each stage will be tested before moving to the next.
+Verification and Acceptance
+Baseline confirmed before implementation:
+
+
+npm test — 79 passed, 0 failed.
+npx tsc --noEmit — exit 0.
+npm run lint — exit 0.
+git diff --check — clean.
+After implementation, I will re-run all four plus npm run build, and report actual results.
+Manual checks after you apply the migrations:
+source backfill shows all existing sources as pending;
+verify/reject/reset actions record the correct reviewer, timestamp, reason, and audit entry;
+email generation uses only verified sources;
+a rejected source blocks approval/send of an existing draft;
+a booking request creates no booking and does not change slot availability;
+a needs_human booking holds its slot and blocks a second booking;
+cancel/reschedule release a needs_human slot explicitly;
+two concurrent book_slot calls result in exactly one success;
+Google sync is only claimed successful after an actual successful OAuth and event creation test.
+I will not report success for database concurrency or Google synchronization until those manual checks are actually performed.
+
+
+Documentation and Submission
+In Build Mode I will:
+
+
+create/update HOW_I_WORKED.md with tools, plan changes, AI rules/context, previous and new mistakes, actual QA numbers, costs/free-tier limits, remaining work, and deployment steps;
+preserve all previously documented mistakes and add new ones honestly;
+create docs/SECURITY.md, docs/ENVIRONMENT.md, and docs/MIGRATION_INSTRUCTIONS.md;
+leave all AI session exports unedited.
+
+
+Existing Uncommitted Work
+I will:
+
+
+inspect git status before and after implementation,
+preserve .gitignore, package.json, lib/research/, scripts/research.ts, the research tests, and research input files,
+not run git reset, git clean, git checkout --, or broad destructive commands,
+not commit the research-agent changes,
+not commit anything unless explicitly asked,
+report clearly which files are existing research work and which are new implementation work.
+
+
+Non-Goals
+
+
+No Phase 4 resumption or new company research.
+No modification of the research CSV.
+No research-agent rewrite.
+No real email sending.
+No scoring weights or automatic qualification.
+No fictional companies, sources, contacts, bookings, or test results.
+No remote Supabase migration execution.
+No secret exposure or requests to paste secrets.
+No editing of full AI session exports.
+
+
+Remaining Decisions
+None blocking. All previously open items are approved. If an implementation-level tradeoff arises, I will ask before introducing a new dependency, schema change, or behavior outside this plan.
+I am ready to begin once you explicitly switch me to Build Mode.
+
+
+
+ChatGPT:
+Excellent. This is now a comprehensive, approved implementation plan. OpenCode has incorporated all five decisions correctly, including the subtle distinction between a booking request and an actual booking requiring human intervention.
+I recommend switching to Build mode now.
+Before doing so, here's what I want you to keep in mind:
+What OpenCode should deliver
+
+
+
+Phase
+Expected result
+
+
+
+5 — Email
+Source verification, AI-generated drafts, human approval, rejection, simulated sending
+
+
+6 — Conversations
+Inbox, AI replies, opt-out suppression, objection handling, human takeover
+
+
+7 — Calendar
+Internal calendar, timezone handling, atomic bookings, cancellation and rescheduling
+
+
+7 — Google
+Optional Google Calendar OAuth and event synchronization
+
+
+Three things I want us to watch particularly closely
+
+Database migrations: OpenCode prepares the SQL, but you execute it in Supabase. We'll inspect each migration before you run it.
+Source verification: Existing sources will become pending review. This is intentional, and email generation must not bypass it.
+Google Calendar: The internal calendar comes first. Google integration is not considered complete until we actually connect and test it.
+
+Project status
+Plan approved
+
+Phases 1–3: implemented.
+Phase 4: postponed.
+Phases 5–7: ready for implementation.
+Baseline: 79 tests passing.
+Existing research-agent changes: must remain untouched.
+Real email sending: prohibited.
+
+Next step: Switch OpenCode from Plan mode to Build mode and let it begin with implementation step 1.
+One important instruction: don't let it rush through all three phases without stopping for verification. Have it finish each implementation stage, run its tests, and report the actual results before proceeding.
+When it gives you its first Build-mode update, paste it here. I'll review its work with you as we go.
+
+
+You:
+Can I switch the model that he is going to use for Build mode ?
+
+
+ChatGPT:
+Yes! And I actually recommend choosing the model carefully before switching to Build mode.
+For this project, OpenCode will be doing substantial work involving:
+
+Next.js 16 and TypeScript.
+Supabase SQL migrations and RLS.
+Transaction-safe booking logic.
+AI safety and source verification.
+Google OAuth and API integration.
+Automated testing and debugging.
+
+I'd prioritize coding accuracy and reasoning over speed.
+My recommendation
+Choose a strong coding/reasoning model with good capabilities for:
+
+Understanding large existing codebases.
+Making coordinated changes across multiple files.
+Writing and debugging SQL and TypeScript.
+Following detailed architectural constraints.
+Running tests and correcting its own mistakes.
+
+You don't necessarily need to use the same model for Plan and Build modes.
+One question
+Which models are available in your OpenCode model selector?
+Send me a screenshot or paste the list, and I'll help you choose the best one for implementing Ledgerwise.
+
+
+You:
+🖼️ [Uploaded image: image(20261114-075313).png — PNG, 16 KB]
+These ones
+
+
+ChatGPT:
+From this list, I'd shortlist DeepSeek V4.1 Flash, GLM-5.3-Flash, and Nemotron 3.5 Super VL for the Ledgerwise Build phase.
+For this particular project, I care most about reliable multi-file coding, architectural consistency, SQL correctness, and debugging—not just generating code quickly.
+
+
+ChatGPT:
+From this list, I'd shortlist DeepSeek V4.1 Flash, GLM-5.3-Flash, and Nemotron 3.5 Super VL for the Ledgerwise Build phase.
+For this particular project, I care most about reliable multi-file coding, architectural consistency, SQL correctness, and debugging—not just generating code quickly.
+My first choice DeepSeek V4.1 Flash Free
+Why:
+
+Its published benchmarks show strong software-engineering agent performance.
+It performs well on repository-level coding tasks and terminal-based agent benchmarks.
+It supports long-context reasoning, which is useful when OpenCode needs to understand multiple files and coordinate changes.
+
+My ranking
+
+
+
+Model
+Recommendation
+
+
+
+DeepSeek V4.1 Flash
+First choice for Build
+
+
+GLM-5.3-Flash
+Second choice / backup
+
+
+Nemotron 3.5 Super VL
+Worth testing, but not my first pick
+
+
+MiMo-V2.6-Flash
+Alternative
+
+
+Remaining models
+No reason to prioritize them yet
+
+
+One caveat: published benchmarks don't guarantee that the free provider's implementation has equally reliable tool calling or rate limits.
+What I'd do
+
+Select DeepSeek V4.1 Flash Free in OpenCode.
+Switch to Build mode.
+Give it the approved implementation plan.
+Have it complete Stage 1 first, then stop and report tests before proceeding.
+
+Don't let it implement all three phases in one uninterrupted run.
+
+Ledgerwise status
+
+Phases 1–3: Foundation implemented.
+Phase 4: Postponed.
+Phases 5–7: Plan approved; implementation not yet confirmed started.
+Research-agent changes: Uncommitted; preserve.
+Baseline: 79 tests passed; TypeScript, lint and diff checks clean.
+
+My vote: DeepSeek V4.1 Flash.
+
+
+ChatGPT:
+My first choice DeepSeek V4.1 Flash Free
+Why:
+
+Its published benchmarks show strong software-engineering agent performance.
+It performs well on repository-level coding tasks and terminal-based agent benchmarks.
+It supports long-context reasoning, which is useful when OpenCode needs to understand multiple files and coordinate changes.
+
+My ranking
+
+
+
+Model
+Recommendation
+
+
+
+DeepSeek V4.1 Flash
+First choice for Build
+
+
+GLM-5.3-Flash
+Second choice / backup
+
+
+Nemotron 3.5 Super VL
+Worth testing, but not my first pick
+
+
+MiMo-V2.6-Flash
+Alternative
+
+
+Remaining models
+No reason to prioritize them yet
+
+
+One caveat: published benchmarks don't guarantee that the free provider's implementation has equally reliable tool calling or rate limits.
+What I'd do
+
+Select DeepSeek V4.1 Flash Free in OpenCode.
+Switch to Build mode.
+Give it the approved implementation plan.
+Have it complete Stage 1 first, then stop and report tests before proceeding.
+
+Don't let it implement all three phases in one uninterrupted run.
+
+Ledgerwise status
+
+Phases 1–3: Foundation implemented.
+Phase 4: Postponed.
+Phases 5–7: Plan approved; implementation not yet confirmed started.
+Research-agent changes: Uncommitted; preserve.
+Baseline: 79 tests passed; TypeScript, lint and diff checks clean.
+
+My vote: DeepSeek V4.1 Flash.
+
+
+You:
+OK I switched to build mode, now what would be the order
+
+
+ChatGPT:
+Now we should implement Ledgerwise in small, controlled stages, in the order already approved. Don't ask OpenCode to build everything at once.
+The key rule: finish each stage, inspect its changes, run its tests, and only then move to the next stage.
+Build order
+
+  
+    **Stage 1 — Source verification and security foundation**
+
+- Add the database migrations.
+- Implement human source verification: pending, verified, rejected.
+- Add audit logging and source-review actions.
+- Build the `/prospects/review` queue and per-source controls.
+- Update the importer so imported sources start as pending review.
+- Test migration logic and verification workflows.
+
+  
+  
+    **Stage 2 — Phase 5: AI email drafting**
+
+- Generate personalized drafts using only verified sources.
+- Validate claims, quotes, and source ownership.
+- Add approve, edit, reject, and simulated-send workflows.
+- Test that unverified or rejected sources cannot support an email.
+
+  
+  
+    **Stage 3 — Phase 6: AI conversations**
+
+- Implement inbound message handling.
+- Add deterministic opt-out, pricing, booking, and sensitive-topic guardrails.
+- Implement human takeover and audited release back to AI.
+- Prevent duplicate AI replies.
+
+  
+  
+    **Stage 4 — Phase 7: Internal calendar**
+
+- Implement availability and slot generation.
+- Add atomic booking, cancellation, and rescheduling.
+- Test concurrent bookings and slot conflicts.
+
+  
+  
+    **Stage 5 — Optional Google Calendar integration**
+
+- Implement OAuth and secure token storage.
+- Sync availability and bookings.
+- Verify actual event creation, updates, and cancellations before claiming integration works.
+
+  
+  
+    **Stage 6 — Final polish and regression**
+
+- Complete the UI and empty states.
+- Update security and environment documentation.
+- Run the full test suite, TypeScript, lint, diff check, and production build.
+- Review the final Git changes before any commit or deployment.
+
+  
+
+
+ChatGPT:
+Now we should implement Ledgerwise in small, controlled stages, in the order already approved. Don't ask OpenCode to build everything at once.
+The key rule: finish each stage, inspect its changes, run its tests, and only then move to the next stage.
+Build order
+
+  
+    **Stage 1 — Source verification and security foundation**
+
+- Add the database migrations.
+- Implement human source verification: pending, verified, rejected.
+- Add audit logging and source-review actions.
+- Build the `/prospects/review` queue and per-source controls.
+- Update the importer so imported sources start as pending review.
+- Test migration logic and verification workflows.
+
+  
+  
+    **Stage 2 — Phase 5: AI email drafting**
+
+- Generate personalized drafts using only verified sources.
+- Validate claims, quotes, and source ownership.
+- Add approve, edit, reject, and simulated-send workflows.
+- Test that unverified or rejected sources cannot support an email.
+
+  
+  
+    **Stage 3 — Phase 6: AI conversations**
+
+- Implement inbound message handling.
+- Add deterministic opt-out, pricing, booking, and sensitive-topic guardrails.
+- Implement human takeover and audited release back to AI.
+- Prevent duplicate AI replies.
+
+  
+  
+    **Stage 4 — Phase 7: Internal calendar**
+
+- Implement availability and slot generation.
+- Add atomic booking, cancellation, and rescheduling.
+- Test concurrent bookings and slot conflicts.
+
+  
+  
+    **Stage 5 — Optional Google Calendar integration**
+
+- Implement OAuth and secure token storage.
+- Sync availability and bookings.
+- Verify actual event creation, updates, and cancellations before claiming integration works.
+
+  
+  
+    **Stage 6 — Final polish and regression**
+
+- Complete the UI and empty states.
+- Update security and environment documentation.
+- Run the full test suite, TypeScript, lint, diff check, and production build.
+- Review the final Git changes before any commit or deployment.
+
+  
+
+
+Send this to OpenCode now
+We are now in Build mode. Use the approved final plan as the implementation specification.
+Follow the approved implementation order strictly:
+
+Stage 1: Shared server utilities, validation, audit logging, suppression, source-verification foundation, SQL migrations, review UI, and tests.
+Stage 2: Phase 5 — AI email drafting and simulated sending.
+Stage 3: Phase 6 — inbound conversations, deterministic guardrails, and human handoff.
+Stage 4: Phase 7 — internal calendar and transactional booking.
+Stage 5: Optional Google Calendar integration.
+Stage 6: UI polish, documentation, and full regression testing.
+
+Start with Stage 1 only. Do not proceed to Stage 2 until I review and approve the Stage 1 results.
+Before modifying anything:
+
+Inspect git status and identify all existing uncommitted changes.
+Preserve every existing research-agent change. Do not reset, clean, discard, overwrite, or commit those changes.
+Review the relevant existing implementation and tests.
+Confirm the exact files you intend to modify.
+
+Implementation rules:
+
+Follow the approved plan; do not silently change architectural decisions.
+Do not perform Phase 4 research or modify the research CSV.
+Do not invent demo data or fabricate research.
+Do not execute remote Supabase SQL or migrations. Create migration files and provide instructions for me to apply them manually.
+Do not introduce new runtime dependencies without asking me first.
+Do not expose secrets or modify .env.local unnecessarily.
+Do not commit, push, or deploy anything.
+
+After Stage 1:
+
+Run relevant tests, then the full test suite, TypeScript, lint, and git diff --check.
+Report files changed, migration contents, tests and their actual results, outstanding issues, and exact manual Supabase steps.
+Stop and wait for my review.
+
+Begin by inspecting the repository and reporting your intended Stage 1 changes before implementing them.
+One important precaution: OpenCode should inspect the existing uncommitted research-agent files before editing anything. We must preserve that work.
+Project status
+
+Phases 1–3: Foundation implemented.
+Phase 4: Postponed.
+Phases 5–7: Approved plan; Build mode selected.
+Next: Stage 1 only.
+Baseline: 79 tests passed; TypeScript, lint, and diff checks clean.
+
+Paste OpenCode's first response here. I'll review its proposed changes before we let it proceed.
+
+
+ChatGPT:
+Send this to OpenCode now
+We are now in Build mode. Use the approved final plan as the implementation specification.
+Follow the approved implementation order strictly:
+
+Stage 1: Shared server utilities, validation, audit logging, suppression, source-verification foundation, SQL migrations, review UI, and tests.
+Stage 2: Phase 5 — AI email drafting and simulated sending.
+Stage 3: Phase 6 — inbound conversations, deterministic guardrails, and human handoff.
+Stage 4: Phase 7 — internal calendar and transactional booking.
+Stage 5: Optional Google Calendar integration.
+Stage 6: UI polish, documentation, and full regression testing.
+
+Start with Stage 1 only. Do not proceed to Stage 2 until I review and approve the Stage 1 results.
+Before modifying anything:
+
+Inspect git status and identify all existing uncommitted changes.
+Preserve every existing research-agent change. Do not reset, clean, discard, overwrite, or commit those changes.
+Review the relevant existing implementation and tests.
+Confirm the exact files you intend to modify.
+
+Implementation rules:
+
+Follow the approved plan; do not silently change architectural decisions.
+Do not perform Phase 4 research or modify the research CSV.
+Do not invent demo data or fabricate research.
+Do not execute remote Supabase SQL or migrations. Create migration files and provide instructions for me to apply them manually.
+Do not introduce new runtime dependencies without asking me first.
+Do not expose secrets or modify .env.local unnecessarily.
+Do not commit, push, or deploy anything.
+
+After Stage 1:
+
+Run relevant tests, then the full test suite, TypeScript, lint, and git diff --check.
+Report files changed, migration contents, tests and their actual results, outstanding issues, and exact manual Supabase steps.
+Stop and wait for my review.
+
+Begin by inspecting the repository and reporting your intended Stage 1 changes before implementing them.
+One important precaution: OpenCode should inspect the existing uncommitted research-agent files before editing anything. We must preserve that work.
+Project status
+
+Phases 1–3: Foundation implemented.
+Phase 4: Postponed.
+Phases 5–7: Approved plan; Build mode selected.
+Next: Stage 1 only.
+Baseline: 79 tests passed; TypeScript, lint, and diff checks clean.
+
+Paste OpenCode's first response here. I'll review its proposed changes before we let it proceed.
+
+
+You:
+Stage 1 inspection complete. No files have been modified yet.
+Current Git State
+Existing uncommitted work I will preserve:
+
+Modified: .gitignore, package.json
+Untracked: lib/research/, scripts/research.ts, five tests/research-*.test.ts files, docs/research-input.txt, docs/research-template copy.csv
+I will not reset, clean, overwrite, stage, or commit any of these.
+Stage 1 Scope
+Stage 1 covers only the shared foundation and source-verification workflow:
+shared auth/audit/validation/suppression utilities,
+source-verification types and state rules,
+importer correction so new sources start pending_review,
+source verification actions and review UI,
+/prospects/review queue and prospect-detail controls,
+migration 01,
+migration instructions,
+unit tests.
+No email, conversation, calendar, or Google code will be added in Stage 1.
+New Files I Intend to Create
+lib/server/auth.ts
+lib/server/audit.ts
+lib/validation.ts
+lib/suppression.ts
+lib/sources/verification.ts
+
+app/(dashboard)/prospects/source-actions.ts
+app/(dashboard)/prospects/review/page.tsx
+components/prospects/SourceStatusBadge.tsx
+components/prospects/SourceReviewTable.tsx
+supabase/migrations/20261114_01_source_verification_and_security.sql
+docs/MIGRATION_INSTRUCTIONS.md
+tests/source-verification.test.ts
+tests/suppression.test.ts
+tests/source-import.test.ts
+Existing Files I Intend to Modify
+app/(dashboard)/prospects/import/actions.ts
+app/(dashboard)/prospects/[id]/page.tsx
+app/(dashboard)/prospects/page.tsx
+app/(dashboard)/prospects/import/page.tsx   (small explanatory note)
+components/ScoreBreakdown.tsx
+lib/scoring/score.ts                        (optional verification fields on SourceRow)
+No changes to package.json, .env.local, lib/ai.ts, lib/research/, or the research CSV.
+Foundation Details
+
+lib/server/auth.ts: authenticated-user helper for server actions.
+lib/server/audit.ts: typed audit_logs writer.
+lib/validation.ts: UUID, email normalization/validation, HTTP URL, text-length checks.
+lib/suppression.ts: isSuppressed and suppressContact wrappers around the new RPCs, with normalized email handling.
+lib/sources/verification.ts:
+status type: pending_review | verified | rejected,
+state rules for verify/reject/reset,
+isUsableVerifiedSource,
+status labels,
+import-field builder that always produces pending_review.
+Source Verification Behavior
+Imported sources: pending_review, imported_by = user.id, no reviewer, no old verified_by.
+Verify: sets verified, reviewed_by, reviewed_at, clears note, writes audit.
+Reject: requires non-empty note, sets rejected, reviewer/timestamp/note, writes audit.
+Reset: requires non-empty reason, sets pending_review, clears reviewer/timestamp/note, writes audit containing the prior status and reason.
+Any authenticated team member may review. This is the documented single-team assumption, not per-user isolation.
+Only verified sources with reviewer metadata and valid URL/evidence may later support email personalization.
+UI Details
+/prospects/review: centralized pending-source queue with company filter, source link, claim, evidence, imported date, and verify/reject/reset controls. Limited page size.
+Prospect detail: all sources with status badges, review metadata, and the same controls.
+Prospects list: pending-review count and link to the queue.
+Score breakdown/source items: optional verification badge so verified and pending evidence are visually distinct.
+Import page: clarifies that imports are structurally validated but not human-verified.
+Migration 01 Contents
+20261114_01_source_verification_and_security.sql will:
+add imported_by, verification_status, reviewed_by, reviewed_at, verification_note;
+backfill imported_by from the old verified_by only when the new columns are first added;
+set all existing sources to pending_review and clear old verified_by;
+preserve claims, URLs, evidence, dates, and all other source data;
+add the status check constraint and verification indexes;
+add conversations.ai_processing_at;
+replace policies on the affected public tables with authenticated-only policies;
+add append-only triggers for suppressed_contacts and audit_logs;
+add is_suppressed and suppress_contact RPCs granted only to authenticated;
+ensure the suppression lower-email unique index exists;
+add source/email/conversation-supporting indexes.
+It will not execute remotely.
+Manual Supabase Steps Preview
+After Stage 1 implementation I will provide:
+
+
+A pg_policies export query to save existing policies.
+Constraint and trigger export queries.
+Exact SQL Editor steps to run migration 01.
+Verification queries for the backfilled columns and constraints.
+A note that remote application is pending your manual execution.
+Stage 1 Tests
+
+
+import field builder sets pending_review, imported_by, and null review fields;
+verify/reject/reset state rules and required notes/reasons;
+only verified sources are email-usable;
+unauthenticated/invalid actions are rejected at the service boundary where testable without a live DB;
+suppression email normalization and error mapping;
+existing 79 tests continue to pass.
+Database RPC and RLS behavior will be verified only after you apply the migration; I will not claim it verified beforehand.
+Verification After Stage 1
+I will run:
+npm test
+npx tsc --noEmit
+npm run lint
+git diff --check
+Then I will report actual results, changed files, migration contents, outstanding issues, and the exact manual Supabase steps, and stop for your review.
+I am ready to implement Stage 1 on your approval.
+
+What is this supposed to mean ?
+I want him to finish all man
+
+
+ChatGPT:
+Ah, I understand. You want OpenCode to finish the entire Ledgerwise implementation (Phases 5, 6, and 7), not stop after Stage 1 and wait for your approval.
+The confusion is my fault: I explicitly instructed it to stop after Stage 1. That's why it's asking for approval now.
+We can let it work through the entire approved plan autonomously, while still testing each stage. You should only need to review the completed implementation.
+Send this correction to OpenCode
+Approved. I want you to implement the ENTIRE approved Ledgerwise plan, not just Stage 1.
+Do not stop after Stage 1 to request my approval. Continue autonomously through every implementation stage in the approved plan:
+
+Source verification and security foundation.
+Phase 5 — AI email drafting, review, approval, and simulated sending.
+Phase 6 — AI conversations, guardrails, suppression, and human handoff.
+Phase 7 — Internal calendar, availability, and transactional booking.
+Google Calendar OAuth and integration.
+Final UI polish, documentation, and regression testing.
+
+You must complete all stages before reporting the implementation as finished.
+Important instructions:
+
+Work sequentially. Complete and test each stage before moving to the next.
+If a test fails, investigate and fix it before proceeding.
+Do not ask me for approval between implementation stages.
+Do not silently omit difficult features or replace approved functionality with placeholders.
+Preserve all existing uncommitted research-agent changes.
+Do not modify the research CSV or resume Phase 4.
+Do not execute Supabase migrations remotely. Create all required migration files and give me exact instructions to apply them manually.
+Do not expose, request, or commit secrets.
+Do not add dependencies without first asking me.
+Do not commit, push, or deploy.
+Do not claim Google Calendar is operational until actual OAuth and event synchronization have been tested with credentials.
+If something genuinely blocks implementation, explain the blocker and continue with all independent work that can safely be completed.
+
+At the end, provide:
+
+All implemented features.
+All files created and modified.
+All migration files and manual application instructions.
+Actual test results: full tests, TypeScript, lint, diff check, and production build.
+Features that still require manual configuration or external credentials.
+Any remaining bugs, limitations, or incomplete acceptance criteria.
+Final Git status, confirming existing research work remains preserved.
+
+Do not stop after Stage 1. Complete the entire approved implementation before your final report.
+One distinction: OpenCode can implement all the code and migrations, but you will still need to apply the Supabase migrations manually and configure external credentials where necessary.
+Ledgerwise status
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phases 5–7: Full implementation now authorized.
+Research-agent changes: Must remain preserved.
+Next milestone: Complete implementation and final verification.
+
+
+
+You:
+Finished the next guardrail/verification pass:
+
+Email creation, revision, and simulated send now require a human-verified contact source containing the exact recipient email; the email page only lists eligible companies.
+Suppression is enforced before AI/human replies and booking create/confirm/reschedule. Calendar now respects is_available and detects stale concurrent updates.
+Hardened source verification, date validation, source-link safety, and raised the server-action body limit to 8 MB for imports. Updated docs/SECURITY.md, docs/MIGRATION_INSTRUCTIONS.md, and docs/SCOPE.md.
+npm test passes 124/124; npx tsc --noEmit, npm run lint, npm run build, and git diff --check are all clean.
+Migrations remain manual and unapplied here. Cal.com is still not integrated; the working path is the internal calendar plus optional Google Calendar sync.
+
+
+
+ChatGPT:
+Good progress. This is an important hardening pass, particularly the exact-recipient verification requirement and suppression checks across replies and bookings.
+The test results are encouraging:
+124/124 tests passing
+
+TypeScript: clean.
+Lint: clean.
+Production build: clean.
+Git diff check: clean.
+
+However, I wouldn't call Ledgerwise finished yet. There are two important distinctions:
+
+Database migrations: They remain unapplied. The new database policies, RPCs, triggers, and schema changes still need to be applied and verified in Supabase.
+External integrations: Cal.com is not integrated. The intended calendar approach is the internal calendar with optional Google Calendar synchronization. Google synchronization must be tested with real credentials before we claim it works.
+
+What I want to verify next
+Ask OpenCode for its consolidated implementation report, including:
+
+Which of Phases 5, 6, and 7 are fully implemented.
+Which acceptance criteria are passing, failing, or untested.
+Whether concurrent booking tests actually exercise simultaneous database transactions.
+Whether source verification and suppression have database-level enforcement, not just UI/server-action checks.
+All migration filenames and whether they are safe to apply.
+Remaining manual configuration.
+Final Git status, including confirmation that the research-agent changes remain untouched.
+
+Ledgerwise status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4
+Postponed
+
+
+Phase 5 — Email
+Implementation progressing; verification needed
+
+
+Phase 6 — Conversations
+Guardrail hardening reported
+
+
+Phase 7 — Calendar
+Internal calendar path reported
+
+
+Google Calendar
+Requires integration testing
+
+
+Supabase migrations
+Not applied
+
+
+Automated checks
+Passing
+
+
+One question: Is this OpenCode's final report, or is it still working through the implementation?
+
+
+You:
+Ledgerwise AI SDR phases 5-7 plan
+Context
+131,221 tokens
+66% used
+$0.00 spent
+LSP
+LSPs are disabled
+▼Todo
+[•] Stage 2: email drafting, guardrails, review queue, simulated send
+[ ] Stage 3: conversations, reply classification, takeover, suppression
+[ ] Stage 4: internal calendar slots and bookings
+[ ] Stage 5: optional Google Calendar integration status/sync
+[ ] Migrations 02/03, SECURITY/Google docs
+[ ] Tests and final verification (test/tsc/lint/diff)
+He is at this
+
+
+ChatGPT:
+Ah, now I see. OpenCode is still actively implementing the project, and it has not reached the later phases yet.
+The ▼Todo list tells us exactly where it stands:
+
+  
+    **Current progress**
+    Stage 2 in progress
+  
+  
+    
+      In progress **Stage 2 — Email drafting**
+
+  Email creation, revision, guardrails, review queue and simulated sending.
+</list-item>
+<list-item>
+  **Stage 3 — Conversations**
+
+  Reply classification, human takeover and suppression.
+</list-item>
+<list-item>
+  **Stage 4 — Internal calendar**
+
+  Calendar slots, availability and bookings.
+</list-item>
+<list-item>
+  **Stage 5 — Google Calendar**
+
+  Optional integration, synchronization and status.
+</list-item>
+<list-item>
+  **Migrations and documentation**
+
+  Migrations 02/03, security and Google Calendar documentation.
+</list-item>
+<list-item>
+  **Final verification**
+
+  Tests, TypeScript, lint and Git diff checks.
+</list-item>
+
+  
+
+
+What should you do now?
+Nothing yet. Let OpenCode continue.
+The 124 passing tests and clean build are encouraging, but they are not proof that Stages 3–5 are complete.
+One clarification to my previous response: I was too quick to describe the conversation and calendar work as implemented. This Todo confirms those stages are still pending.
+Ledgerwise status
+
+
+
+Phase
+Status
+
+
+
+1–3
+Implemented
+
+
+4
+Postponed
+
+
+5 — Email
+In progress
+
+
+6 — Conversations
+Pending
+
+
+7 — Calendar
+Pending
+
+
+Google Calendar
+Pending
+
+
+Final verification
+Pending
+
+
+When OpenCode finishes, send me its final report. We'll review the implementation against the original case requirements before applying migrations or deploying.
+
+
+You:
+
+Thought: 2.5s
+Finished the next guardrail/verification pass:
+
+
+Email creation, revision, and simulated send now require a human-verified contact source containing the exact recipient email; the email page only lists eligible companies.
+Suppression is enforced before AI/human replies and booking create/confirm/reschedule. Calendar now respects is_available and detects stale concurrent updates.
+Hardened source verification, date validation, source-link safety, and raised the server-action body limit to 8 MB for imports. Updated docs/SECURITY.md, docs/MIGRATION_INSTRUCTIONS.md, and docs/SCOPE.md.
+npm test passes 124/124; npx tsc --noEmit, npm run lint, npm run build, and git diff --check are all clean.
+Migrations remain manual and unapplied here. Cal.com is still not integrated; the working path is the internal calendar plus optional Google Calendar sync.
+
+I mean he is not working now
+
+
+ChatGPT:
+Ah, understood now. OpenCode has stopped working, and that last message is its final update for the current run. The Todo list shows that Stage 2 is still in progress, with Stages 3–5 and final verification pending.
+It may have stopped because it reached the end of its current task or exhausted its current execution turn. We shouldn't assume the remaining work is complete.
+What to do now
+Send this to OpenCode:
+You appear to have stopped working. Your Todo list still shows Stage 2 in progress, with Stages 3, 4, 5 and final verification pending.
+Resume implementation immediately from the current repository state.
+
+Finish Stage 2 completely.
+Continue through Stage 3 (conversations).
+Continue through Stage 4 (internal calendar and bookings).
+Continue through Stage 5 (Google Calendar integration).
+Complete migrations 02/03 and the required documentation.
+Run the complete final verification.
+
+Do not stop after another guardrail pass or status update. Continue implementing the remaining approved features.
+Preserve all existing work, including the uncommitted research-agent changes. Do not commit, push, deploy, or execute remote migrations.
+Only stop if you encounter a genuine blocker that requires my input. Otherwise, continue until the full implementation is complete and report the actual results.
+Ledgerwise status
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Stage 2: In progress; latest hardening pass reported.
+Stage 3: Pending.
+Stage 4: Pending.
+Stage 5: Pending.
+Migrations 02/03: Pending.
+Final verification: Pending.
+
+Don't switch models or restart the project. Have OpenCode resume from its existing repository state.
+
+
+You:
+$ python3 - <<'PY'
+from pathlib import Path
+p=Path('docs/SCOPE.md')
+s=p.read_text()
+s=s.replace('''- Built: login, protected dashboard shell, research/import pipeline, source
+  review, scoring, email drafts and review, reply handling with guardrails,
+  internal calendar and bookings, optional Google Calendar sync.
+
+Email sending is simulated. No real provider is connected.
+Google Calendar is optional and is not claimed operational until real OAuth,
+event sync, and an external check have been verified.''','''- Built: login, protected dashboard shell, research/import pipeline, source
+review, scoring, email drafts and review, reply handling with guardrails,
+internal calendar and bookings, and optional Google Calendar create/update/
+delete sync.
+Email sending is simulated. No real provider is connected.
+Google Calendar is optional and is not claimed operational until real OAuth,
+event create/update/delete sync, and an external check have been verified.''')
+p.write_text(s)
+
+p=Path('docs/SECURITY.md')
+s=p.read_text()
+s=s.replace('''- The internal calendar is the source of truth for bookings. Google Calendar is
+  optional. The UI reports it as not operational until credentials are present,
+  the operator explicitly marks it verified, and sync is enabled.''','''- The internal calendar is the source of truth for bookings. Google Calendar is
+  optional. The UI reports it as not operational until credentials are present,
+  the operator explicitly marks it verified, and sync is enabled. When enabled,
+  booking creation, rescheduling, and cancellation create, update, or delete the
+  linked Google event; failures never roll back the internal booking.''')
+p.write_text(s)
+PY
+(no output)
+Free limit was reached
+
+
+ChatGPT:
+Okay, this confirms OpenCode reached its free usage limit and stopped, rather than completing the remaining work.
+The last operation you pasted was a documentation-only edit to:
+
+docs/SCOPE.md
+docs/SECURITY.md
+
+The Python script produced no output, which is normal for a successful execution, but we haven't independently verified the resulting files.
+Where we stand
+Implementation paused
+
+
+
+Component
+Status
+
+
+
+Source verification
+Implemented
+
+
+Email drafting and simulated sending
+Reported implemented; needs full review
+
+
+Conversations and guardrails
+Reported implemented; needs full review
+
+
+Internal calendar and bookings
+Reported implemented; needs full review
+
+
+Google Calendar sync
+Implementation reported; real OAuth not verified
+
+
+Migrations
+Manual application still required
+
+
+Final verification
+124 tests passed in the last reported run
+
+
+What I recommend
+Don't discard the current work or restart OpenCode from scratch.
+When your free limit resets:
+
+Reopen the existing Ledgerwise project in OpenCode.
+Check git status to preserve all uncommitted work.
+Ask it to inspect the Todo list and repository to identify exactly what remains.
+Have it finish the remaining implementation and final verification.
+
+Use this prompt:
+Resume the Ledgerwise implementation from the current repository state. Your previous session stopped because the usage limit was reached.
+First inspect the existing implementation, Git status, and all project Todo items. Do not repeat completed work or overwrite existing changes.
+Compare the actual repository against the approved Phases 5–7 plan and identify incomplete acceptance criteria.
+Then finish all remaining implementation, tests, migrations, and documentation. Preserve the uncommitted research-agent work. Do not commit, push, deploy, or execute remote Supabase migrations.
+Run the complete final verification, including npm test, TypeScript, lint, git diff --check, and npm run build.
+Give me a final report distinguishing implemented, tested, manually configured, and externally verified functionality. Do not claim Google Calendar is operational without real OAuth and event synchronization testing.
+Ledgerwise status board
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phases 5–7: Implementation partially completed; final audit pending.
+Research-agent changes: Preserve.
+Supabase migrations: Not yet applied.
+Deployment: Not yet authorized.
+
+Most importantly, your existing work is still the starting point. We don't need to rebuild Ledgerwise.
+
+If you want, I can:
+
+Tell OpenCode to resume and finish all remaining Ledgerwise stages
+Ask OpenCode for a detailed list of unfinished tasks and incomplete features
+Request OpenCode to produce a final implementation and testing summary report

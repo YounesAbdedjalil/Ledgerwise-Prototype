@@ -1,0 +1,4712 @@
+Project Status Update (9)
+=========================
+
+ChatGPT:
+You're right. We've spent too long inspecting instead of building. Let's stop the verification loop and move forward.
+New approach: I'll make implementation decisions using the information we already have. I'll only ask for command output when it's genuinely needed to apply or verify a change—not for another round of exploratory checks.
+What we're implementing next
+
+Correct migration 04
+
+Make calendar booking and slot operations transactional.
+Serialize suppression and booking operations using the same advisory lock.
+Remove direct authenticated writes to suppressed_contacts.
+Restrict audit inserts to the authenticated actor.
+Prevent unrestricted modification of Google Calendar event metadata.
+
+
+Refactor calendar actions
+
+Replace direct booking and slot mutations with database RPCs.
+Keep internal Ledgerwise bookings authoritative.
+Keep Google synchronization separate from the internal transaction.
+Preserve existing UI behavior and error handling.
+
+
+Run the complete test suite and fix any regressions.
+
+Review the final migration once, then you can decide when to apply it remotely.
+
+
+Status board
+
+
+
+Workstream
+Status
+
+
+
+Phases 1–3
+Complete
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar
+Hardening in progress
+
+
+Migration 04
+Being corrected
+
+
+Google OAuth
+Still planned, not operational
+
+
+Deployment
+Not yet done
+
+
+One practical constraint: I cannot directly modify files on your Kali machine from this chat. I'll provide complete implementation patches and commands, not another sequence of exploratory inspections.
+Let's finish the calendar implementation.
+
+
+You:
+OK proceed from the last point
+
+
+ChatGPT:
+Let's move straight into implementation. We'll use OpenCode to make the coordinated changes in the repository rather than spend another round manually inspecting files.
+First implementation target: migration 04 and calendar actions.
+1. Give OpenCode this implementation task
+Switch OpenCode to Build/Edit mode, then paste this prompt:
+# IMPLEMENTATION TASK — Ledgerwise transactional calendar hardening
+You are implementing the next stage of Ledgerwise. Do not return another plan or perform another exploratory verification-only pass. Make the changes in the repository.
+Important constraints
+
+Preserve all existing unrelated modifications and untracked files.
+Do not use git reset, git clean, broad checkout/discard commands, or overwrite unrelated work.
+Do not apply migrations to the remote Supabase database.
+Do not commit, push, deploy, or install dependencies.
+Do not change Phase 4 research or the research CSV.
+Do not implement manual Google refresh-token configuration as the final OAuth architecture.
+Internal Ledgerwise bookings remain authoritative. Google Calendar remains optional.
+Never expose or print environment variable values or secrets.
+
+A. Correct migration 04
+Edit the existing un-applied migration:
+supabase/migrations/20261114_04_transactional_calendar_operations.sql
+Implement these security corrections:
+
+suppress_contact must acquire the same transaction-scoped advisory lock used by all calendar booking/slot mutation RPCs, before checking/inserting suppression records. This prevents a booking from racing with a suppression.
+Revoke direct INSERT privileges on public.suppressed_contacts from anon and authenticated. Retain authenticated SELECT access if required by the application.
+Drop the authenticated direct-insert RLS policy on suppressed_contacts. Keep suppression writes routed through suppress_contact.
+Tighten the audit_logs authenticated INSERT policy to require actor_id = auth.uid(). Existing application audit writers pass the authenticated user's ID, including CSV import.
+Retain authenticated SELECT and INSERT access to audit_logs; do not revoke application audit writes.
+Keep append-only protections intact.
+Use a safe search_path for every SECURITY DEFINER function, including pg_temp where appropriate.
+Do not weaken the authorization checks or advisory locking in the existing calendar RPCs.
+
+B. Secure Google sync metadata
+Inspect the existing Google sync metadata update path.
+Do not leave an unrestricted authenticated RPC that lets any logged-in user assign arbitrary Google event IDs to bookings.
+Use a server-only Supabase administrative client for metadata writes, if the project can safely support one using the existing server-side environment configuration. If no helper exists, implement a server-only helper using SUPABASE_SERVICE_ROLE_KEY, ensure it cannot enter client bundles, and retain an explicit authenticated-user check in the server action before using it.
+Do not print or request secrets. Do not expose the service-role key to the browser.
+If safe server-only persistence cannot be implemented without changing the approved architecture, remove the unsafe metadata-write path and clearly report the remaining limitation rather than pretending it is secure.
+C. Refactor calendar actions
+Edit:
+app/(dashboard)/calendar/actions.ts
+Replace direct database mutations for:
+
+creating calendar slots
+deleting calendar slots
+creating bookings
+confirming bookings
+cancelling bookings
+rescheduling bookings
+
+with the corresponding transactional RPCs already defined in migration 04.
+Keep direct SELECT queries where appropriate.
+Ensure RPC arguments match the exact SQL function signatures. Handle RPC errors and returned IDs/statuses correctly. Remove obsolete preflight checks that are superseded by transactional database checks, but retain useful input validation and suppression fail-closed behavior.
+Keep Google API calls outside the internal database transaction. A Google sync failure must not roll back an otherwise successful internal booking operation. Persist sync metadata only through the secure server-only path described above.
+Keep existing action result shapes, user-facing behavior, and revalidatePath behavior compatible with the UI.
+D. Tests
+Add or update tests for:
+
+suppression and booking serialization assumptions
+booking creation/confirmation/cancellation/rescheduling RPC result handling
+calendar action error handling
+Google sync metadata persistence authorization, where testable
+
+Do not claim that SQL concurrency behavior is integration-tested unless a real database test proves it.
+E. Run checks
+Run:
+
+npm test
+npx tsc --noEmit
+npm run lint
+git diff --check
+
+Also check whitespace in the untracked migration file; ordinary git diff --check does not include untracked files.
+Fix failures caused by your changes.
+Final response
+Report:
+
+Files changed.
+Exact implementation details.
+Tests and actual results.
+Any unresolved limitations.
+Confirm explicitly that no remote migration was applied, no commit/push/deployment occurred, and unrelated work was preserved.
+
+Do not stop after producing a plan. Implement the changes.
+2. What we're aiming to finish
+
+
+
+Item
+Target
+
+
+
+Suppression race condition
+Fixed through shared advisory lock
+
+
+Direct suppression-table writes
+Revoked
+
+
+Audit actor spoofing
+Prevented
+
+
+Calendar mutations
+Transactional RPCs
+
+
+Google event metadata
+Server-only writes
+
+
+Existing UI behavior
+Preserved
+
+
+Remote database
+Untouched until migration approval
+
+
+Ledgerwise status
+
+Phases 1–3: implemented.
+Phase 4 research: postponed.
+Phase 5 email: implemented; sending simulated.
+Phase 6 conversations: implemented.
+Phase 7 calendar: transactional hardening underway.
+Migration 04: still unapproved and unapplied.
+Google OAuth: proper OAuth architecture remains planned.
+Latest baseline: 130 tests passed; TypeScript and lint passed before these new changes.
+
+Next: paste OpenCode's implementation summary and the actual diff for the migration and calendar actions. I'll review the changes as an implementation review—not restart the discovery process.
+
+
+You:
+Opencode is down currently, so Imma use you, give me the commands and I will paste them to make changes (no verifications please, we already did in the past conversation, but if you feel that the implementation code that I am about to perform feels too dangerous than give a safety measure code along the implementation code)
+
+
+ChatGPT:
+Understood. We'll implement directly through your Kali terminal, one change at a time. No more exploratory verification loops, and no asking you to rerun checks we've already completed.
+I'll provide:
+
+Exact commands for your zsh terminal.
+Complete code changes, not vague instructions.
+A safety measure alongside any change that could damage existing work or weaken security.
+A short explanation of what each change accomplishes.
+
+We'll preserve your existing uncommitted work and leave the remote Supabase database untouched.
+Implementation 1 — Harden suppression and audit permissions
+We'll start by adding a new corrective migration, rather than rewriting migration 04 immediately. This preserves the existing migration as a reference and makes the changes independently reviewable.
+The migration will:
+
+Serialize contact suppression with calendar booking operations using the same advisory lock.
+Remove direct authenticated INSERT access to suppressed_contacts.
+Require audit records to use the authenticated user's own ID.
+Preserve authenticated audit reads and writes.
+Keep append-only protections.
+
+
+
+ChatGPT:
+Understood. We'll implement directly through your Kali terminal, one change at a time. No more exploratory verification loops, and no asking you to rerun checks we've already completed.
+I'll provide:
+
+Exact commands for your zsh terminal.
+Complete code changes, not vague instructions.
+A safety measure alongside any change that could damage existing work or weaken security.
+A short explanation of what each change accomplishes.
+
+We'll preserve your existing uncommitted work and leave the remote Supabase database untouched.
+Implementation 1 — Harden suppression and audit permissions
+We'll start by adding a new corrective migration, rather than rewriting migration 04 immediately. This preserves the existing migration as a reference and makes the changes independently reviewable.
+The migration will:
+
+Serialize contact suppression with calendar booking operations using the same advisory lock.
+Remove direct authenticated INSERT access to suppressed_contacts.
+Require audit records to use the authenticated user's own ID.
+Preserve authenticated audit reads and writes.
+Keep append-only protections.
+
+Run this command
+It creates a new corrective migration without overwriting migration 01–04 or any existing project files.
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+FILE="supabase/migrations/20261114_05_calendar_security_corrections.sql"
+
+if [ -e "$FILE" ]; then
+  echo "STOP: $FILE already exists. Nothing was changed."
+  return 1 2>/dev/null || exit 1
+fi
+
+cat > "$FILE" <<'SQL'
+-- Ledgerwise — migration 05
+-- Correct suppression concurrency and audit actor authorization.
+--
+-- Apply only after migrations 01–04 have been reviewed and approved.
+
+begin;
+
+-- 1. Suppression records can be read by authenticated users,
+--    but all writes must go through the SECURITY DEFINER RPC.
+revoke insert on table public.suppressed_contacts
+  from anon, authenticated;
+
+grant select on table public.suppressed_contacts
+  to authenticated;
+
+drop policy if exists auth_insert_suppressed_contacts
+  on public.suppressed_contacts;
+
+-- 2. Authenticated users may create audit records only as themselves.
+--    Existing application writers already supply actor_id = auth.uid().
+drop policy if exists auth_insert_audit_logs
+  on public.audit_logs;
+
+create policy auth_insert_audit_logs
+  on public.audit_logs
+  for insert
+  to authenticated
+  with check (actor_id = auth.uid());
+
+-- 3. Serialize suppression with booking operations.
+--    This MUST use the same advisory lock as the calendar RPCs:
+--    pg_advisory_xact_lock(734921, 1).
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if v_email = ''
+    or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
+  then
+    raise exception 'invalid_email';
+  end if;
+
+  -- Shared transaction lock with book_slot and other calendar mutations.
+  perform pg_advisory_xact_lock(734921, 1);
+
+  insert into public.suppressed_contacts (
+    email,
+    reason,
+    source_message_id
+  )
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+
+  if v_row.id is null then
+    select *
+      into v_row
+      from public.suppressed_contacts
+      where lower(email) = v_email;
+
+    return v_row;
+  end if;
+
+  insert into public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    detail
+  )
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.suppress_contact(text, text, uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.suppress_contact(text, text, uuid)
+  to authenticated;
+
+commit;
+SQL
+
+echo "Created $FILE"
+
+Why this is safe: it uses a new file, refuses to overwrite an existing migration, and does not touch the remote database. The shared lock ensures that a booking and a suppression operation cannot pass their respective checks concurrently without being serialized.
+One important distinction: this migration assumes the calendar RPCs in migration 04 use exactly pg_advisory_xact_lock(734921, 1), as established in our earlier review.
+
+Next implementation: calendar actions
+After this, we'll replace the six direct calendar mutations with the existing transactional RPCs:
+
+create_calendar_slot
+delete_calendar_slot
+book_slot
+confirm_booking
+cancel_booking
+reschedule_booking
+
+We'll also separate Google metadata persistence from ordinary authenticated writes. I won't expose the service-role key or make Google OAuth claims.
+Status board
+
+
+
+Workstream
+Status
+
+
+
+Suppression/audit corrective migration
+Command provided
+
+
+Calendar action RPC refactor
+Next
+
+
+Google metadata security
+Pending implementation
+
+
+Tests
+130 baseline tests passed
+
+
+Remote migrations
+Not applied
+
+
+Commit/deployment
+None
+
+
+
+
+ChatGPT:
+Run this command
+It creates a new corrective migration without overwriting migration 01–04 or any existing project files.
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+FILE="supabase/migrations/20261114_05_calendar_security_corrections.sql"
+
+if [ -e "$FILE" ]; then
+  echo "STOP: $FILE already exists. Nothing was changed."
+  return 1 2>/dev/null || exit 1
+fi
+
+cat > "$FILE" <<'SQL'
+-- Ledgerwise — migration 05
+-- Correct suppression concurrency and audit actor authorization.
+--
+-- Apply only after migrations 01–04 have been reviewed and approved.
+
+begin;
+
+-- 1. Suppression records can be read by authenticated users,
+--    but all writes must go through the SECURITY DEFINER RPC.
+revoke insert on table public.suppressed_contacts
+  from anon, authenticated;
+
+grant select on table public.suppressed_contacts
+  to authenticated;
+
+drop policy if exists auth_insert_suppressed_contacts
+  on public.suppressed_contacts;
+
+-- 2. Authenticated users may create audit records only as themselves.
+--    Existing application writers already supply actor_id = auth.uid().
+drop policy if exists auth_insert_audit_logs
+  on public.audit_logs;
+
+create policy auth_insert_audit_logs
+  on public.audit_logs
+  for insert
+  to authenticated
+  with check (actor_id = auth.uid());
+
+-- 3. Serialize suppression with booking operations.
+--    This MUST use the same advisory lock as the calendar RPCs:
+--    pg_advisory_xact_lock(734921, 1).
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if v_email = ''
+    or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
+  then
+    raise exception 'invalid_email';
+  end if;
+
+  -- Shared transaction lock with book_slot and other calendar mutations.
+  perform pg_advisory_xact_lock(734921, 1);
+
+  insert into public.suppressed_contacts (
+    email,
+    reason,
+    source_message_id
+  )
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+
+  if v_row.id is null then
+    select *
+      into v_row
+      from public.suppressed_contacts
+      where lower(email) = v_email;
+
+    return v_row;
+  end if;
+
+  insert into public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    detail
+  )
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.suppress_contact(text, text, uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.suppress_contact(text, text, uuid)
+  to authenticated;
+
+commit;
+SQL
+
+echo "Created $FILE"
+
+Why this is safe: it uses a new file, refuses to overwrite an existing migration, and does not touch the remote database. The shared lock ensures that a booking and a suppression operation cannot pass their respective checks concurrently without being serialized.
+One important distinction: this migration assumes the calendar RPCs in migration 04 use exactly pg_advisory_xact_lock(734921, 1), as established in our earlier review.
+
+Next implementation: calendar actions
+After this, we'll replace the six direct calendar mutations with the existing transactional RPCs:
+
+create_calendar_slot
+delete_calendar_slot
+book_slot
+confirm_booking
+cancel_booking
+reschedule_booking
+
+We'll also separate Google metadata persistence from ordinary authenticated writes. I won't expose the service-role key or make Google OAuth claims.
+Status board
+
+
+
+Workstream
+Status
+
+
+
+Suppression/audit corrective migration
+Command provided
+
+
+Calendar action RPC refactor
+Next
+
+
+Google metadata security
+Pending implementation
+
+
+Tests
+130 baseline tests passed
+
+
+Remote migrations
+Not applied
+
+
+Commit/deployment
+None
+
+
+
+
+You:
+Alright let's go
+
+
+ChatGPT:
+Let's implement the calendar actions now. We'll replace the direct database mutations with the six transactional RPCs already defined in migration 04.
+Important: this change preserves the existing action interfaces, so the calendar UI should not need to be rewritten.
+Implementation 2 — Replace direct calendar mutations
+We'll replace app/(dashboard)/calendar/actions.ts with an implementation that:
+
+Calls the transactional RPCs for all six mutations.
+Keeps database reads and input validation.
+Keeps Google API operations outside the database transaction.
+Keeps internal bookings authoritative.
+Fails safely if Google synchronization fails.
+
+1. Back up the current file
+Run:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+cp -p "app/(dashboard)/calendar/actions.ts" \
+  "/tmp/ledgerwise-calendar-actions.ts.backup"
+
+2. Apply the implementation
+I don't want to invent the exact RPC argument names or return structures from memory. A mismatch here could break booking creation, cancellation, or rescheduling.
+The most direct safe route is to use the actual SQL function definitions from migration 04, which we reviewed earlier, alongside the existing TypeScript action file. Please paste the output of this single command:
+sed -n '1,260p' "supabase/migrations/20261114_04_transactional_calendar_operations.sql"
+sed -n '261,520p' "supabase/migrations/20261114_04_transactional_calendar_operations.sql"
+sed -n '521,780p' "supabase/migrations/20261114_04_transactional_calendar_operations.sql"
+
+This is not another verification round. It's the implementation source needed to generate exact RPC calls rather than guess at database contracts.
+Status board
+
+
+
+Workstream
+Status
+
+
+
+Migration 05 corrective SQL
+Command provided
+
+
+Calendar actions RPC refactor
+In progress
+
+
+Google metadata security
+Pending
+
+
+Existing test baseline
+130 passed
+
+
+Remote database
+Untouched
+
+
+Git commit/deployment
+None
+
+
+Once you paste the SQL, I'll give you the complete replacement command for actions.ts, not another checklist.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ sed -n '1,260p' "supabase/migrations/20261114_04_transactional_calendar_operations.sql"
+sed -n '261,520p' "supabase/migrations/20261114_04_transactional_calendar_operations.sql"
+sed -n '521,780p' "supabase/migrations/20261114_04_transactional_calendar_operations.sql"
+-- Ledgerwise migration 04
+-- Transactional calendar operations and restricted table mutations.
+-- Apply only after reviewing this migration alongside migrations 01-03.
+-- All calendar mutations use one transaction-scoped advisory lock.
+-- Google Calendar API calls remain outside these database transactions.
+
+-- 1. Create calendar slot
+
+create or replace function public.create_calendar_slot(
+  p_start_time timestamptz,
+  p_end_time timestamptz,
+  p_timezone text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_slot_id uuid;
+  v_local_start timestamp;
+  v_local_end timestamp;
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  perform pg_advisory_xact_lock(734921, 1);
+  if p_start_time is null or p_end_time is null
+     or p_end_time <= p_start_time then
+    raise exception 'Invalid slot time range';
+  end if;
+  if p_start_time <= now() then
+    raise exception 'A calendar slot must be in the future';
+  end if;
+  if p_timezone is null or not exists (
+    select 1 from pg_timezone_names where name = p_timezone
+  ) then
+    raise exception 'Invalid timezone';
+  end if;
+  if extract(epoch from (p_end_time - p_start_time)) / 60 not between 15 and 120 then
+    raise exception 'Slot duration must be between 15 and 120 minutes';
+  end if;
+  v_local_start := p_start_time at time zone p_timezone;
+  v_local_end := p_end_time at time zone p_timezone;
+  if v_local_start::date <> v_local_end::date
+     or v_local_start::time < time '09:00'
+     or v_local_end::time > time '17:00' then
+    raise exception 'Slots must remain within 09:00-17:00 local business hours';
+  end if;
+  if exists (
+    select 1
+    from public.calendar_slots s
+    where s.is_available = true
+      and s.start_time < p_end_time
+      and s.end_time > p_start_time
+  ) then
+    raise exception 'This slot overlaps an existing available slot';
+  end if;
+  insert into public.calendar_slots (
+    start_time,
+    end_time,
+    timezone,
+    source,
+    external_id,
+    is_available,
+    fetched_at
+  )
+  values (
+    p_start_time,
+    p_end_time,
+    p_timezone,
+    'internal',
+    null,
+    true,
+    now()
+  )
+  returning id into v_slot_id;
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    v_actor,
+    'calendar_slot_created',
+    'calendar_slot',
+    v_slot_id,
+    jsonb_build_object(
+      'start_time', p_start_time,
+      'end_time', p_end_time,
+      'timezone', p_timezone
+    )
+  );
+  return v_slot_id;
+end;
+$$;
+
+-- 2. Delete calendar slot
+
+create or replace function public.delete_calendar_slot(
+  p_slot_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_slot public.calendar_slots%rowtype;
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_slot_id is null then
+    raise exception 'Slot ID is required';
+  end if;
+  perform pg_advisory_xact_lock(734921, 1);
+  select *
+  into v_slot
+  from public.calendar_slots
+  where id = p_slot_id
+  for update;
+  if not found then
+    raise exception 'Calendar slot not found';
+  end if;
+  if exists (
+    select 1
+    from public.bookings b
+    where b.slot_id = p_slot_id
+      and b.status in ('pending', 'confirmed', 'needs_human')
+  ) then
+    raise exception 'Cannot delete a slot with an active booking';
+  end if;
+  if exists (
+    select 1
+    from public.bookings b
+    where b.slot_id = p_slot_id
+  ) then
+    raise exception 'Cannot delete a slot referenced by booking history';
+  end if;
+  delete from public.calendar_slots
+  where id = p_slot_id;
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    v_actor,
+    'calendar_slot_deleted',
+    'calendar_slot',
+    p_slot_id,
+    jsonb_build_object(
+      'start_time', v_slot.start_time,
+      'end_time', v_slot.end_time,
+      'timezone', v_slot.timezone
+    )
+  );
+  return true;
+end;
+$$;
+
+-- 3. Book slot
+
+create or replace function public.book_slot(
+  p_slot_id uuid,
+  p_company_id uuid,
+  p_conversation_id uuid,
+  p_prospect_name text,
+  p_prospect_email text,
+  p_timezone text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_slot public.calendar_slots%rowtype;
+  v_booking_id uuid;
+  v_company_id uuid := p_company_id;
+  v_email text := lower(btrim(coalesce(p_prospect_email, '')));
+  v_conversation_company_id uuid;
+  v_conversation_email text;
+  v_conversation_status text;
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  perform pg_advisory_xact_lock(734921, 1);
+  if p_slot_id is null then
+    raise exception 'Slot ID is required';
+  end if;
+  if nullif(btrim(coalesce(p_prospect_name, '')), '') is null then
+    raise exception 'Prospect name is required';
+  end if;
+  if v_email !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+.[A-Z]{2,}$' then
+    raise exception 'A valid prospect email is required';
+  end if;
+  if p_timezone is null or not exists (
+    select 1 from pg_timezone_names where name = p_timezone
+  ) then
+    raise exception 'Invalid timezone';
+  end if;
+  if exists (
+    select 1
+    from public.suppressed_contacts s
+    where lower(s.email) = v_email
+  ) then
+    raise exception 'This contact is suppressed';
+  end if;
+  if p_conversation_id is not null then
+    select c.company_id, lower(c.contact_email), c.status
+    into v_conversation_company_id, v_conversation_email, v_conversation_status
+    from public.conversations c
+    where c.id = p_conversation_id
+    for update;
+if not found then
+  raise exception 'Conversation not found';
+end if;
+
+if v_conversation_status = 'suppressed' then
+  raise exception 'This conversation is suppressed';
+end if;
+
+if v_conversation_email <> v_email then
+  raise exception 'Prospect email does not match the conversation';
+end if;
+
+if v_company_id is null then
+  v_company_id := v_conversation_company_id;
+elsif v_company_id <> v_conversation_company_id then
+  raise exception 'Company does not match the conversation';
+end if;
+
+  end if;
+  select *
+  into v_slot
+  from public.calendar_slots
+  where id = p_slot_id
+  for update;
+  if not found then
+    raise exception 'Calendar slot not found';
+  end if;
+  if not v_slot.is_available then
+    raise exception 'This slot is not available';
+  end if;
+  if v_slot.start_time <= now() then
+    raise exception 'This slot is in the past';
+  end if;
+  if exists (
+    select 1
+    from public.bookings b
+    join public.calendar_slots s on s.id = b.slot_id
+    where b.status in ('pending', 'confirmed', 'needs_human')
+      and s.start_time < v_slot.end_time
+      and s.end_time > v_slot.start_time
+  ) then
+    raise exception 'This time overlaps an existing booking';
+  end if;
+  insert into public.bookings (
+    company_id,
+    conversation_id,
+    slot_id,
+    prospect_name,
+    prospect_email,
+    timezone,
+    status
+  )
+  values (
+    v_company_id,
+    p_conversation_id,
+    p_slot_id,
+    btrim(p_prospect_name),
+    v_email,
+    p_timezone,
+    'pending'
+  )
+  returning id into v_booking_id;
+  if p_conversation_id is not null then
+    update public.conversations
+    set status = 'human_takeover',
+        booking_request = false
+    where id = p_conversation_id;
+  end if;
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    v_actor,
+    'booking_created',
+    'booking',
+    v_booking_id,
+    jsonb_build_object(
+      'slot_id', p_slot_id,
+      'company_id', v_company_id,
+      'conversation_id', p_conversation_id,
+      'prospect_email', v_email,
+      'status', 'pending'
+    )
+  );
+  return v_booking_id;
+end;
+$$;
+
+-- 4. Confirm booking
+
+create or replace function public.confirm_booking(
+  p_booking_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_booking public.bookings%rowtype;
+  v_slot public.calendar_slots%rowtype;
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_booking_id is null then
+    raise exception 'Booking ID is required';
+  end if;
+  perform pg_advisory_xact_lock(734921, 1);
+  select *
+  into v_booking
+  from public.bookings
+  where id = p_booking_id
+  for update;
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+  if v_booking.status not in ('pending', 'needs_human') then
+    raise exception 'This booking cannot be confirmed from its current status';
+  end if;
+  if exists (
+    select 1
+    from public.suppressed_contacts s
+    where lower(s.email) = lower(v_booking.prospect_email)
+  ) then
+    raise exception 'This contact is suppressed';
+  end if;
+  if v_booking.slot_id is null then
+    raise exception 'Booking has no calendar slot';
+  end if;
+  select *
+  into v_slot
+  from public.calendar_slots
+  where id = v_booking.slot_id
+  for update;
+  if not found or not v_slot.is_available or v_slot.start_time <= now() then
+    raise exception 'The booked slot is no longer available';
+  end if;
+  if exists (
+    select 1
+    from public.bookings b
+    join public.calendar_slots s on s.id = b.slot_id
+    where b.id <> p_booking_id
+      and b.status in ('pending', 'confirmed', 'needs_human')
+      and s.start_time < v_slot.end_time
+      and s.end_time > v_slot.start_time
+  ) then
+    raise exception 'Another active booking overlaps this slot';
+  end if;
+  update public.bookings
+  set status = 'confirmed'
+  where id = p_booking_id;
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    v_actor,
+    'booking_confirmed',
+    'booking',
+    p_booking_id,
+    jsonb_build_object('previous_status', v_booking.status)
+  );
+  return true;
+end;
+$$;
+
+-- 5. Cancel booking
+
+create or replace function public.cancel_booking(
+  p_booking_id uuid,
+  p_reason text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_booking public.bookings%rowtype;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_booking_id is null then
+    raise exception 'Booking ID is required';
+  end if;
+  if v_reason is null then
+    raise exception 'A cancellation reason is required';
+  end if;
+  perform pg_advisory_xact_lock(734921, 1);
+  select *
+  into v_booking
+  from public.bookings
+  where id = p_booking_id
+  for update;
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+  if v_booking.status not in ('pending', 'confirmed', 'needs_human') then
+    raise exception 'This booking cannot be cancelled from its current status';
+  end if;
+  update public.bookings
+  set status = 'cancelled'
+  where id = p_booking_id;
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    v_actor,
+    'booking_cancelled',
+    'booking',
+    p_booking_id,
+    jsonb_build_object(
+      'previous_status', v_booking.status,
+      'reason', v_reason,
+      'slot_id', v_booking.slot_id
+    )
+  );
+  return true;
+end;
+$$;
+
+-- 6. Reschedule booking
+
+create or replace function public.reschedule_booking(
+  p_booking_id uuid,
+  p_new_slot_id uuid,
+  p_reason text
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_booking public.bookings%rowtype;
+  v_new_slot public.calendar_slots%rowtype;
+  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');
+  v_old_slot_id uuid;
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_booking_id is null or p_new_slot_id is null then
+    raise exception 'Booking ID and new slot ID are required';
+  end if;
+  if v_reason is null then
+    raise exception 'A rescheduling reason is required';
+  end if;
+  perform pg_advisory_xact_lock(734921, 1);
+  select *
+  into v_booking
+  from public.bookings
+  where id = p_booking_id
+  for update;
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+  if v_booking.status not in ('pending', 'confirmed', 'needs_human') then
+    raise exception 'This booking cannot be rescheduled from its current status';
+  end if;
+  if v_booking.slot_id = p_new_slot_id then
+    raise exception 'Choose a different slot';
+  end if;
+  if exists (
+    select 1
+    from public.suppressed_contacts s
+    where lower(s.email) = lower(v_booking.prospect_email)
+  ) then
+    raise exception 'This contact is suppressed';
+  end if;
+  v_old_slot_id := v_booking.slot_id;
+  -- Lock both slot rows in stable ID order.
+  perform s.id
+  from public.calendar_slots s
+  where s.id in (v_old_slot_id, p_new_slot_id)
+  order by s.id
+  for update;
+  select *
+  into v_new_slot
+  from public.calendar_slots
+  where id = p_new_slot_id;
+  if not found then
+    raise exception 'New calendar slot not found';
+  end if;
+  if not v_new_slot.is_available or v_new_slot.start_time <= now() then
+    raise exception 'New slot is not available';
+  end if;
+  if exists (
+    select 1
+    from public.bookings b
+    join public.calendar_slots s on s.id = b.slot_id
+    where b.id <> p_booking_id
+      and b.status in ('pending', 'confirmed', 'needs_human')
+      and s.start_time < v_new_slot.end_time
+      and s.end_time > v_new_slot.start_time
+  ) then
+    raise exception 'New slot overlaps an existing booking';
+  end if;
+  update public.bookings
+  set slot_id = p_new_slot_id,
+      status = 'pending'
+  where id = p_booking_id;
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    v_actor,
+    'booking_rescheduled',
+    'booking',
+    p_booking_id,
+    jsonb_build_object(
+      'old_slot_id', v_old_slot_id,
+      'new_slot_id', p_new_slot_id,
+      'previous_status', v_booking.status,
+      'reason', v_reason
+    )
+  );
+  return true;
+end;
+$$;
+
+-- 7. Record Google Calendar sync metadata
+
+-- This RPC only updates sync metadata. It does not perform Google API calls.
+-- OAuth, token security, retries, and reconciliation are separate work.
+create or replace function public.record_google_calendar_sync(
+  p_booking_id uuid,
+  p_status text,
+  p_event_id text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_actor uuid := auth.uid();
+begin
+  if v_actor is null then
+    raise exception 'Authentication required';
+  end if;
+  if p_booking_id is null then
+    raise exception 'Booking ID is required';
+  end if;
+  if p_status not in ('pending', 'synced', 'failed', 'deleted', 'not_configured') then
+    raise exception 'Invalid Google Calendar sync status';
+  end if;
+  if p_status = 'synced' and nullif(btrim(coalesce(p_event_id, '')), '') is null then
+    raise exception 'A Google event ID is required for synced status';
+  end if;
+  update public.bookings
+  set google_event_id = case
+        when p_status = 'deleted' then null
+        when p_event_id is not null then p_event_id
+        else google_event_id
+      end,
+      calendar_sync_status = p_status,
+      calendar_synced_at = now()
+  where id = p_booking_id;
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+  return true;
+end;
+$$;
+
+-- 8. Restrict direct table mutations
+
+revoke all on table public.calendar_slots from anon, authenticated;
+revoke all on table public.bookings from anon, authenticated;
+revoke all on table public.audit_logs from anon, authenticated;
+grant select on table public.calendar_slots to authenticated;
+grant select on table public.bookings to authenticated;
+grant select, insert on table public.audit_logs to authenticated;
+-- Conversations retain their existing application workflow permissions.
+revoke all on table public.conversations from anon;
+grant select, insert, update on table public.conversations to authenticated;
+
+-- 9. Restrict RPC execution
+
+revoke all on function public.create_calendar_slot(timestamptz, timestamptz, text)
+  from public, anon, authenticated;
+revoke all on function public.delete_calendar_slot(uuid)
+  from public, anon, authenticated;
+revoke all on function public.book_slot(uuid, uuid, uuid, text, text, text)
+  from public, anon, authenticated;
+revoke all on function public.confirm_booking(uuid)
+  from public, anon, authenticated;
+revoke all on function public.cancel_booking(uuid, text)
+  from public, anon, authenticated;
+revoke all on function public.reschedule_booking(uuid, uuid, text)
+  from public, anon, authenticated;
+revoke all on function public.record_google_calendar_sync(uuid, text, text)
+  from public, anon, authenticated;
+grant execute on function public.create_calendar_slot(timestamptz, timestamptz, text)
+  to authenticated;
+grant execute on function public.delete_calendar_slot(uuid)
+  to authenticated;
+grant execute on function public.book_slot(uuid, uuid, uuid, text, text, text)
+  to authenticated;
+grant execute on function public.confirm_booking(uuid)
+  to authenticated;
+grant execute on function public.cancel_booking(uuid, text)
+  to authenticated;
+grant execute on function public.reschedule_booking(uuid, uuid, text)
+  to authenticated;
+grant execute on function public.record_google_calendar_sync(uuid, text, text)
+  to authenticated;
+notify pgrst, 'reload schema';
+
+
+ChatGPT:
+Good. We now have the exact database contract, so we can replace the race-prone direct calendar mutations with the transactional RPCs—without guessing any argument names or return types.
+The important contracts are:
+
+
+
+Action
+Database RPC
+Returns
+
+
+
+Create slot
+create_calendar_slot
+UUID
+
+
+Delete slot
+delete_calendar_slot
+Boolean
+
+
+Book slot
+book_slot
+UUID
+
+
+Confirm booking
+confirm_booking
+Boolean
+
+
+Cancel booking
+cancel_booking
+Boolean
+
+
+Reschedule booking
+reschedule_booking
+Boolean
+
+
+All six use the same advisory lock and write their audit records inside the transaction. That means we should remove the corresponding separate writeAudit() calls from the calendar actions.
+I also found one security issue to correct: record_google_calendar_sync currently lets any authenticated user update sync metadata for any booking. We should remove its authenticated execution permission and handle Google metadata through a server-only, privileged path after the action has authenticated the user and loaded the booking.
+
+
+ChatGPT:
+Good. We now have the exact database contract, so we can replace the race-prone direct calendar mutations with the transactional RPCs—without guessing any argument names or return types.
+The important contracts are:
+
+
+
+Action
+Database RPC
+Returns
+
+
+
+Create slot
+create_calendar_slot
+UUID
+
+
+Delete slot
+delete_calendar_slot
+Boolean
+
+
+Book slot
+book_slot
+UUID
+
+
+Confirm booking
+confirm_booking
+Boolean
+
+
+Cancel booking
+cancel_booking
+Boolean
+
+
+Reschedule booking
+reschedule_booking
+Boolean
+
+
+All six use the same advisory lock and write their audit records inside the transaction. That means we should remove the corresponding separate writeAudit() calls from the calendar actions.
+I also found one security issue to correct: record_google_calendar_sync currently lets any authenticated user update sync metadata for any booking. We should remove its authenticated execution permission and handle Google metadata through a server-only, privileged path after the action has authenticated the user and loaded the booking.
+One remaining source file is needed before I give you the replacement: the current actions.ts. I want to preserve the existing Google sync behavior, validation, and action result types rather than overwrite them with assumptions.
+Run this single command:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+cp -p "app/(dashboard)/calendar/actions.ts" /tmp/ledgerwise-calendar-actions.ts.backup
+
+cat "app/(dashboard)/calendar/actions.ts"
+
+Paste the output. I'll then provide the implementation replacement and the corrective migration together, including the Google metadata permission fix.
+Status
+
+ Migration 04 RPC contracts inspected
+ Transactional booking and audit behavior confirmed
+ Google metadata permission flaw identified
+ Replace calendar actions with RPC calls
+ Finalize corrective migration 05
+ Run tests and build
+
+No remote database changes, commits, or deployments have been made.
+
+
+ChatGPT:
+One remaining source file is needed before I give you the replacement: the current actions.ts. I want to preserve the existing Google sync behavior, validation, and action result types rather than overwrite them with assumptions.
+Run this single command:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+cp -p "app/(dashboard)/calendar/actions.ts" /tmp/ledgerwise-calendar-actions.ts.backup
+
+cat "app/(dashboard)/calendar/actions.ts"
+
+Paste the output. I'll then provide the implementation replacement and the corrective migration together, including the Google metadata permission fix.
+Status
+
+ Migration 04 RPC contracts inspected
+ Transactional booking and audit behavior confirmed
+ Google metadata permission flaw identified
+ Replace calendar actions with RPC calls
+ Finalize corrective migration 05
+ Run tests and build
+
+No remote database changes, commits, or deployments have been made.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+cp -p "app/(dashboard)/calendar/actions.ts" /tmp/ledgerwise-calendar-actions.ts.backup
+cat "app/(dashboard)/calendar/actions.ts"
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { isSuppressed } from "@/lib/suppression";
+import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+import {
+  OCCUPYING_BOOKING_STATUSES,
+  validateBookingInput,
+  validateSlotInput,
+} from "@/lib/calendar/time";
+import {
+  deleteGoogleEvent,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+  type GoogleEventInput,
+} from "@/lib/calendar/google";
+export type CalendarActionResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  slotId?: string;
+  bookingId?: string;
+};
+type SlotRow = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  source: string;
+  is_available: boolean;
+};
+type BookingRow = {
+  id: string;
+  company_id: string | null;
+  conversation_id: string | null;
+  slot_id: string | null;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  status: string;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+};
+function revalidateCalendar() {
+  revalidatePath("/calendar");
+  revalidatePath("/conversations");
+}
+async function loadSlot(
+  supabase: ServerSupabase,
+  slotId: string
+): Promise<{ slot?: SlotRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .select("id,start_time,end_time,timezone,source,is_available")
+    .eq("id", slotId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Slot not found." };
+  return { slot: data as SlotRow };
+}
+async function loadBooking(
+  supabase: ServerSupabase,
+  bookingId: string
+): Promise<{ booking?: BookingRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Booking not found." };
+  return { booking: data as BookingRow };
+}
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: Ledgerwise call: ${booking.prospect_name || booking.prospect_email},
+    description: [
+      Prospect: ${booking.prospect_name || "unknown"},
+      Email: ${booking.prospect_email},
+      Company: ${booking.company_id ?? "unknown"},
+      "Managed from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+async function recordGoogleSync(
+  supabase: ServerSupabase,
+  bookingId: string,
+  result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
+  deleted = false
+): Promise {
+  if (result.status === "not_configured") return;
+  if (result.status === "synced") {
+    await supabase
+      .from("bookings")
+      .update(
+        deleted
+          ? {
+              google_event_id: null,
+              calendar_sync_status: "deleted",
+              calendar_synced_at: new Date().toISOString(),
+            }
+          : {
+              ...(result.eventId ? { google_event_id: result.eventId } : {}),
+              calendar_sync_status: "synced",
+              calendar_synced_at: new Date().toISOString(),
+            }
+      )
+      .eq("id", bookingId);
+    return;
+  }
+  await supabase
+    .from("bookings")
+    .update({ calendar_sync_status: "failed" })
+    .eq("id", bookingId);
+}
+async function checkSuppressed(
+  supabase: ServerSupabase,
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (await isSuppressed(supabase, email)) {
+      return {
+        ok: false,
+        error: "This contact is on the permanent suppression list. A booking cannot be created or confirmed.",
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The suppression check failed. Apply the database migrations first.",
+    };
+  }
+}
+async function checkSlotFree(
+  supabase: ServerSupabase,
+  slot: SlotRow,
+  ignoreBookingId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: overlappingSlots, error: slotError } = await supabase
+    .from("calendar_slots")
+    .select("id")
+    .lt("start_time", slot.end_time)
+    .gt("end_time", slot.start_time);
+  if (slotError) return { ok: false, error: slotError.message };
+  const slotIds = Array.from(
+    new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
+  );
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .in("slot_id", slotIds)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES]);
+  if (error) return { ok: false, error: error.message };
+  const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+  if (conflict) {
+    return { ok: false, error: "That time is already held by another booking." };
+  }
+  return { ok: true };
+}
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const validation = validateSlotInput(input);
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .insert({
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+      external_id: null,
+      is_available: true,
+      fetched_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      error:
+        error?.message ??
+        "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+    };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_created",
+    entityType: "calendar_slots",
+    entityId: data.id,
+    detail: {
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId: data.id, message: "Internal slot created." };
+}
+export async function deleteSlot(slotId: string): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+  const loaded = await loadSlot(supabase, slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { data: active, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("slot_id", slotId)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES])
+    .limit(1);
+  if (error) return { ok: false, error: error.message };
+  if ((active ?? []).length > 0) {
+    return {
+      ok: false,
+      error: "Cancel or reschedule the active booking before deleting this slot.",
+    };
+  }
+  const { error: deleteError } = await supabase
+    .from("calendar_slots")
+    .delete()
+    .eq("id", slotId);
+  if (deleteError) return { ok: false, error: deleteError.message };
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_deleted",
+    entityType: "calendar_slots",
+    entityId: slotId,
+    detail: {
+      start_time: loaded.slot.start_time,
+      end_time: loaded.slot.end_time,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId, message: "Slot deleted." };
+}
+export async function bookSlot(input: {
+  slotId: string;
+  companyId?: string | null;
+  conversationId?: string | null;
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+  let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
+  const conversationId =
+    input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+  let prospectName = input.prospectName;
+  let prospectEmail = normalizeEmail(input.prospectEmail);
+  if (conversationId) {
+    const { data: conversation } = await supabase
+      .from("conversations")
+      .select("id,company_id,contact_email,status")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (!conversation) return { ok: false, error: "Conversation not found." };
+    if (conversation.status === "suppressed") {
+      return {
+        ok: false,
+        error: "This contact is suppressed. A booking cannot be created.",
+      };
+    }
+    companyId = companyId ?? conversation.company_id;
+    if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
+  }
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name,contact_name,contact_email")
+      .eq("id", companyId)
+      .maybeSingle();
+    if (company) {
+      if (!prospectName.trim() && company.contact_name !== "unknown") {
+        prospectName = company.contact_name;
+      }
+      if (!prospectEmail && company.contact_email) {
+        prospectEmail = normalizeEmail(company.contact_email);
+      }
+    }
+  }
+  if (!isValidEmail(prospectEmail)) {
+    return { ok: false, error: "A valid prospect email is required." };
+  }
+  const suppression = await checkSuppressed(supabase, prospectEmail);
+  if (!suppression.ok) return { ok: false, error: suppression.error };
+  const cleanProspectName = trimText(prospectName, 200);
+  if (!cleanProspectName) {
+    return { ok: false, error: "A prospect name is required." };
+  }
+  const validation = validateBookingInput({
+    prospectName: cleanProspectName,
+    prospectEmail,
+    timezone: input.timezone,
+  });
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const loaded = await loadSlot(supabase, input.slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { slot } = loaded;
+  if (!slot.is_available) {
+    return { ok: false, error: "That slot is marked unavailable." };
+  }
+  if (Date.parse(slot.end_time) <= Date.now()) {
+    return { ok: false, error: "That slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, slot);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: inserted, error } = await supabase
+    .from("bookings")
+    .insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      slot_id: input.slotId,
+      prospect_name: cleanProspectName,
+      prospect_email: prospectEmail,
+      timezone: input.timezone,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    if (error?.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error?.message ?? "The booking could not be created." };
+  }
+  if (conversationId) {
+    await supabase
+      .from("conversations")
+      .update({ status: "human_takeover", booking_request: false })
+      .eq("id", conversationId);
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_created",
+    entityType: "bookings",
+    entityId: inserted.id,
+    detail: {
+      slot_id: input.slotId,
+      company_id: companyId,
+      conversation_id: conversationId,
+      prospect_email: prospectEmail,
+      status: "pending",
+    },
+  });
+  const google = await syncBookingToGoogle({
+    summary: Ledgerwise call: ${cleanProspectName},
+    description: [
+      Prospect: ${cleanProspectName},
+      Email: ${prospectEmail},
+      Company: ${companyId ?? "unknown"},
+      "Created from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone: slot.timezone,
+  });
+  await recordGoogleSync(supabase, inserted.id, google);
+  revalidateCalendar();
+  revalidatePath(/conversations/${conversationId ?? ""});
+  return {
+    ok: true,
+    bookingId: inserted.id,
+    slotId: input.slotId,
+    message:
+      google.status === "synced"
+        ? "Booking created and synced to Google Calendar."
+        : google.status === "failed"
+          ? "Booking created on the internal calendar. Google Calendar sync failed."
+          : "Booking created on the internal calendar.",
+  };
+}
+export async function confirmBooking(
+  bookingId: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (booking.status !== "pending" && booking.status !== "needs_human") {
+    return { ok: false, error: "Only a pending or needs-human booking can be confirmed." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "confirmed" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were confirming it. Refresh and try again.",
+    };
+  }
+  let syncNote = "";
+  let syncStatus = "not_attempted";
+  if (!booking.google_event_id && booking.slot_id) {
+    const loadedSlot = await loadSlot(supabase, booking.slot_id);
+    if (loadedSlot.slot) {
+      const google = await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+      syncStatus = google.status;
+      await recordGoogleSync(supabase, bookingId, google);
+      syncNote =
+        google.status === "synced"
+          ? " Google Calendar event created."
+          : google.status === "failed"
+            ? " Google Calendar sync failed; the internal booking is still confirmed."
+            : "";
+    }
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_confirmed",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      previous_status: booking.status,
+      slot_id: booking.slot_id,
+      google_sync_status: booking.google_event_id ? "already_linked" : syncStatus,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, bookingId, message: Booking confirmed.${syncNote} };
+}
+export async function cancelBooking(
+  bookingId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) return { ok: false, error: "A cancellation reason is required." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return { ok: false, error: "This booking is already cancelled or rescheduled." };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "cancelled" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were cancelling it. Refresh and try again.",
+    };
+  }
+  let syncNote = "";
+  if (booking.google_event_id) {
+    const google = await deleteGoogleEvent(booking.google_event_id);
+    if (google.status === "not_configured") {
+      await supabase
+        .from("bookings")
+        .update({ calendar_sync_status: "failed" })
+        .eq("id", bookingId);
+      syncNote =
+        " The internal booking is cancelled, but the Google event could not be removed because sync is not operational.";
+    } else {
+      await recordGoogleSync(supabase, bookingId, google, true);
+      syncNote =
+        google.status === "synced"
+          ? " The Google Calendar event was removed."
+          : " The internal booking is cancelled, but Google Calendar deletion failed.";
+    }
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_cancelled",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      previous_status: booking.status,
+      slot_id: booking.slot_id,
+      reason: cleanReason,
+      google_event_id: booking.google_event_id,
+    },
+  });
+  revalidateCalendar();
+  return {
+    ok: true,
+    bookingId,
+    message: Booking cancelled. The slot is free.${syncNote},
+  };
+}
+export async function rescheduleBooking(
+  bookingId: string,
+  newSlotId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId) || !isUuid(newSlotId)) {
+    return { ok: false, error: "Invalid booking or slot ID." };
+  }
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) return { ok: false, error: "A reschedule reason is required." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return { ok: false, error: "Only an active booking can be rescheduled." };
+  }
+  if (booking.slot_id === newSlotId) {
+    return { ok: false, error: "Choose a different slot." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const loadedSlot = await loadSlot(supabase, newSlotId);
+  if (!loadedSlot.slot) return { ok: false, error: loadedSlot.error };
+  if (!loadedSlot.slot.is_available) {
+    return { ok: false, error: "The new slot is marked unavailable." };
+  }
+  if (Date.parse(loadedSlot.slot.end_time) <= Date.now()) {
+    return { ok: false, error: "The new slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, loadedSlot.slot, bookingId);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ slot_id: newSlotId, status: "pending" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error.message };
+  }
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were rescheduling it. Refresh and try again.",
+    };
+  }
+  const google = booking.google_event_id
+    ? await updateGoogleEvent(
+        booking.google_event_id,
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      )
+    : await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+  if (google.status === "not_configured" && booking.google_event_id) {
+    await supabase
+      .from("bookings")
+      .update({ calendar_sync_status: "failed" })
+      .eq("id", bookingId);
+  } else {
+    await recordGoogleSync(supabase, bookingId, google);
+  }
+  const syncNote =
+    google.status === "synced"
+      ? " Google Calendar was updated."
+      : google.status === "failed"
+        ? " Google Calendar sync failed; the internal booking is authoritative."
+        : booking.google_event_id
+          ? " The Google event was not updated because sync is not operational."
+          : "";
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_rescheduled",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      old_slot_id: booking.slot_id,
+      new_slot_id: newSlotId,
+      previous_status: booking.status,
+      reason: cleanReason,
+      google_sync: google.status,
+    },
+  });
+  revalidateCalendar();
+  return {
+    ok: true,
+    bookingId,
+    slotId: newSlotId,
+    message: Booking rescheduled. The old slot is free and the new slot is held.${syncNote},
+  };
+}
+
+
+ChatGPT:
+We have everything needed now. I'm moving directly to implementation.
+The replacement will:
+
+Route all six calendar operations through migration 04's transactional RPCs.
+Remove the race-prone availability checks and separate audit writes; the database now owns both.
+Keep Google Calendar API calls outside the database transactions.
+Store Google sync metadata through a server-only Supabase service-role client, not an RPC exposed to ordinary authenticated users.
+Preserve the existing action names, input shapes, and CalendarActionResult contract so the UI doesn't need to change.
+
+Your backup of actions.ts was created successfully before the file was read.
+Important: the service-role key must be configured as SUPABASE_SERVICE_ROLE_KEY in your local server environment. Never expose it through a NEXT_PUBLIC_ variable or commit it.
+
+
+ChatGPT:
+1. Create the corrective migration
+This migration closes the direct suppression-insert path, constrains audit inserts to the signed-in actor, and changes Google sync metadata RPC access to the service role only.
+Run this first:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+FILE="supabase/migrations/20261114_05_calendar_security_corrections.sql"
+
+if [ -e "$FILE" ]; then
+  echo "STOP: $FILE already exists. Do not overwrite it."
+  exit 1
+fi
+
+cat > "$FILE" <<'SQL'
+-- Ledgerwise migration 05
+-- Calendar and suppression security corrections.
+-- Review before applying to the remote database.
+
+begin;
+
+-- Suppression records must be created through the audited RPC.
+revoke insert on table public.suppressed_contacts from anon, authenticated;
+grant select on table public.suppressed_contacts to authenticated;
+
+drop policy if exists auth_insert_suppressed_contacts
+  on public.suppressed_contacts;
+
+-- Authenticated audit inserts must identify the current actor.
+drop policy if exists auth_insert_audit_logs on public.audit_logs;
+
+create policy auth_insert_audit_logs
+  on public.audit_logs
+  for insert
+  to authenticated
+  with check (actor_id = auth.uid());
+
+-- Serialize suppression writes with booking operations.
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if v_email = ''
+     or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    raise exception 'invalid_email';
+  end if;
+
+  perform pg_advisory_xact_lock(734921, 1);
+
+  insert into public.suppressed_contacts (
+    email, reason, source_message_id
+  )
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+
+  if v_row.id is null then
+    select *
+    into v_row
+    from public.suppressed_contacts
+    where lower(email) = v_email;
+
+    return v_row;
+  end if;
+
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.suppress_contact(text, text, uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.suppress_contact(text, text, uuid)
+  to authenticated;
+
+-- The Google sync metadata RPC is now server-only.
+-- A service-role JWT is required, and only service_role may execute it.
+create or replace function public.record_google_calendar_sync(
+  p_booking_id uuid,
+  p_status text,
+  p_event_id text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Service role required';
+  end if;
+
+  if p_booking_id is null then
+    raise exception 'Booking ID is required';
+  end if;
+
+  if p_status not in ('pending', 'synced', 'failed', 'deleted', 'not_configured') then
+    raise exception 'Invalid Google Calendar sync status';
+  end if;
+
+  if p_status = 'synced'
+     and nullif(btrim(coalesce(p_event_id, '')), '') is null then
+    raise exception 'A Google event ID is required for synced status';
+  end if;
+
+  update public.bookings
+  set google_event_id = case
+        when p_status = 'deleted' then null
+        when p_event_id is not null then p_event_id
+        else google_event_id
+      end,
+      calendar_sync_status = p_status,
+      calendar_synced_at = now()
+  where id = p_booking_id;
+
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.record_google_calendar_sync(uuid, text, text)
+  from public, anon, authenticated, service_role;
+
+grant execute on function public.record_google_calendar_sync(uuid, text, text)
+  to service_role;
+
+notify pgrst, 'reload schema';
+
+commit;
+SQL
+
+echo "Created $FILE"
+
+This only creates a local migration file. It does not apply anything to Supabase.
+2. Add the server-only Supabase admin client
+cat > "lib/supabase/admin.ts" <<'TS'
+import "server-only";
+
+import { createClient } from "@supabase/supabase-js";
+
+export function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      "Supabase admin configuration is missing. Set SUPABASE_SERVICE_ROLE_KEY on the server."
+    );
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+TS
+
+
+
+ChatGPT:
+3. Replace the calendar actions
+This replacement retains the existing public action interfaces. It also makes the database transaction authoritative: if an RPC rejects a booking because another operation took the slot, the action returns that database error rather than relying on an earlier availability check.
+cat > "app/(dashboard)/calendar/actions.ts" <<'TS'
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { isSuppressed } from "@/lib/suppression";
+import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+import {
+  validateBookingInput,
+  validateSlotInput,
+} from "@/lib/calendar/time";
+import {
+  deleteGoogleEvent,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+  type GoogleEventInput,
+} from "@/lib/calendar/google";
+
+export type CalendarActionResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  slotId?: string;
+  bookingId?: string;
+};
+
+type SlotRow = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  source: string;
+  is_available: boolean;
+};
+
+type BookingRow = {
+  id: string;
+  company_id: string | null;
+  conversation_id: string | null;
+  slot_id: string | null;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  status: string;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+};
+
+function revalidateCalendar() {
+  revalidatePath("/calendar");
+  revalidatePath("/conversations");
+}
+
+function rpcError(error: { message: string } | null, fallback: string) {
+  return error?.message || fallback;
+}
+
+async function loadSlot(
+  supabase: ServerSupabase,
+  slotId: string
+): Promise<{ slot?: SlotRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .select("id,start_time,end_time,timezone,source,is_available")
+    .eq("id", slotId)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Slot not found." };
+
+  return { slot: data as SlotRow };
+}
+
+async function loadBooking(
+  supabase: ServerSupabase,
+  bookingId: string
+): Promise<{ booking?: BookingRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Booking not found." };
+
+  return { booking: data as BookingRow };
+}
+
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: `Ledgerwise call: ${booking.prospect_name || booking.prospect_email}`,
+    description: [
+      `Prospect: ${booking.prospect_name || "unknown"}`,
+      `Email: ${booking.prospect_email}`,
+      `Company: ${booking.company_id ?? "unknown"}`,
+      "Managed from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+
+type GoogleResult = {
+  status: "not_configured" | "synced" | "failed";
+  eventId?: string;
+};
+
+async function recordGoogleSync(
+  bookingId: string,
+  result: GoogleResult,
+  deleted = false,
+  forceFailed = false
+): Promise<boolean> {
+  const status = forceFailed
+    ? "failed"
+    : deleted
+      ? "deleted"
+      : result.status;
+
+  if (status === "not_configured") return true;
+
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.rpc("record_google_calendar_sync", {
+      p_booking_id: bookingId,
+      p_status: status,
+      p_event_id: status === "synced" ? result.eventId ?? null : null,
+    });
+
+    if (error) {
+      console.error("Could not persist Google Calendar sync metadata:", error.message);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Could not persist Google Calendar sync metadata:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    return false;
+  }
+}
+
+async function checkSuppressed(
+  supabase: ServerSupabase,
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (await isSuppressed(supabase, email)) {
+      return {
+        ok: false,
+        error:
+          "This contact is on the permanent suppression list. A booking cannot be created or confirmed.",
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The suppression check failed. Apply the database migrations first.",
+    };
+  }
+}
+
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const validation = validateSlotInput(input);
+  if (!validation.ok) {
+    return { ok: false, error: validation.errors.join(" ") };
+  }
+
+  const { data, error } = await supabase.rpc("create_calendar_slot", {
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_timezone: input.timezone,
+  });
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error: rpcError(error, "The calendar slot could not be created."),
+    };
+  }
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    slotId: data as string,
+    message: "Internal slot created.",
+  };
+}
+
+export async function deleteSlot(slotId: string): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+
+  const { data, error } = await supabase.rpc("delete_calendar_slot", {
+    p_slot_id: slotId,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The slot could not be deleted."),
+    };
+  }
+
+  revalidateCalendar();
+
+  return { ok: true, slotId, message: "Slot deleted." };
+}
+
+export async function bookSlot(input: {
+  slotId: string;
+  companyId?: string | null;
+  conversationId?: string | null;
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+
+  const companyId =
+    input.companyId && isUuid(input.companyId) ? input.companyId : null;
+  const conversationId =
+    input.conversationId && isUuid(input.conversationId)
+      ? input.conversationId
+      : null;
+
+  let prospectName = input.prospectName;
+  let prospectEmail = normalizeEmail(input.prospectEmail);
+
+  if (conversationId) {
+    const { data: conversation, error } = await supabase
+      .from("conversations")
+      .select("id,company_id,contact_email,status")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!conversation) {
+      return { ok: false, error: "Conversation not found." };
+    }
+
+    if (conversation.status === "suppressed") {
+      return {
+        ok: false,
+        error: "This contact is suppressed. A booking cannot be created.",
+      };
+    }
+
+    if (companyId && companyId !== conversation.company_id) {
+      return {
+        ok: false,
+        error: "The selected company does not match the conversation.",
+      };
+    }
+
+    if (!prospectEmail) {
+      prospectEmail = normalizeEmail(conversation.contact_email);
+    }
+  }
+
+  const resolvedCompanyId = conversationId
+    ? await (async () => {
+        const { data } = await supabase
+          .from("conversations")
+          .select("company_id")
+          .eq("id", conversationId)
+          .maybeSingle();
+
+        return companyId ?? data?.company_id ?? null;
+      })()
+    : companyId;
+
+  if (resolvedCompanyId) {
+    const { data: company, error } = await supabase
+      .from("companies")
+      .select("name,contact_name,contact_email")
+      .eq("id", resolvedCompanyId)
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+
+    if (company) {
+      if (!prospectName.trim() && company.contact_name !== "unknown") {
+        prospectName = company.contact_name;
+      }
+
+      if (!prospectEmail && company.contact_email) {
+        prospectEmail = normalizeEmail(company.contact_email);
+      }
+    }
+  }
+
+  if (!isValidEmail(prospectEmail)) {
+    return { ok: false, error: "A valid prospect email is required." };
+  }
+
+  const suppression = await checkSuppressed(supabase, prospectEmail);
+  if (!suppression.ok) {
+    return { ok: false, error: suppression.error };
+  }
+
+  const cleanProspectName = trimText(prospectName, 200);
+  if (!cleanProspectName) {
+    return { ok: false, error: "A prospect name is required." };
+  }
+
+  const validation = validateBookingInput({
+    prospectName: cleanProspectName,
+    prospectEmail,
+    timezone: input.timezone,
+  });
+
+  if (!validation.ok) {
+    return { ok: false, error: validation.errors.join(" ") };
+  }
+
+  const { data: bookingId, error } = await supabase.rpc("book_slot", {
+    p_slot_id: input.slotId,
+    p_company_id: resolvedCompanyId,
+    p_conversation_id: conversationId,
+    p_prospect_name: cleanProspectName,
+    p_prospect_email: prospectEmail,
+    p_timezone: input.timezone,
+  });
+
+  if (error || !bookingId) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be created."),
+    };
+  }
+
+  const loadedSlot = await loadSlot(supabase, input.slotId);
+
+  let google: GoogleResult = { status: "not_configured" };
+  let metadataSaved = true;
+
+  if (loadedSlot.slot) {
+    google = await syncBookingToGoogle({
+      summary: `Ledgerwise call: ${cleanProspectName}`,
+      description: [
+        `Prospect: ${cleanProspectName}`,
+        `Email: ${prospectEmail}`,
+        `Company: ${resolvedCompanyId ?? "unknown"}`,
+        "Created from the Ledgerwise prototype.",
+      ].join("\n"),
+      startTime: loadedSlot.slot.start_time,
+      endTime: loadedSlot.slot.end_time,
+      timezone: loadedSlot.slot.timezone,
+    });
+
+    metadataSaved = await recordGoogleSync(bookingId, google);
+  }
+
+  revalidateCalendar();
+  if (conversationId) revalidatePath(`/conversations/${conversationId}`);
+
+  const message =
+    google.status === "synced"
+      ? metadataSaved
+        ? "Booking created and synced to Google Calendar."
+        : "Booking created and Google Calendar event synced, but sync metadata could not be saved."
+      : google.status === "failed"
+        ? "Booking created on the internal calendar. Google Calendar sync failed."
+        : "Booking created on the internal calendar.";
+
+  return {
+    ok: true,
+    bookingId: bookingId as string,
+    slotId: input.slotId,
+    message,
+  };
+}
+
+export async function confirmBooking(
+  bookingId: string
+): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) {
+    return { ok: false, error: loaded.error };
+  }
+
+  const booking = loaded.booking;
+
+  if (booking.status !== "pending" && booking.status !== "needs_human") {
+    return {
+      ok: false,
+      error: "Only a pending or needs-human booking can be confirmed.",
+    };
+  }
+
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: `${suppression.error} Cancel the booking instead.`,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("confirm_booking", {
+    p_booking_id: bookingId,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be confirmed."),
+    };
+  }
+
+  let syncNote = "";
+
+  if (!booking.google_event_id && booking.slot_id) {
+    const loadedSlot = await loadSlot(supabase, booking.slot_id);
+
+    if (loadedSlot.slot) {
+      const google = await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+
+      const metadataSaved = await recordGoogleSync(bookingId, google);
+
+      syncNote =
+        google.status === "synced"
+          ? metadataSaved
+            ? " Google Calendar event created."
+            : " Google event created, but its sync metadata could not be saved."
+          : google.status === "failed"
+            ? " Google Calendar sync failed; the internal booking is still confirmed."
+            : "";
+    }
+  }
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    bookingId,
+    message: `Booking confirmed.${syncNote}`,
+  };
+}
+
+export async function cancelBooking(
+  bookingId: string,
+  reason: string
+): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) {
+    return { ok: false, error: "A cancellation reason is required." };
+  }
+
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) {
+    return { ok: false, error: loaded.error };
+  }
+
+  const booking = loaded.booking;
+
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return {
+      ok: false,
+      error: "This booking is already cancelled or rescheduled.",
+    };
+  }
+
+  const { data, error } = await supabase.rpc("cancel_booking", {
+    p_booking_id: bookingId,
+    p_reason: cleanReason,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be cancelled."),
+    };
+  }
+
+  let syncNote = "";
+
+  if (booking.google_event_id) {
+    const google = await deleteGoogleEvent(booking.google_event_id);
+
+    if (google.status === "not_configured") {
+      const metadataSaved = await recordGoogleSync(
+        bookingId,
+        google,
+        false,
+        true
+      );
+
+      syncNote = metadataSaved
+        ? " The internal booking is cancelled, but the Google event could not be removed because sync is not operational."
+        : " The internal booking is cancelled, but Google sync metadata could not be updated.";
+    } else {
+      const metadataSaved = await recordGoogleSync(bookingId, google, true);
+
+      syncNote =
+        google.status === "synced"
+          ? metadataSaved
+            ? " The Google Calendar event was removed."
+            : " The Google event was removed, but sync metadata could not be saved."
+          : " The internal booking is cancelled, but Google Calendar deletion failed.";
+    }
+  }
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    bookingId,
+    message: `Booking cancelled. The slot is free.${syncNote}`,
+  };
+}
+
+export async function rescheduleBooking(
+  bookingId: string,
+  newSlotId: string,
+  reason: string
+): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  if (!isUuid(bookingId) || !isUuid(newSlotId)) {
+    return { ok: false, error: "Invalid booking or slot ID." };
+  }
+
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) {
+    return { ok: false, error: "A reschedule reason is required." };
+  }
+
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) {
+    return { ok: false, error: loaded.error };
+  }
+
+  const booking = loaded.booking;
+
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return {
+      ok: false,
+      error: "Only an active booking can be rescheduled.",
+    };
+  }
+
+  if (booking.slot_id === newSlotId) {
+    return { ok: false, error: "Choose a different slot." };
+  }
+
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: `${suppression.error} Cancel the booking instead.`,
+    };
+  }
+
+  const loadedSlot = await loadSlot(supabase, newSlotId);
+  if (!loadedSlot.slot) {
+    return { ok: false, error: loadedSlot.error };
+  }
+
+  const { data, error } = await supabase.rpc("reschedule_booking", {
+    p_booking_id: bookingId,
+    p_new_slot_id: newSlotId,
+    p_reason: cleanReason,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be rescheduled."),
+    };
+  }
+
+  const google = booking.google_event_id
+    ? await updateGoogleEvent(
+        booking.google_event_id,
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      )
+    : await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+
+  let metadataSaved = true;
+
+  if (google.status === "not_configured" && booking.google_event_id) {
+    metadataSaved = await recordGoogleSync(bookingId, google, false, true);
+  } else {
+    metadataSaved = await recordGoogleSync(bookingId, google);
+  }
+
+  const syncNote =
+    google.status === "synced"
+      ? metadataSaved
+        ? " Google Calendar was updated."
+        : " Google Calendar was updated, but its sync metadata could not be saved."
+      : google.status === "failed"
+        ? " Google Calendar sync failed; the internal booking is authoritative."
+        : booking.google_event_id
+          ? " The Google event was not updated because sync is not operational."
+          : "";
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    bookingId,
+    slotId: newSlotId,
+    message: `Booking rescheduled. The old slot is free and the new slot is held.${syncNote}`,
+  };
+}
+TS
+
+echo "Replaced calendar actions."
+
+
+
+ChatGPT:
+We have everything needed now. I'm moving directly to implementation.
+The replacement will:
+
+Route all six calendar operations through migration 04's transactional RPCs.
+Remove the race-prone availability checks and separate audit writes; the database now owns both.
+Keep Google Calendar API calls outside the database transactions.
+Store Google sync metadata through a server-only Supabase service-role client, not an RPC exposed to ordinary authenticated users.
+Preserve the existing action names, input shapes, and CalendarActionResult contract so the UI doesn't need to change.
+
+Your backup of actions.ts was created successfully before the file was read.
+Important: the service-role key must be configured as SUPABASE_SERVICE_ROLE_KEY in your local server environment. Never expose it through a NEXT_PUBLIC_ variable or commit it.
+1. Create the corrective migration
+This migration closes the direct suppression-insert path, constrains audit inserts to the signed-in actor, and changes Google sync metadata RPC access to the service role only.
+Run this first:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+FILE="supabase/migrations/20261114_05_calendar_security_corrections.sql"
+
+if [ -e "$FILE" ]; then
+  echo "STOP: $FILE already exists. Do not overwrite it."
+  exit 1
+fi
+
+cat > "$FILE" <<'SQL'
+-- Ledgerwise migration 05
+-- Calendar and suppression security corrections.
+-- Review before applying to the remote database.
+
+begin;
+
+-- Suppression records must be created through the audited RPC.
+revoke insert on table public.suppressed_contacts from anon, authenticated;
+grant select on table public.suppressed_contacts to authenticated;
+
+drop policy if exists auth_insert_suppressed_contacts
+  on public.suppressed_contacts;
+
+-- Authenticated audit inserts must identify the current actor.
+drop policy if exists auth_insert_audit_logs on public.audit_logs;
+
+create policy auth_insert_audit_logs
+  on public.audit_logs
+  for insert
+  to authenticated
+  with check (actor_id = auth.uid());
+
+-- Serialize suppression writes with booking operations.
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+
+  if v_email = ''
+     or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' then
+    raise exception 'invalid_email';
+  end if;
+
+  perform pg_advisory_xact_lock(734921, 1);
+
+  insert into public.suppressed_contacts (
+    email, reason, source_message_id
+  )
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+
+  if v_row.id is null then
+    select *
+    into v_row
+    from public.suppressed_contacts
+    where lower(email) = v_email;
+
+    return v_row;
+  end if;
+
+  insert into public.audit_logs (
+    actor_id, action, entity_type, entity_id, detail
+  )
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+
+  return v_row;
+end;
+$$;
+
+revoke all on function public.suppress_contact(text, text, uuid)
+  from public, anon, authenticated;
+
+grant execute on function public.suppress_contact(text, text, uuid)
+  to authenticated;
+
+-- The Google sync metadata RPC is now server-only.
+-- A service-role JWT is required, and only service_role may execute it.
+create or replace function public.record_google_calendar_sync(
+  p_booking_id uuid,
+  p_status text,
+  p_event_id text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then
+    raise exception 'Service role required';
+  end if;
+
+  if p_booking_id is null then
+    raise exception 'Booking ID is required';
+  end if;
+
+  if p_status not in ('pending', 'synced', 'failed', 'deleted', 'not_configured') then
+    raise exception 'Invalid Google Calendar sync status';
+  end if;
+
+  if p_status = 'synced'
+     and nullif(btrim(coalesce(p_event_id, '')), '') is null then
+    raise exception 'A Google event ID is required for synced status';
+  end if;
+
+  update public.bookings
+  set google_event_id = case
+        when p_status = 'deleted' then null
+        when p_event_id is not null then p_event_id
+        else google_event_id
+      end,
+      calendar_sync_status = p_status,
+      calendar_synced_at = now()
+  where id = p_booking_id;
+
+  if not found then
+    raise exception 'Booking not found';
+  end if;
+
+  return true;
+end;
+$$;
+
+revoke all on function public.record_google_calendar_sync(uuid, text, text)
+  from public, anon, authenticated, service_role;
+
+grant execute on function public.record_google_calendar_sync(uuid, text, text)
+  to service_role;
+
+notify pgrst, 'reload schema';
+
+commit;
+SQL
+
+echo "Created $FILE"
+
+This only creates a local migration file. It does not apply anything to Supabase.
+2. Add the server-only Supabase admin client
+cat > "lib/supabase/admin.ts" <<'TS'
+import "server-only";
+
+import { createClient } from "@supabase/supabase-js";
+
+export function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      "Supabase admin configuration is missing. Set SUPABASE_SERVICE_ROLE_KEY on the server."
+    );
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+TS
+
+3. Replace the calendar actions
+This replacement retains the existing public action interfaces. It also makes the database transaction authoritative: if an RPC rejects a booking because another operation took the slot, the action returns that database error rather than relying on an earlier availability check.
+cat > "app/(dashboard)/calendar/actions.ts" <<'TS'
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { isSuppressed } from "@/lib/suppression";
+import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+import {
+  validateBookingInput,
+  validateSlotInput,
+} from "@/lib/calendar/time";
+import {
+  deleteGoogleEvent,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+  type GoogleEventInput,
+} from "@/lib/calendar/google";
+
+export type CalendarActionResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  slotId?: string;
+  bookingId?: string;
+};
+
+type SlotRow = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  source: string;
+  is_available: boolean;
+};
+
+type BookingRow = {
+  id: string;
+  company_id: string | null;
+  conversation_id: string | null;
+  slot_id: string | null;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  status: string;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+};
+
+function revalidateCalendar() {
+  revalidatePath("/calendar");
+  revalidatePath("/conversations");
+}
+
+function rpcError(error: { message: string } | null, fallback: string) {
+  return error?.message || fallback;
+}
+
+async function loadSlot(
+  supabase: ServerSupabase,
+  slotId: string
+): Promise<{ slot?: SlotRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .select("id,start_time,end_time,timezone,source,is_available")
+    .eq("id", slotId)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Slot not found." };
+
+  return { slot: data as SlotRow };
+}
+
+async function loadBooking(
+  supabase: ServerSupabase,
+  bookingId: string
+): Promise<{ booking?: BookingRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!data) return { error: "Booking not found." };
+
+  return { booking: data as BookingRow };
+}
+
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: `Ledgerwise call: ${booking.prospect_name || booking.prospect_email}`,
+    description: [
+      `Prospect: ${booking.prospect_name || "unknown"}`,
+      `Email: ${booking.prospect_email}`,
+      `Company: ${booking.company_id ?? "unknown"}`,
+      "Managed from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+
+type GoogleResult = {
+  status: "not_configured" | "synced" | "failed";
+  eventId?: string;
+};
+
+async function recordGoogleSync(
+  bookingId: string,
+  result: GoogleResult,
+  deleted = false,
+  forceFailed = false
+): Promise<boolean> {
+  const status = forceFailed
+    ? "failed"
+    : deleted
+      ? "deleted"
+      : result.status;
+
+  if (status === "not_configured") return true;
+
+  try {
+    const admin = createAdminClient();
+    const { error } = await admin.rpc("record_google_calendar_sync", {
+      p_booking_id: bookingId,
+      p_status: status,
+      p_event_id: status === "synced" ? result.eventId ?? null : null,
+    });
+
+    if (error) {
+      console.error("Could not persist Google Calendar sync metadata:", error.message);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(
+      "Could not persist Google Calendar sync metadata:",
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    return false;
+  }
+}
+
+async function checkSuppressed(
+  supabase: ServerSupabase,
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (await isSuppressed(supabase, email)) {
+      return {
+        ok: false,
+        error:
+          "This contact is on the permanent suppression list. A booking cannot be created or confirmed.",
+      };
+    }
+
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The suppression check failed. Apply the database migrations first.",
+    };
+  }
+}
+
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  const validation = validateSlotInput(input);
+  if (!validation.ok) {
+    return { ok: false, error: validation.errors.join(" ") };
+  }
+
+  const { data, error } = await supabase.rpc("create_calendar_slot", {
+    p_start_time: input.startTime,
+    p_end_time: input.endTime,
+    p_timezone: input.timezone,
+  });
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error: rpcError(error, "The calendar slot could not be created."),
+    };
+  }
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    slotId: data as string,
+    message: "Internal slot created.",
+  };
+}
+
+export async function deleteSlot(slotId: string): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+
+  const { data, error } = await supabase.rpc("delete_calendar_slot", {
+    p_slot_id: slotId,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The slot could not be deleted."),
+    };
+  }
+
+  revalidateCalendar();
+
+  return { ok: true, slotId, message: "Slot deleted." };
+}
+
+export async function bookSlot(input: {
+  slotId: string;
+  companyId?: string | null;
+  conversationId?: string | null;
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+
+  const companyId =
+    input.companyId && isUuid(input.companyId) ? input.companyId : null;
+  const conversationId =
+    input.conversationId && isUuid(input.conversationId)
+      ? input.conversationId
+      : null;
+
+  let prospectName = input.prospectName;
+  let prospectEmail = normalizeEmail(input.prospectEmail);
+
+  if (conversationId) {
+    const { data: conversation, error } = await supabase
+      .from("conversations")
+      .select("id,company_id,contact_email,status")
+      .eq("id", conversationId)
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+    if (!conversation) {
+      return { ok: false, error: "Conversation not found." };
+    }
+
+    if (conversation.status === "suppressed") {
+      return {
+        ok: false,
+        error: "This contact is suppressed. A booking cannot be created.",
+      };
+    }
+
+    if (companyId && companyId !== conversation.company_id) {
+      return {
+        ok: false,
+        error: "The selected company does not match the conversation.",
+      };
+    }
+
+    if (!prospectEmail) {
+      prospectEmail = normalizeEmail(conversation.contact_email);
+    }
+  }
+
+  const resolvedCompanyId = conversationId
+    ? await (async () => {
+        const { data } = await supabase
+          .from("conversations")
+          .select("company_id")
+          .eq("id", conversationId)
+          .maybeSingle();
+
+        return companyId ?? data?.company_id ?? null;
+      })()
+    : companyId;
+
+  if (resolvedCompanyId) {
+    const { data: company, error } = await supabase
+      .from("companies")
+      .select("name,contact_name,contact_email")
+      .eq("id", resolvedCompanyId)
+      .maybeSingle();
+
+    if (error) return { ok: false, error: error.message };
+
+    if (company) {
+      if (!prospectName.trim() && company.contact_name !== "unknown") {
+        prospectName = company.contact_name;
+      }
+
+      if (!prospectEmail && company.contact_email) {
+        prospectEmail = normalizeEmail(company.contact_email);
+      }
+    }
+  }
+
+  if (!isValidEmail(prospectEmail)) {
+    return { ok: false, error: "A valid prospect email is required." };
+  }
+
+  const suppression = await checkSuppressed(supabase, prospectEmail);
+  if (!suppression.ok) {
+    return { ok: false, error: suppression.error };
+  }
+
+  const cleanProspectName = trimText(prospectName, 200);
+  if (!cleanProspectName) {
+    return { ok: false, error: "A prospect name is required." };
+  }
+
+  const validation = validateBookingInput({
+    prospectName: cleanProspectName,
+    prospectEmail,
+    timezone: input.timezone,
+  });
+
+  if (!validation.ok) {
+    return { ok: false, error: validation.errors.join(" ") };
+  }
+
+  const { data: bookingId, error } = await supabase.rpc("book_slot", {
+    p_slot_id: input.slotId,
+    p_company_id: resolvedCompanyId,
+    p_conversation_id: conversationId,
+    p_prospect_name: cleanProspectName,
+    p_prospect_email: prospectEmail,
+    p_timezone: input.timezone,
+  });
+
+  if (error || !bookingId) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be created."),
+    };
+  }
+
+  const loadedSlot = await loadSlot(supabase, input.slotId);
+
+  let google: GoogleResult = { status: "not_configured" };
+  let metadataSaved = true;
+
+  if (loadedSlot.slot) {
+    google = await syncBookingToGoogle({
+      summary: `Ledgerwise call: ${cleanProspectName}`,
+      description: [
+        `Prospect: ${cleanProspectName}`,
+        `Email: ${prospectEmail}`,
+        `Company: ${resolvedCompanyId ?? "unknown"}`,
+        "Created from the Ledgerwise prototype.",
+      ].join("\n"),
+      startTime: loadedSlot.slot.start_time,
+      endTime: loadedSlot.slot.end_time,
+      timezone: loadedSlot.slot.timezone,
+    });
+
+    metadataSaved = await recordGoogleSync(bookingId, google);
+  }
+
+  revalidateCalendar();
+  if (conversationId) revalidatePath(`/conversations/${conversationId}`);
+
+  const message =
+    google.status === "synced"
+      ? metadataSaved
+        ? "Booking created and synced to Google Calendar."
+        : "Booking created and Google Calendar event synced, but sync metadata could not be saved."
+      : google.status === "failed"
+        ? "Booking created on the internal calendar. Google Calendar sync failed."
+        : "Booking created on the internal calendar.";
+
+  return {
+    ok: true,
+    bookingId: bookingId as string,
+    slotId: input.slotId,
+    message,
+  };
+}
+
+export async function confirmBooking(
+  bookingId: string
+): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) {
+    return { ok: false, error: loaded.error };
+  }
+
+  const booking = loaded.booking;
+
+  if (booking.status !== "pending" && booking.status !== "needs_human") {
+    return {
+      ok: false,
+      error: "Only a pending or needs-human booking can be confirmed.",
+    };
+  }
+
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: `${suppression.error} Cancel the booking instead.`,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("confirm_booking", {
+    p_booking_id: bookingId,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be confirmed."),
+    };
+  }
+
+  let syncNote = "";
+
+  if (!booking.google_event_id && booking.slot_id) {
+    const loadedSlot = await loadSlot(supabase, booking.slot_id);
+
+    if (loadedSlot.slot) {
+      const google = await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+
+      const metadataSaved = await recordGoogleSync(bookingId, google);
+
+      syncNote =
+        google.status === "synced"
+          ? metadataSaved
+            ? " Google Calendar event created."
+            : " Google event created, but its sync metadata could not be saved."
+          : google.status === "failed"
+            ? " Google Calendar sync failed; the internal booking is still confirmed."
+            : "";
+    }
+  }
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    bookingId,
+    message: `Booking confirmed.${syncNote}`,
+  };
+}
+
+export async function cancelBooking(
+  bookingId: string,
+  reason: string
+): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) {
+    return { ok: false, error: "A cancellation reason is required." };
+  }
+
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) {
+    return { ok: false, error: loaded.error };
+  }
+
+  const booking = loaded.booking;
+
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return {
+      ok: false,
+      error: "This booking is already cancelled or rescheduled.",
+    };
+  }
+
+  const { data, error } = await supabase.rpc("cancel_booking", {
+    p_booking_id: bookingId,
+    p_reason: cleanReason,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be cancelled."),
+    };
+  }
+
+  let syncNote = "";
+
+  if (booking.google_event_id) {
+    const google = await deleteGoogleEvent(booking.google_event_id);
+
+    if (google.status === "not_configured") {
+      const metadataSaved = await recordGoogleSync(
+        bookingId,
+        google,
+        false,
+        true
+      );
+
+      syncNote = metadataSaved
+        ? " The internal booking is cancelled, but the Google event could not be removed because sync is not operational."
+        : " The internal booking is cancelled, but Google sync metadata could not be updated.";
+    } else {
+      const metadataSaved = await recordGoogleSync(bookingId, google, true);
+
+      syncNote =
+        google.status === "synced"
+          ? metadataSaved
+            ? " The Google Calendar event was removed."
+            : " The Google event was removed, but sync metadata could not be saved."
+          : " The internal booking is cancelled, but Google Calendar deletion failed.";
+    }
+  }
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    bookingId,
+    message: `Booking cancelled. The slot is free.${syncNote}`,
+  };
+}
+
+export async function rescheduleBooking(
+  bookingId: string,
+  newSlotId: string,
+  reason: string
+): Promise<CalendarActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  if (!isUuid(bookingId) || !isUuid(newSlotId)) {
+    return { ok: false, error: "Invalid booking or slot ID." };
+  }
+
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) {
+    return { ok: false, error: "A reschedule reason is required." };
+  }
+
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) {
+    return { ok: false, error: loaded.error };
+  }
+
+  const booking = loaded.booking;
+
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return {
+      ok: false,
+      error: "Only an active booking can be rescheduled.",
+    };
+  }
+
+  if (booking.slot_id === newSlotId) {
+    return { ok: false, error: "Choose a different slot." };
+  }
+
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: `${suppression.error} Cancel the booking instead.`,
+    };
+  }
+
+  const loadedSlot = await loadSlot(supabase, newSlotId);
+  if (!loadedSlot.slot) {
+    return { ok: false, error: loadedSlot.error };
+  }
+
+  const { data, error } = await supabase.rpc("reschedule_booking", {
+    p_booking_id: bookingId,
+    p_new_slot_id: newSlotId,
+    p_reason: cleanReason,
+  });
+
+  if (error || data !== true) {
+    return {
+      ok: false,
+      error: rpcError(error, "The booking could not be rescheduled."),
+    };
+  }
+
+  const google = booking.google_event_id
+    ? await updateGoogleEvent(
+        booking.google_event_id,
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      )
+    : await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+
+  let metadataSaved = true;
+
+  if (google.status === "not_configured" && booking.google_event_id) {
+    metadataSaved = await recordGoogleSync(bookingId, google, false, true);
+  } else {
+    metadataSaved = await recordGoogleSync(bookingId, google);
+  }
+
+  const syncNote =
+    google.status === "synced"
+      ? metadataSaved
+        ? " Google Calendar was updated."
+        : " Google Calendar was updated, but its sync metadata could not be saved."
+      : google.status === "failed"
+        ? " Google Calendar sync failed; the internal booking is authoritative."
+        : booking.google_event_id
+          ? " The Google event was not updated because sync is not operational."
+          : "";
+
+  revalidateCalendar();
+
+  return {
+    ok: true,
+    bookingId,
+    slotId: newSlotId,
+    message: `Booking rescheduled. The old slot is free and the new slot is held.${syncNote}`,
+  };
+}
+TS
+
+echo "Replaced calendar actions."
+
+4. Configure the server secret
+In your local .env.local, make sure this variable exists:
+SUPABASE_SERVICE_ROLE_KEY=your_actual_service_role_key
+
+Use the service-role key from your Supabase project settings. Do not paste it here.
+5. Run the checks
+After creating the files, run:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+git diff --check
+
+Paste the results, including any errors.
+Updated status
+
+
+
+Work item
+Status
+
+
+
+Migration 04 contract
+Inspected
+
+
+Migration 05
+Creation command provided
+
+
+Server-only admin client
+Creation command provided
+
+
+Transactional calendar actions
+Replacement provided
+
+
+Local tests and build
+Awaiting execution
+
+
+Remote Supabase migration
+Not applied
+
+
+Git commit / push / deployment
+Not performed
+
+
+Do not apply migration 05 remotely yet. First let's confirm the code compiles and the existing test suite passes. Then we'll review the migration for application.
+
+
+ChatGPT:
+4. Configure the server secret
+In your local .env.local, make sure this variable exists:
+SUPABASE_SERVICE_ROLE_KEY=your_actual_service_role_key
+
+Use the service-role key from your Supabase project settings. Do not paste it here.
+5. Run the checks
+After creating the files, run:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+git diff --check
+
+Paste the results, including any errors.
+Updated status
+
+
+
+Work item
+Status
+
+
+
+Migration 04 contract
+Inspected
+
+
+Migration 05
+Creation command provided
+
+
+Server-only admin client
+Creation command provided
+
+
+Transactional calendar actions
+Replacement provided
+
+
+Local tests and build
+Awaiting execution
+
+
+Remote Supabase migration
+Not applied
+
+
+Git commit / push / deployment
+Not performed
+
+
+Do not apply migration 05 remotely yet. First let's confirm the code compiles and the existing test suite passes. Then we'll review the migration for application.
+
+
+You:
+You know what, I think Imma upload the app's file to Claude at once (without the env and the node modules)
+And tell him to perform all the stages and finish the app once and for all (without Phase 4, since that one is postponed)
+
+
+ChatGPT:
+Honestly, I think that's a reasonable move. We've spent too much time coordinating small implementation steps. A full-repository handoff gives Claude the opportunity to understand the application as a whole, identify inconsistencies, and finish the remaining implementation in a coherent pass.
+But I'd give Claude a very strict engineering mandate, not simply tell it to "finish the app." Otherwise, it might rewrite working features, silently change your architecture, or declare integrations complete when they're only simulated.
+What I'd upload
+Create a ZIP of the complete working project, excluding:
+
+node_modules/
+.next/
+.env.local and every other file containing actual secrets
+Build artifacts and caches
+Large unnecessary generated files
+
+Keep these:
+
+app/, components/, lib/, supabase/
+tests/
+docs/
+package.json and lockfile
+.env.example (with variable names, never values)
+Research CSV and existing project documentation
+All current migrations, including unapplied migrations
+Existing AI session exports and planning documents, if available
+
+Important: Preserve your current uncommitted changes in the ZIP. Don't create an archive from an older Git commit.
+The handoff instructions
+I'd give Claude this as its primary task:
+# LEDGERWISE — COMPLETE THE APPLICATION
+Role
+Act as the senior full-stack engineer, software architect, security engineer, QA engineer, and product implementation lead responsible for finishing Ledgerwise.
+You have been given the complete current repository. Your responsibility is to inspect the existing implementation, understand its architecture, and finish the application end-to-end.
+This is an implementation assignment, not a planning exercise.
+Do not spend the majority of the session producing plans, repeatedly verifying already-understood details, or asking me to approve every small implementation decision. Make sound engineering decisions, implement them, and validate your work.
+1. Project objective
+Ledgerwise is an AI-powered SDR platform for bookkeeping services.
+The application should support:
+
+Company prospect research and importing.
+Source verification and prospect qualification.
+Lead scoring and prioritization.
+Personalized email drafting.
+Email review and approval.
+Reply and objection handling.
+Human handoff when necessary.
+Internal appointment scheduling and booking.
+Optional Google Calendar synchronization.
+A coherent authenticated dashboard and end-to-end user workflow.
+
+The project is a portfolio/case-study application for an AI engineering role. It must be functional, secure, presentable, and demonstrable.
+2. Phase 4 is postponed
+Do not implement Phase 4 research expansion.
+The existing research CSV is the current dataset. Do not conduct additional research, replace the dataset, invent company information, or restructure the research pipeline unnecessarily.
+Preserve the existing research work and focus on completing the application.
+3. Existing architecture and decisions to preserve
+Inspect the actual repository before changing anything.
+The project uses:
+
+Next.js App Router.
+TypeScript.
+Tailwind CSS.
+Supabase authentication and PostgreSQL.
+Supabase migrations.
+Vercel deployment.
+
+Preserve existing working functionality and existing user-facing interfaces unless a change is genuinely necessary.
+Important architectural decisions:
+Calendar
+
+Ledgerwise's internal calendar is authoritative.
+Google Calendar is optional.
+Internal bookings must continue working without Google Calendar credentials.
+Google Calendar must not be presented as operational unless real OAuth and actual integration tests establish that it works.
+
+Google Calendar
+Implement the proper OAuth architecture, not a manually configured refresh-token shortcut.
+The intended architecture includes:
+
+OAuth authorization initiation and callback.
+Secure server-side token storage with encryption.
+Account-level authorization checks.
+Calendar selection.
+Free/busy availability retrieval.
+Idempotent event creation, updates, and cancellations.
+Retry and reconciliation handling.
+Clear synchronization states and failure reporting.
+Real integration testing where credentials are available.
+
+Never expose Google credentials or Supabase service-role keys to the browser.
+Email
+Email sending must remain simulated unless a real email provider is configured and explicitly approved.
+Never claim that a simulated email was actually sent.
+Security
+Review:
+
+Supabase RLS policies.
+RPC execution permissions.
+Security-definer functions.
+Server actions and authorization checks.
+Audit logging.
+Suppression-list enforcement.
+Input validation.
+Secret handling.
+Google OAuth token security.
+
+Preserve the existing single-team authentication model. Do not introduce unnecessary multi-tenant architecture.
+4. Your responsibilities
+First, inspect the entire repository and determine the actual implementation state.
+Then finish the remaining work across all applicable phases, excluding Phase 4.
+Do not assume previous planning documents are perfectly accurate. Compare them against the actual code and database migrations.
+Prioritize:
+
+Fix incomplete or broken functionality.
+Complete transactional calendar operations.
+Complete security and database corrections.
+Complete the proper Google OAuth implementation.
+Finish email and conversation workflows.
+Ensure all dashboard workflows work together.
+Improve UI consistency and usability.
+Complete automated tests.
+Verify production build readiness.
+Update project documentation.
+
+Avoid unnecessary rewrites. Prefer targeted, maintainable improvements.
+5. Implementation rules
+
+Work directly on the provided project.
+Preserve existing work and uncommitted changes.
+Do not delete functionality simply because it is inconvenient to maintain.
+Do not replace real implementations with mock implementations.
+Do not introduce unnecessary dependencies.
+Do not bypass TypeScript errors with any, broad suppressions, or disabling checks.
+Do not weaken security to make tests pass.
+Do not invent database columns, RPC signatures, or environment variables. Inspect the actual migrations and implementation.
+Do not duplicate audit records when a database transaction already writes them.
+Keep external API calls outside database transactions where appropriate.
+Handle partial failures explicitly.
+Make operations idempotent when necessary.
+Add tests for meaningful business logic and security-sensitive behavior.
+
+If you encounter an ambiguity, make the safest reasonable decision when the repository provides sufficient evidence. Ask me only when an external decision, credential, or destructive action genuinely requires my involvement.
+6. Database and deployment restrictions
+You may prepare and modify local migration files.
+However:
+
+Do not apply migrations to the remote Supabase database without my explicit approval.
+Do not delete or overwrite existing database data.
+Do not run destructive SQL against the production database.
+Do not push to GitHub.
+Do not deploy to Vercel.
+Do not change production environment variables.
+
+Provide reviewed migration instructions and identify exactly which migrations need to be applied.
+7. Testing requirements
+Run the available checks and fix the issues they reveal.
+At minimum:
+
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+git diff --check
+
+Also add or improve tests for:
+
+Booking concurrency and overlapping appointments.
+Invalid and expired calendar slots.
+Suppressed contacts.
+Booking confirmation, cancellation, and rescheduling.
+Google Calendar synchronization failures.
+OAuth authorization and callback security.
+Email approval and simulated sending.
+Conversation state transitions.
+Authorization and access-control boundaries.
+
+Do not claim a test passed unless you actually ran it and observed its result.
+If a test requires unavailable credentials or external services, report that limitation honestly.
+8. Product quality requirements
+The completed application should have:
+
+A coherent and consistent interface.
+No broken dashboard navigation.
+No dead buttons or misleading actions.
+Useful loading, empty, success, and error states.
+Clear distinction between simulated and real integrations.
+Appropriate error handling.
+Consistent data handling across prospects, conversations, bookings, and calendar views.
+
+Prioritize functional completeness and reliability over unnecessary visual embellishments.
+9. Final deliverables
+When implementation is finished, provide:
+
+A summary of everything implemented.
+A list of bugs and security issues fixed.
+A list of files created or modified.
+Database migrations requiring my approval.
+Required environment variables, without asking me to share their values.
+Test results with actual pass/fail counts.
+Any functionality that still requires external credentials.
+Remaining limitations, if any.
+Exact instructions for running the application locally.
+Exact instructions for deploying it myself.
+Updated README.md and HOW_I_WORKED.md.
+A clear demonstration checklist for the portfolio presentation.
+
+The application must not be described as complete if important functionality remains mocked, broken, or unverified.
+10. Definition of done
+The assignment is complete when:
+
+All applicable phases except Phase 4 are implemented.
+The primary user workflows work end-to-end.
+Database operations are secure and transactional.
+Google Calendar has the correct OAuth architecture and honest integration status.
+Tests, lint, TypeScript, and production build pass, subject to clearly documented external-service limitations.
+Documentation reflects the actual implementation.
+No existing work has been silently discarded.
+No remote migrations, commits, pushes, or deployments have been performed without my approval.
+
+Start implementing immediately. Do not return only a plan. Finish as much as possible in this execution session, and clearly identify anything that genuinely requires my intervention.
+One thing I'd insist on
+Ask Claude to work in an environment where it can actually edit the repository and run commands, such as Claude Code, rather than merely reviewing a ZIP and returning suggested code. A file upload alone does not necessarily give it an executable development environment.
+And when Claude finishes, don't blindly accept its "complete" status. We should review its final change summary, test evidence, and migrations before touching Supabase or deploying.
+My recommendation: let Claude take the implementation workload, but retain control over database changes, secrets, GitHub, and deployment. That gives you the speed you want without handing over the keys to your project.
+
+
+You:
+I am filling the research document in the CSV, and I wonder, what is the evidence column for ?
+
+
+ChatGPT:
+The Evidence column is where you record the specific proof supporting a research finding about a company.
+Think of it as the answer to:
+“What makes us confident this information is true?”
+For Ledgerwise, it helps ensure that the AI SDR doesn't generate personalized outreach based on invented, outdated, or unsupported claims.
+Example
+Suppose you're researching a bookkeeping prospect:
+
+
+
+Column
+Example
+
+
+
+Company
+Acme Accounting
+
+
+Research finding
+Recently expanded its team
+
+
+Evidence
+The company published three new accountant job openings in October 2026.
+
+
+Source URL
+https://example.com/careers
+
+
+The evidence explains what you found. The source URL lets someone else verify it.
+What belongs in Evidence?
+Good evidence includes:
+
+Funding: Announced a $2M funding round.
+Hiring: Published job openings for accountants or finance staff.
+Expansion: Opened a new office or entered a new market.
+Technology: Announced adoption of a particular accounting or CRM platform.
+Business activity: Launched a new service or product.
+Operational signals: Publicly mentioned difficulties with invoicing, reconciliation, or financial operations.
+
+What should you avoid?
+
+Generic descriptions copied from the company's homepage.
+Unsupported assumptions about its internal problems.
+Personal opinions or speculation.
+Claims without a verifiable source.
+
+My recommendation: Write evidence as a short, factual statement, ideally including a date or relevant detail. Keep the actual URL in the Source URL column.
+This distinction matters because Ledgerwise should use the evidence to construct personalized outreach, not blindly treat every research observation as a confirmed fact.
+
+
+You:
+📎 [Attached file: Book 9(Sheet1).csv — CSV, 4 KB]
+Check this one, is it good ?
+It is still incomplete (only 2 companies and the last two columns are decided by me to be left empty)
+
+
+ChatGPT:
+Yes — the overall structure is good, and the CSV is readable. You've separated research into distinct claim types (us_ecommerce, category, size_fit, growth_signal, pain_signal, and contact), which is useful for Ledgerwise.
+I also understand that there are only two companies so far, and that you've intentionally left retrieved_at and evidence blank. I won't count those empty columns as mistakes.
+However, I would make a few corrections before filling in the remaining companies.
+
+
+ChatGPT:
+Yes — the overall structure is good, and the CSV is readable. You've separated research into distinct claim types (us_ecommerce, category, size_fit, growth_signal, pain_signal, and contact), which is useful for Ledgerwise.
+I also understand that there are only two companies so far, and that you've intentionally left retrieved_at and evidence blank. I won't count those empty columns as mistakes.
+However, I would make a few corrections before filling in the remaining companies.
+1. What looks good
+
+Wild Rye: Good variety of research signals. You've identified growth, financial pressure, and a relevant decision-maker.
+Sigmas: You've gone beyond basic company descriptions and identified a potentially interesting business transition.
+Claim types: Consistent categorization makes the data easier to process programmatically.
+One claim per row: This is the right approach. It lets Ledgerwise evaluate individual facts rather than treating an entire company description as one claim.
+
+2. What needs improvement
+
+
+
+Company / field
+My assessment
+What to fix
+
+
+
+Wild Rye — us_ecommerce
+Good
+Source URL is present.
+
+
+Wild Rye — category
+Good
+Source URL is present.
+
+
+Wild Rye — size_fit
+Needs source
+Revenue and employee estimates have no source URL.
+
+
+Wild Rye — growth_signal
+Needs improvement
+Good details, but the source title is missing, and one LinkedIn URL may not substantiate every statistic.
+
+
+Wild Rye — pain_signal
+Needs verification
+The Yahoo article is useful, but the financial figures need their own supporting source.
+
+
+Wild Rye — contact
+Needs source
+The LinkedIn profile doesn't substantiate every listed contact detail.
+
+
+Sigmas — us_ecommerce
+Missing source
+Add a source confirming US shipping.
+
+
+Sigmas — category
+Missing source
+Add a company page confirming its product category.
+
+
+Sigmas — size_fit
+Missing source
+Revenue and employee estimates need supporting sources.
+
+
+Sigmas — growth_signal
+Missing source
+The funding, pivot, product launch, and SKU claims need sources.
+
+
+Sigmas — pain_signal
+Needs caution
+Some statements are reasonable business inferences, not demonstrated company problems.
+
+
+Sigmas — contact
+Needs source
+Add a source for the founders and company contact details.
+
+
+3. Three important recommendations
+A. Distinguish facts from interpretations.
+For example, Sigmas' transition from a marketplace to DTC is a factual business development.
+But saying that this transition creates customer acquisition pressure is an interpretation. That's a reasonable hypothesis, but don't present it as a problem the company has publicly acknowledged.
+B. Make sources traceable.
+Ideally, every claim should have its own supporting URL. If a claim contains five different statistics, make sure the source actually supports all five.
+C. Clean up the claim formatting.
+Your Wild Rye growth_signal and pain_signal contain Markdown formatting such as **bold**. I'd remove that formatting and keep the CSV values as plain text. Also, avoid putting several unrelated contact details into a single hard-to-verify statement.
+4. About the two empty columns
+Your decision to leave retrieved_at empty is understandable if you intend to populate it later.
+For evidence, though, I would reconsider leaving it empty permanently. The distinction I'd recommend is:
+
+claim: A concise statement of what the research establishes.
+source_url: Where the information came from.
+source_title: The name of the source.
+retrieved_at: When you collected the information.
+evidence: The specific supporting detail, quotation, or excerpt from the source.
+
+This makes the data much easier to audit and helps prevent the AI from turning weak signals into confident claims.
+
+My verdict: Good research structure, promising initial findings, but not yet ready for import. The biggest issue isn't the number of companies or the empty final columns — it's the missing source URLs and the distinction between verified facts and inferred business problems.
+I'd keep this structure and continue filling it in rather than redesigning the CSV.
+
+
+ChatGPT:
+1. What looks good
+
+Wild Rye: Good variety of research signals. You've identified growth, financial pressure, and a relevant decision-maker.
+Sigmas: You've gone beyond basic company descriptions and identified a potentially interesting business transition.
+Claim types: Consistent categorization makes the data easier to process programmatically.
+One claim per row: This is the right approach. It lets Ledgerwise evaluate individual facts rather than treating an entire company description as one claim.
+
+2. What needs improvement
+
+
+
+Company / field
+My assessment
+What to fix
+
+
+
+Wild Rye — us_ecommerce
+Good
+Source URL is present.
+
+
+Wild Rye — category
+Good
+Source URL is present.
+
+
+Wild Rye — size_fit
+Needs source
+Revenue and employee estimates have no source URL.
+
+
+Wild Rye — growth_signal
+Needs improvement
+Good details, but the source title is missing, and one LinkedIn URL may not substantiate every statistic.
+
+
+Wild Rye — pain_signal
+Needs verification
+The Yahoo article is useful, but the financial figures need their own supporting source.
+
+
+Wild Rye — contact
+Needs source
+The LinkedIn profile doesn't substantiate every listed contact detail.
+
+
+Sigmas — us_ecommerce
+Missing source
+Add a source confirming US shipping.
+
+
+Sigmas — category
+Missing source
+Add a company page confirming its product category.
+
+
+Sigmas — size_fit
+Missing source
+Revenue and employee estimates need supporting sources.
+
+
+Sigmas — growth_signal
+Missing source
+The funding, pivot, product launch, and SKU claims need sources.
+
+
+Sigmas — pain_signal
+Needs caution
+Some statements are reasonable business inferences, not demonstrated company problems.
+
+
+Sigmas — contact
+Needs source
+Add a source for the founders and company contact details.
+
+
+3. Three important recommendations
+A. Distinguish facts from interpretations.
+For example, Sigmas' transition from a marketplace to DTC is a factual business development.
+But saying that this transition creates customer acquisition pressure is an interpretation. That's a reasonable hypothesis, but don't present it as a problem the company has publicly acknowledged.
+B. Make sources traceable.
+Ideally, every claim should have its own supporting URL. If a claim contains five different statistics, make sure the source actually supports all five.
+C. Clean up the claim formatting.
+Your Wild Rye growth_signal and pain_signal contain Markdown formatting such as **bold**. I'd remove that formatting and keep the CSV values as plain text. Also, avoid putting several unrelated contact details into a single hard-to-verify statement.
+4. About the two empty columns
+Your decision to leave retrieved_at empty is understandable if you intend to populate it later.
+For evidence, though, I would reconsider leaving it empty permanently. The distinction I'd recommend is:
+
+claim: A concise statement of what the research establishes.
+source_url: Where the information came from.
+source_title: The name of the source.
+retrieved_at: When you collected the information.
+evidence: The specific supporting detail, quotation, or excerpt from the source.
+
+This makes the data much easier to audit and helps prevent the AI from turning weak signals into confident claims.
+
+My verdict: Good research structure, promising initial findings, but not yet ready for import. The biggest issue isn't the number of companies or the empty final columns — it's the missing source URLs and the distinction between verified facts and inferred business problems.
+I'd keep this structure and continue filling it in rather than redesigning the CSV.
+
+
+You:
+📎 [Attached file: company_research.csv — CSV, 45 KB]
+what about this one now
+
+
+ChatGPT:
+This version is a substantial improvement. You've expanded the research considerably, and the CSV is now much closer to the structure I'd want Ledgerwise to consume.
+I inspected the actual file, including its rows, columns, company coverage, and research claims.
+
+  CSV quality overview
+  
+    
+      41
+      Companies researched
+    
+    
+      246
+      Total research records
+    
+    
+      6
+      Claim types per company
+    
+    
+      0
+      Missing source URLs or titles
+    
+  
+  
+  
+    **Structural consistency**
+    Good
+  
+  Every company has six records, covering the same six claim types. The two columns you've reserved for later, `retrieved_at` and `evidence`, are consistently empty.
+
+
+1. What's working well
+
+Research coverage: 41 companies is a meaningful dataset, not just a small test sample.
+Source attribution: Every record has a source URL and source title.
+Growth signals: You're increasingly finding specific figures, funding rounds, acquisitions, expansion, hiring, and revenue developments.
+Pain signals: You're distinguishing between publicly disclosed problems and potential operational challenges.
+Consistency: The six-record structure is maintained across all 41 companies.
+
+2. Issues I'd fix before importing
+These are the most important findings from my review.
+
+
+
+Issue
+Example
+Recommendation
+
+
+
+Potentially suspicious URLs
+Gamer's Choice job URLs; Datanyze URLs ending in 345678901
+Verify these aren't placeholder or incorrect links.
+
+
+Incorrect classification
+Fields Good is primarily a restaurant chain; Jetset Pilates is primarily a studio franchise
+Reconsider whether these meet the intended e-commerce prospect criteria.
+
+
+Incorrect metric classification
+Golden Pet Brands has Revenue >$1B valuation
+Valuation is not revenue. Separate the two.
+
+
+Mixed metrics
+Something & Nothing's size_fit includes US revenue share and employee estimates
+Keep revenue, employee count, and geographic revenue share distinct.
+
+
+Weak pain signals
+"Competitive market" or "managing inventory risk"
+Treat these as hypotheses, not verified company problems.
+
+
+Weak contact targeting
+Gamer's Choice lists an HR email
+Prefer a founder, CEO, finance leader, or appropriate business contact.
+
+
+3. A few specific examples
+Wild Rye — excellent research direction.
+The tariff-related financial pressure, founder statements, hiring decisions, and revenue growth are much more useful than generic descriptions of the company.
+Sigmas — good prospect intelligence.
+The marketplace-to-DTC transition and funding round provide an interesting reason to initiate outreach. Just make sure the operational difficulties you describe are clearly identified as inferred risks.
+Traeger — particularly useful.
+The public-company financial information and reported losses provide concrete business context. This is the kind of research that can support a genuinely personalized sales conversation.
+Uproot Clean — needs caution.
+Your revenue estimates range from approximately $513K to $57M. That's an enormous discrepancy. Don't let Ledgerwise treat either figure as established fact without further verification.
+Golden Pet Brands — needs correction.
+A company valuation exceeding $1 billion does not establish annual revenue exceeding $1 billion. This distinction matters for prospect qualification.
+4. One important improvement to your research methodology
+I would introduce a distinction between three types of research claims:
+
+  
+    
+      **Verified fact**
+      
+      High confidence
+    
+    Directly supported by a reliable source.
+
+Example: The company reported a $111M net loss.
+
+  
+  
+  
+    
+      **Third-party estimate**
+      
+      Medium confidence
+    
+    Reported by a company intelligence platform or other third party.
+
+Example: Estimated revenue of $5M–$10M.
+
+  
+  
+  
+    
+      **Business hypothesis**
+      
+      Unverified
+    
+    An interpretation based on the company's business model or circumstances.
+
+Example: Rapid retail expansion may increase inventory-management complexity.
+
+  
+
+
+This distinction will be particularly valuable when Ledgerwise generates personalized emails. It should never turn a business hypothesis into a statement that a company has publicly acknowledged a problem.
+5. My verdict
+Good progress
+I would keep the existing CSV structure. I don't see a reason to redesign it.
+
+
+
+Area
+Assessment
+
+
+
+CSV structure
+Good
+
+
+Research coverage
+Good
+
+
+Source attribution
+Good, subject to verification
+
+
+Research specificity
+Improving
+
+
+Pain-signal reliability
+Needs improvement
+
+
+Company qualification
+Needs a final pass
+
+
+Ready for strict import
+Not yet confirmed
+
+
+My recommendation: Continue researching companies using this exact structure. Don't spend time filling retrieved_at and evidence if you've deliberately reserved those for later.
+Before importing, I'd do one final quality-control pass focused on source validity, company qualification, metric classification, and unsupported assumptions.
+One important limitation: this was a review of the CSV's contents and internal consistency, not independent verification of all 246 source URLs. I haven't marked the underlying claims as independently verified.
+
+
+You:
+Meh no meed, research is done, it can be done for a later time because time is against us, we will use these research csv now, it is official now
+
+
+ChatGPT:
+Understood. The research phase is officially closed. We're moving forward with the current company_research.csv as the authoritative research dataset for Ledgerwise.
+No more research expansion, source verification, or CSV restructuring for now. We'll accept the current dataset as-is and revisit its quality later if necessary.
+Ledgerwise — Updated project status
+
+
+
+Phase
+Status
+
+
+
+Phase 1 — Foundation
+Complete
+
+
+Phase 2 — Research pipeline
+Complete
+
+
+Phase 3 — Prospect qualification
+Complete
+
+
+Phase 4 — Additional research
+Postponed
+
+
+Phase 5 — Email workflows
+In progress
+
+
+Phase 6 — Conversations
+In progress
+
+
+Phase 7 — Calendar integration
+In progress
+
+
+Next priority: Finish implementation, integration, testing, documentation, and deployment. No more getting stuck in research or endless verification.
+Let's build.
+
+If you want, I can:
+
+Draft handoff instructions with strict engineering mandates for Claude
+Define comprehensive next implementation steps after research handoff
+Prepare detailed test plan for remaining project phases

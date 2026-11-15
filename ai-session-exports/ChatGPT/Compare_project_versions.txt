@@ -1,0 +1,1401 @@
+Compare project versions
+========================
+
+You:
+📎 [Attached file: Ledgerwise-Research-Agent-Freemium-Upgrade Second Version and Latest.zip — ZIP, 262 KB]
+I got this one, I worked on this one using my job's office PC, so Imma need you to check the differences between each
+
+
+ChatGPT:
+Absolutely. Since you worked on this version using your office PC, we'll treat it as a separate development snapshot of Ledgerwise and compare it against the versions we've been working on.
+I'll focus on more than just changed files:
+
+Features: What was added, removed, or modified?
+Research agent: Discovery, company qualification, source verification, and scoring.
+AI functionality: Provider selection, prompts, fallback mechanisms, and API integrations.
+Backend: Database, Supabase, server actions, and API routes.
+Calendar: Booking workflow and Google Calendar integration.
+UI/UX: Layout, components, styling, and usability.
+Stability: Tests, security, missing functionality, and potential regressions.
+
+
+
+ChatGPT:
+Absolutely. Since you worked on this version using your office PC, we'll treat it as a separate development snapshot of Ledgerwise and compare it against the versions we've been working on.
+I'll focus on more than just changed files:
+
+Features: What was added, removed, or modified?
+Research agent: Discovery, company qualification, source verification, and scoring.
+AI functionality: Provider selection, prompts, fallback mechanisms, and API integrations.
+Backend: Database, Supabase, server actions, and API routes.
+Calendar: Booking workflow and Google Calendar integration.
+UI/UX: Layout, components, styling, and usability.
+Stability: Tests, security, missing functionality, and potential regressions.
+
+1. Overall comparison
+I compared the new office-PC archive against the previous ledgerwise-latest.zip from November 14.
+
+  
+    
+      Previous version
+      107
+      Source files
+      229 KB
+    
+  
+  
+    
+      Office-PC version
+      122
+      Source files
+      268 KB
+    
+  
+
+
+
+  
+    16
+    Added files
+  
+  
+    25
+    Modified files
+  
+  
+    1
+    Removed file
+  
+
+
+This is a meaningful development update, not simply a different ZIP export.
+2. Major improvements in the office-PC version
+Here are the most important changes I found.
+A. Research agent improvements
+Significant improvement
+The following files have been added or modified:
+
+lib/research/runner.ts
+lib/research/pages.ts
+lib/research/extract.ts
+lib/research/freshness.ts
+app/api/prospects/discover/route.ts
+
+New capabilities include:
+
+
+
+Feature
+Previous
+Office version
+
+
+
+Autonomous discovery
+Earlier research workflow
+Tavily discovery endpoint
+
+
+Website crawling
+Less extensive
+Up to 8 pages/company
+
+
+Internal link discovery
+Earlier implementation
+Two discovery passes
+
+
+Page prioritization
+Earlier implementation
+About, Team, Contact, Press, Careers, etc.
+
+
+Evidence freshness
+No classification
+Fresh, Aging, Stale, Unknown
+
+
+AI extraction
+Existing extraction
+More restrictive extraction instructions
+
+
+The new research pipeline is particularly interesting.
+It now:
+
+Searches for candidate companies.
+Visits their websites.
+Prioritizes relevant internal pages.
+Discovers additional pages from those pages.
+Extracts potential claims.
+Verifies extracted claims against website evidence.
+Sends accepted evidence into the human-review workflow.
+
+It also limits crawling to eight pages per company.
+That's a worthwhile improvement.
+B. Custom qualification scoring
+New functionality
+Three particularly important additions:
+
+lib/scoring/custom.ts
+app/(dashboard)/prospects/scoring-actions.ts
+app/(dashboard)/prospects/ScoreGenerationButton.tsx
+
+The new implementation supports configurable scoring criteria through:
+LEDGERWISE_SCORING_CRITERIA_JSON
+It validates:
+
+Criterion structure.
+Unique criterion keys.
+Supported claim types.
+Individual weights.
+Total weight of exactly 100 points.
+
+Invalid configurations fall back to the default scoring rubric.
+Importantly, scoring continues to award positive points only for human-verified evidence.
+One limitation: the custom rubric currently comes from environment configuration, not individual organization settings.
+C. Actual email sending through Resend
+New functionality
+This is another substantial addition.
+New file:
+lib/email/resend.ts
+The office version introduces:
+
+Real outbound email through Resend.
+Explicit live-sending configuration.
+Sender verification requirements.
+Approved-draft checks.
+Contact verification checks.
+Suppression checks.
+Email safety validation.
+Idempotency keys.
+Provider acceptance logging.
+
+It also preserves simulated sending.
+This is a significant step toward making Ledgerwise a functioning SDR application rather than just a prototype.
+However, real sending remains disabled by default, and the transactional outbox and inbound email infrastructure are still unfinished.
+D. Improved documentation
+The office version introduces considerably better project documentation.
+New or substantially updated documents include:
+
+docs/IMPLEMENTATION_STATUS.md
+docs/PROVIDER_SETUP.md
+docs/SAAS_DATABASE_MIGRATION_NOTES.md
+docs/PRODUCTION_ROADMAP_M1_M3.md
+
+The documentation now distinguishes between:
+
+Implemented functionality.
+Work blocked by missing database information.
+Provider configuration requirements.
+Remaining production requirements.
+
+This is particularly useful for continuing development across different computers.
+
+3. Important issue: Company discovery is still not sufficiently restrictive
+Needs attention
+Remember our Ecom CFO problem?
+The office version introduces an improved discovery endpoint, but I found something important.
+The discovery route currently uses these queries:
+
+US direct-to-consumer ecommerce brands.
+American online retail consumer brands.
+Ecommerce brands with founder/team information.
+
+It also blocks known directories and platforms.
+However, it does not implement a sufficiently strict business-type qualification step before accepting a candidate.
+For example, a financial consultancy could still appear in search results, have a valid homepage, pass the domain checks, and enter the research pipeline.
+That means a company like Ecom CFO could potentially slip through again.
+The research agent needs an additional qualification stage that explicitly distinguishes:
+
+Actual e-commerce stores selling physical or digital products.
+DTC brands.
+Online retailers.
+E-commerce businesses.
+
+From:
+
+Agencies.
+Consultants.
+Financial service providers.
+SaaS companies.
+Marketing companies.
+General B2B service providers.
+
+We should address this before considering autonomous discovery reliable.
+There is also a small UI inconsistency: the new discovery button says Discover 30 Companies, while the backend currently caps discovery at 12 new candidates per request.
+
+4. What did NOT change?
+Not everything received improvements.
+
+
+
+Area
+Findings
+
+
+
+UI/UX
+No changes to the global stylesheet
+
+
+Authentication
+Existing Supabase authentication remains
+
+
+Calendar
+Existing calendar workflow retained
+
+
+Google Calendar
+Existing integration retained
+
+
+Conversations
+Existing conversation functionality retained
+
+
+Email drafting
+Existing drafting workflow retained
+
+
+Database
+No new executable tenant migration
+
+
+SaaS billing
+Still not implemented
+
+
+Multi-tenancy
+Still not implemented
+
+
+In particular, I checked app/globals.css: it is unchanged from the previous archive.
+So the office version is primarily a backend, research-agent and functionality upgrade, not another UI redesign.
+5. Testing and stability
+The new archive contains 18 test files, compared with 15 in the previous version.
+Three additional test files cover:
+
+Custom scoring configuration.
+Research source freshness.
+Resend email integration.
+
+The office version's implementation report records 138 passing tests.
+However, one test file (research-output.test.ts) could not load because papaparse was unavailable in that environment.
+The report also says the full dependency installation, lint and production build were not completed.
+Therefore, I would not yet classify this version as fully validated.
+6. My assessment
+
+  **Office-PC version assessment**
+
+  
+    Research agent
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    Qualification scoring
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    Email infrastructure
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    Documentation
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    UI/UX
+
+<span class="ce-badge ce-badge-default">Unchanged</span>
+
+  
+  
+    Multi-tenancy
+
+<span class="ce-badge ce-badge-warning">Outstanding</span>
+
+  
+  
+    Production validation
+
+<span class="ce-badge ce-badge-warning">Incomplete</span>
+
+  
+
+
+My recommendation: Keep the office-PC version as the newer development branch. Don't discard it or overwrite it with the previous version.
+It contains meaningful improvements that we should preserve.
+7. What I suggest we do next
+I'd approach this in three stages:
+
+Merge assessment: Identify which office-PC changes should be incorporated into our main development copy.
+Research-agent correction: Fix the company qualification problem so service providers cannot enter the e-commerce prospect pipeline.
+Regression testing: Validate discovery, scoring, email sending, calendar functionality and the existing workflows.
+
+One thing I particularly want to preserve is the new Resend integration and configurable scoring system.
+They are useful additions, and there's no reason to lose that work.
+I can next prepare a precise, file-by-file merge plan so we can combine the strongest parts of both versions without accidentally overwriting working functionality.
+
+
+ChatGPT:
+1. Overall comparison
+I compared the new office-PC archive against the previous ledgerwise-latest.zip from November 14.
+
+  
+    
+      Previous version
+      107
+      Source files
+      229 KB
+    
+  
+  
+    
+      Office-PC version
+      122
+      Source files
+      268 KB
+    
+  
+
+
+
+  
+    16
+    Added files
+  
+  
+    25
+    Modified files
+  
+  
+    1
+    Removed file
+  
+
+
+This is a meaningful development update, not simply a different ZIP export.
+2. Major improvements in the office-PC version
+Here are the most important changes I found.
+A. Research agent improvements
+Significant improvement
+The following files have been added or modified:
+
+lib/research/runner.ts
+lib/research/pages.ts
+lib/research/extract.ts
+lib/research/freshness.ts
+app/api/prospects/discover/route.ts
+
+New capabilities include:
+
+
+
+Feature
+Previous
+Office version
+
+
+
+Autonomous discovery
+Earlier research workflow
+Tavily discovery endpoint
+
+
+Website crawling
+Less extensive
+Up to 8 pages/company
+
+
+Internal link discovery
+Earlier implementation
+Two discovery passes
+
+
+Page prioritization
+Earlier implementation
+About, Team, Contact, Press, Careers, etc.
+
+
+Evidence freshness
+No classification
+Fresh, Aging, Stale, Unknown
+
+
+AI extraction
+Existing extraction
+More restrictive extraction instructions
+
+
+The new research pipeline is particularly interesting.
+It now:
+
+Searches for candidate companies.
+Visits their websites.
+Prioritizes relevant internal pages.
+Discovers additional pages from those pages.
+Extracts potential claims.
+Verifies extracted claims against website evidence.
+Sends accepted evidence into the human-review workflow.
+
+It also limits crawling to eight pages per company.
+That's a worthwhile improvement.
+B. Custom qualification scoring
+New functionality
+Three particularly important additions:
+
+lib/scoring/custom.ts
+app/(dashboard)/prospects/scoring-actions.ts
+app/(dashboard)/prospects/ScoreGenerationButton.tsx
+
+The new implementation supports configurable scoring criteria through:
+LEDGERWISE_SCORING_CRITERIA_JSON
+It validates:
+
+Criterion structure.
+Unique criterion keys.
+Supported claim types.
+Individual weights.
+Total weight of exactly 100 points.
+
+Invalid configurations fall back to the default scoring rubric.
+Importantly, scoring continues to award positive points only for human-verified evidence.
+One limitation: the custom rubric currently comes from environment configuration, not individual organization settings.
+C. Actual email sending through Resend
+New functionality
+This is another substantial addition.
+New file:
+lib/email/resend.ts
+The office version introduces:
+
+Real outbound email through Resend.
+Explicit live-sending configuration.
+Sender verification requirements.
+Approved-draft checks.
+Contact verification checks.
+Suppression checks.
+Email safety validation.
+Idempotency keys.
+Provider acceptance logging.
+
+It also preserves simulated sending.
+This is a significant step toward making Ledgerwise a functioning SDR application rather than just a prototype.
+However, real sending remains disabled by default, and the transactional outbox and inbound email infrastructure are still unfinished.
+D. Improved documentation
+The office version introduces considerably better project documentation.
+New or substantially updated documents include:
+
+docs/IMPLEMENTATION_STATUS.md
+docs/PROVIDER_SETUP.md
+docs/SAAS_DATABASE_MIGRATION_NOTES.md
+docs/PRODUCTION_ROADMAP_M1_M3.md
+
+The documentation now distinguishes between:
+
+Implemented functionality.
+Work blocked by missing database information.
+Provider configuration requirements.
+Remaining production requirements.
+
+This is particularly useful for continuing development across different computers.
+
+3. Important issue: Company discovery is still not sufficiently restrictive
+Needs attention
+Remember our Ecom CFO problem?
+The office version introduces an improved discovery endpoint, but I found something important.
+The discovery route currently uses these queries:
+
+US direct-to-consumer ecommerce brands.
+American online retail consumer brands.
+Ecommerce brands with founder/team information.
+
+It also blocks known directories and platforms.
+However, it does not implement a sufficiently strict business-type qualification step before accepting a candidate.
+For example, a financial consultancy could still appear in search results, have a valid homepage, pass the domain checks, and enter the research pipeline.
+That means a company like Ecom CFO could potentially slip through again.
+The research agent needs an additional qualification stage that explicitly distinguishes:
+
+Actual e-commerce stores selling physical or digital products.
+DTC brands.
+Online retailers.
+E-commerce businesses.
+
+From:
+
+Agencies.
+Consultants.
+Financial service providers.
+SaaS companies.
+Marketing companies.
+General B2B service providers.
+
+We should address this before considering autonomous discovery reliable.
+There is also a small UI inconsistency: the new discovery button says Discover 30 Companies, while the backend currently caps discovery at 12 new candidates per request.
+
+4. What did NOT change?
+Not everything received improvements.
+
+
+
+Area
+Findings
+
+
+
+UI/UX
+No changes to the global stylesheet
+
+
+Authentication
+Existing Supabase authentication remains
+
+
+Calendar
+Existing calendar workflow retained
+
+
+Google Calendar
+Existing integration retained
+
+
+Conversations
+Existing conversation functionality retained
+
+
+Email drafting
+Existing drafting workflow retained
+
+
+Database
+No new executable tenant migration
+
+
+SaaS billing
+Still not implemented
+
+
+Multi-tenancy
+Still not implemented
+
+
+In particular, I checked app/globals.css: it is unchanged from the previous archive.
+So the office version is primarily a backend, research-agent and functionality upgrade, not another UI redesign.
+5. Testing and stability
+The new archive contains 18 test files, compared with 15 in the previous version.
+Three additional test files cover:
+
+Custom scoring configuration.
+Research source freshness.
+Resend email integration.
+
+The office version's implementation report records 138 passing tests.
+However, one test file (research-output.test.ts) could not load because papaparse was unavailable in that environment.
+The report also says the full dependency installation, lint and production build were not completed.
+Therefore, I would not yet classify this version as fully validated.
+6. My assessment
+
+  **Office-PC version assessment**
+
+  
+    Research agent
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    Qualification scoring
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    Email infrastructure
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    Documentation
+
+<span class="ce-badge ce-badge-success">Improved</span>
+
+  
+  
+    UI/UX
+
+<span class="ce-badge ce-badge-default">Unchanged</span>
+
+  
+  
+    Multi-tenancy
+
+<span class="ce-badge ce-badge-warning">Outstanding</span>
+
+  
+  
+    Production validation
+
+<span class="ce-badge ce-badge-warning">Incomplete</span>
+
+  
+
+
+My recommendation: Keep the office-PC version as the newer development branch. Don't discard it or overwrite it with the previous version.
+It contains meaningful improvements that we should preserve.
+7. What I suggest we do next
+I'd approach this in three stages:
+
+Merge assessment: Identify which office-PC changes should be incorporated into our main development copy.
+Research-agent correction: Fix the company qualification problem so service providers cannot enter the e-commerce prospect pipeline.
+Regression testing: Validate discovery, scoring, email sending, calendar functionality and the existing workflows.
+
+One thing I particularly want to preserve is the new Resend integration and configurable scoring system.
+They are useful additions, and there's no reason to lose that work.
+I can next prepare a precise, file-by-file merge plan so we can combine the strongest parts of both versions without accidentally overwriting working functionality.
+
+
+You:
+📎 [Attached file: 05_DATABASE_WORK_REQUIRED(1).md — MD, 8 KB]
+📎 [Attached file: 04_ENVIRONMENT_KEYS_AND_ENDPOINTS.md — MD, 5 KB]
+📎 [Attached file: 03_CURRENT_APPLICATION_FUNCTIONS.md — MD, 5 KB]
+📎 [Attached file: 02_NOT_YET_COMPLETED.md — MD, 5 KB]
+📎 [Attached file: 01_WHEN_I_GET_HOME.md — MD, 4 KB]
+📎 [Attached file: 00_READ_ME_FIRST_NEXT_STEPS.md — MD, 988 B]
+Here are some mds, that the AI from my office made:
+
+
+ChatGPT:
+I've reviewed all six Markdown files. These are actually quite useful: your office AI has prepared a return-home handover package for continuing Ledgerwise development.
+The documents aren't just feature descriptions. They establish what is currently implemented, what remains unfinished, what information is needed from your home PC, and which operations must not be performed prematurely.
+1. What each document is for
+
+
+
+File
+Purpose
+Priority
+
+
+
+00_READ_ME_FIRST_NEXT_STEPS.md
+Overall handover and warnings
+Read first
+
+
+01_WHEN_I_GET_HOME.md
+Practical home-PC checklist
+Immediate
+
+
+02_NOT_YET_COMPLETED.md
+Outstanding development work
+High
+
+
+03_CURRENT_APPLICATION_FUNCTIONS.md
+Existing application capabilities
+Reference
+
+
+04_ENVIRONMENT_KEYS_AND_ENDPOINTS.md
+API keys and provider configuration
+Immediate
+
+
+05_DATABASE_WORK_REQUIRED.md
+Database inspection and migration requirements
+Critical
+
+
+2. The most important discovery
+Your office AI has identified a major limitation that we need to address before continuing:
+
+  
+    **Database readiness**
+    Blocked
+  
+  The project ZIP doesn't contain the original Supabase base schema.
+
+  This means we cannot safely design and execute the multi-tenant database migration yet.
+  Specifically, we need to understand:
+
+Existing tables and columns.
+Foreign-key relationships.
+RLS policies.
+Database triggers.
+Constraints.
+Existing RPC functions.
+Applied migration history.
+
+This is important because the application already has calendar operations that depend on transactional database RPCs introduced in migration 04.
+The handover explicitly warns that migrations 04 and 05 are in supabase/unapplied/ and must be reconciled against the actual remote database before execution.
+See 05_DATABASE_WORK_REQUIRED.md. 
+3. What remains to be completed
+I've consolidated the outstanding work into development categories.
+
+
+
+Category
+Remaining work
+
+
+
+Database
+Schema export, migration reconciliation, staging
+
+
+Multi-tenancy
+Organizations, memberships, tenant isolation
+
+
+Authentication
+Organization onboarding and invitations
+
+
+SaaS
+Billing and subscriptions
+
+
+Research agent
+Better evidence diversity, accuracy and reliability
+
+
+Research infrastructure
+Persistent jobs, retries and scheduling
+
+
+Email
+Inbound synchronization, webhooks, transactional outbox
+
+
+Calendar
+Verify RPCs and Google Calendar synchronization
+
+
+Security
+Cross-tenant penetration testing
+
+
+Production
+Monitoring, backups, logging and deployment validation
+
+
+One particularly important distinction: the Resend integration exists, but inbound email synchronization and delivery/bounce webhook processing do not.
+Likewise, Google Calendar synchronization exists in code but has not been fully verified.
+4. What you should do when you get home
+I would follow this exact order.
+
+  
+    **Recover the actual home-PC project**
+
+Open the original Ledgerwise repository and confirm the correct version is present.
+
+  
+  
+    **Recover environment configuration**
+
+Locate `.env.local`. Keep all credentials private.
+
+  
+  
+    **Export the Supabase schema**
+
+Generate `supabase/schema_snapshot.sql` and retrieve the remote migration history.
+
+  
+  
+    **Create a staging database**
+
+Restore a backup or create a separate Supabase staging project.
+
+  
+  
+    **Validate the application**
+
+```bash
+npm ci
+npm test
+npm run lint
+npm run build
+```
+
+  
+  
+    **Reconcile database migrations**
+
+Compare migrations 01–05 against the actual database before executing anything.
+
+  
+  
+    **Begin multi-tenancy implementation**
+
+Only after the schema is understood and the migration strategy is tested.
+
+  
+
+
+5. My recommendation for our development workflow
+I suggest we preserve these six documents as the official handover reference for the office-PC version.
+We should also distinguish three things going forward:
+
+Implemented: Functionality that exists in the code.
+Verified: Functionality that has passed appropriate tests.
+Production-ready: Functionality that has passed real-world integration, security and operational checks.
+
+Having an implementation does not automatically mean a feature is verified.
+
+6. What I want us to do next
+There is one thing I would prioritize before writing more code: reconcile the office-PC version with the November 14 home-PC version.
+We have two development snapshots and now a detailed handover package describing the office version.
+My suggested next step is to establish a single authoritative development baseline, preserving the improvements from both versions.
+Then, when you get home, we can resume from the exact database-inspection stage rather than wasting time rediscovering what the office AI already investigated.
+
+
+You:
+I am at home now, so what do we do now ?
+
+
+ChatGPT:
+Perfect. Now we can move from the office-PC handover to the actual development work.
+I've reviewed the six handover documents and the two Ledgerwise development snapshots. We're going to use your home PC as the main development environment and the office version as a source of improvements.
+Our immediate objective is to recover the real Supabase database information, validate the application, and prepare the next development phase.
+I don't want us to start writing more features before we establish a reliable baseline.
+Phase 1 — Recover and inspect the home-PC environment
+Starting now
+First, open a terminal on your home PC and navigate to your original Ledgerwise project directory.
+Run these commands:
+# Confirm the project directory
+pwd
+
+# Check Git status
+git status --short
+git branch --show-current
+
+# Check project files
+ls -la
+
+# Check Supabase migration files
+find supabase -maxdepth 2 -type f | sort
+
+# Check environment file existence (does not reveal secrets)
+test -f .env.local && echo ".env.local exists" || echo ".env.local missing"
+
+# Check dependency installation
+test -d node_modules && echo "node_modules exists" || echo "node_modules missing"
+
+Send me the complete terminal output.
+Do not run database migrations yet.
+
+
+ChatGPT:
+Perfect. Now we can move from the office-PC handover to the actual development work.
+I've reviewed the six handover documents and the two Ledgerwise development snapshots. We're going to use your home PC as the main development environment and the office version as a source of improvements.
+Our immediate objective is to recover the real Supabase database information, validate the application, and prepare the next development phase.
+I don't want us to start writing more features before we establish a reliable baseline.
+Phase 1 — Recover and inspect the home-PC environment
+Starting now
+First, open a terminal on your home PC and navigate to your original Ledgerwise project directory.
+Run these commands:
+# Confirm the project directory
+pwd
+
+# Check Git status
+git status --short
+git branch --show-current
+
+# Check project files
+ls -la
+
+# Check Supabase migration files
+find supabase -maxdepth 2 -type f | sort
+
+# Check environment file existence (does not reveal secrets)
+test -f .env.local && echo ".env.local exists" || echo ".env.local missing"
+
+# Check dependency installation
+test -d node_modules && echo "node_modules exists" || echo "node_modules missing"
+
+Send me the complete terminal output.
+Do not run database migrations yet.
+Phase 2 — What we'll do after that
+Once I see your output, we'll proceed in this order:
+
+Confirm which codebase is our authoritative baseline.
+Check the installed dependencies and environment configuration.
+Inspect Supabase CLI authentication and project linking.
+Export the actual database schema.
+Retrieve migration history.
+Reconcile migrations 01–05.
+Run the application tests, lint and production build.
+Prepare the next implementation phase.
+
+Important: Never paste .env.local, API keys, database passwords, service-role keys or OAuth tokens here.
+Our immediate target is to obtain these two files:
+
+supabase/schema_snapshot.sql
+supabase/migration_history.txt
+
+After that, we can tackle the database work with actual evidence rather than assumptions.
+Let's start with the terminal output. I'll guide you command by command.
+
+
+ChatGPT:
+Phase 2 — What we'll do after that
+Once I see your output, we'll proceed in this order:
+
+Confirm which codebase is our authoritative baseline.
+Check the installed dependencies and environment configuration.
+Inspect Supabase CLI authentication and project linking.
+Export the actual database schema.
+Retrieve migration history.
+Reconcile migrations 01–05.
+Run the application tests, lint and production build.
+Prepare the next implementation phase.
+
+Important: Never paste .env.local, API keys, database passwords, service-role keys or OAuth tokens here.
+Our immediate target is to obtain these two files:
+
+supabase/schema_snapshot.sql
+supabase/migration_history.txt
+
+After that, we can tackle the database work with actual evidence rather than assumptions.
+Let's start with the terminal output. I'll guide you command by command.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ >....
+git status --short
+git branch --show-current
+Check project files
+ls -la
+Check Supabase migration files
+find supabase -maxdepth 2 -type f | sort
+Check environment file existence (does not reveal secrets)
+test -f .env.local && echo ".env.local exists" || echo ".env.local missing"
+Check dependency installation
+test -d node_modules && echo "node_modules exists" || echo "node_modules missing"
+/home/younes/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype
+main
+total 512
+drwxrwxr-x  14 younes younes   4096 Nov 14 20:40 .
+drwxrwxr-x   3 younes younes   4096 Nov 14 16:59 ..
+-rw-rw-r--   1 younes younes    679 Nov 14 15:23 AGENTS.md
+drwxrwxr-x   2 younes younes   4096 Nov 14 15:23 ai-session-exports
+drwxrwxr-x   6 younes younes   4096 Nov 14 20:43 app
+drwxrwxr-x   6 younes younes   4096 Nov 14 20:43 components
+drwxrwxr-x   2 younes younes   4096 Nov 14 15:23 docs
+-rw-rw-r--   1 younes younes    550 Nov 14 20:40 .env.local
+-rw-rw-r--   1 younes younes    465 Nov 14 15:23 eslint.config.mjs
+drwxrwxr-x   7 younes younes   4096 Nov 15 18:11 .git
+-rw-rw-r--   1 younes younes    517 Nov 14 15:23 .gitignore
+drwxrwxr-x  10 younes younes   4096 Nov 14 15:23 lib
+drwxrwxr-x   9 younes younes   4096 Nov 14 17:44 .next
+-rw-rw-r--   1 younes younes    184 Nov 14 15:23 next.config.ts
+-rw-rw-r--   1 younes younes    296 Nov 14 17:45 next-env.d.ts
+drwxrwxr-x 298 younes younes  12288 Nov 14 17:42 node_modules
+-rw-rw-r--   1 younes younes    831 Nov 14 15:23 package.json
+-rw-rw-r--   1 younes younes 276823 Nov 14 15:23 package-lock.json
+-rw-rw-r--   1 younes younes     94 Nov 14 15:23 postcss.config.mjs
+-rw-rw-r--   1 younes younes   1272 Nov 14 15:23 proxy.ts
+drwxrwxr-x   2 younes younes   4096 Nov 14 15:23 public
+-rw-rw-r--   1 younes younes   1450 Nov 14 15:23 README.md
+drwxrwxr-x   2 younes younes   4096 Nov 14 15:23 scripts
+drwxrwxr-x   5 younes younes   4096 Nov 14 15:23 supabase
+drwxrwxr-x   2 younes younes   4096 Nov 14 15:23 tests
+-rw-rw-r--   1 younes younes    666 Nov 14 15:23 tsconfig.json
+-rw-rw-r--   1 younes younes 131781 Nov 14 20:53 tsconfig.tsbuildinfo
+supabase/migrations/20261114_01_source_verification_and_security.sql
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+supabase/migrations/20261114_03_google_calendar.sql
+supabase/.temp/cli-latest
+supabase/unapplied/20261114_04_transactional_calendar_operations.sql
+supabase/unapplied/20261114_05_calendar_security_corrections.sql
+supabase/unapplied/README.md
+.env.local exists
+node_modules exists
+
+
+ChatGPT:
+Excellent. We're in the correct home-PC project directory.
+I've checked your output, and here's our current situation.
+Phase 1 — Environment inspection
+
+  
+    **Project directory**
+    Confirmed
+  
+  `/home/younes/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype`
+
+  
+  | Check | Result |
+  |---|---|
+  | Git branch | `main` |
+  | `.env.local` | Present |
+  | `node_modules` | Present |
+  | Supabase migrations | 01–03 present |
+  | Migration 04 | Unapplied folder |
+  | Migration 05 | Unapplied folder |
+  | Git working tree | No changes reported |
+
+
+A few important observations:
+
+Your dependencies are already installed, so we don't need to reinstall immediately.
+Your environment file exists. Keep it private.
+Your repository contains three normal migrations and two additional calendar migrations.
+We haven't yet established which migrations actually ran against Supabase.
+
+One thing I want to emphasize: Having migrations 01–03 in the repository does not prove they were executed remotely.
+
+
+ChatGPT:
+Excellent. We're in the correct home-PC project directory.
+I've checked your output, and here's our current situation.
+Phase 1 — Environment inspection
+
+  
+    **Project directory**
+    Confirmed
+  
+  `/home/younes/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype`
+
+  
+  | Check | Result |
+  |---|---|
+  | Git branch | `main` |
+  | `.env.local` | Present |
+  | `node_modules` | Present |
+  | Supabase migrations | 01–03 present |
+  | Migration 04 | Unapplied folder |
+  | Migration 05 | Unapplied folder |
+  | Git working tree | No changes reported |
+
+
+A few important observations:
+
+Your dependencies are already installed, so we don't need to reinstall immediately.
+Your environment file exists. Keep it private.
+Your repository contains three normal migrations and two additional calendar migrations.
+We haven't yet established which migrations actually ran against Supabase.
+
+One thing I want to emphasize: Having migrations 01–03 in the repository does not prove they were executed remotely.
+Phase 2 — Check Supabase connectivity
+Before touching the database, let's establish whether your Supabase CLI is installed, authenticated, and linked to the correct project.
+Run:
+# Check Supabase CLI
+supabase --version
+
+# Check CLI authentication and accessible projects
+supabase projects list
+
+# Check whether this repository has a linked project
+test -f supabase/.temp/project-ref \
+  && echo "Supabase project link exists" \
+  || echo "Supabase project link missing"
+
+If supabase projects list reports that you're not logged in, don't worry; we'll authenticate you.
+Send me the output of these three commands.
+Don't run supabase db push, supabase migration up, or any SQL migrations yet.
+Our next objective is to establish the correct remote project and retrieve its migration history.
+
+
+ChatGPT:
+Phase 2 — Check Supabase connectivity
+Before touching the database, let's establish whether your Supabase CLI is installed, authenticated, and linked to the correct project.
+Run:
+# Check Supabase CLI
+supabase --version
+
+# Check CLI authentication and accessible projects
+supabase projects list
+
+# Check whether this repository has a linked project
+test -f supabase/.temp/project-ref \
+  && echo "Supabase project link exists" \
+  || echo "Supabase project link missing"
+
+If supabase projects list reports that you're not logged in, don't worry; we'll authenticate you.
+Send me the output of these three commands.
+Don't run supabase db push, supabase migration up, or any SQL migrations yet.
+Our next objective is to establish the correct remote project and retrieve its migration history.
+
+
+You:
+I applied migration 04 and 05
+
+
+ChatGPT:
+Ah, excellent. That changes our database status.
+We'll mark migrations 04 and 05 as reportedly applied, but we still need to verify that the remote database agrees.
+
+  **Updated migration status**
+
+
+
+
+Migration
+Status
+
+
+
+01 — Source verification
+Previously present
+
+
+02 — Calendar source and booking
+Previously present
+
+
+03 — Google Calendar
+Previously present
+
+
+04 — Transactional calendar operations
+Applied — reported
+
+
+05 — Calendar security corrections
+Applied — reported
+
+
+  Remote execution history still needs confirmation.
+
+Next step: Verify the database
+Please run:
+supabase --version
+
+Then:
+supabase projects list
+
+And finally:
+supabase migration list
+
+The third command is particularly important.
+It will help us establish whether migrations 01–05 are recorded as applied on the remote Supabase project.
+Don't execute any additional migrations.
+Once you send me the output, we'll move directly to exporting the actual database schema and preparing the tenant/SaaS database architecture.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ supabase --version
+supabase: command not found
+
+
+ChatGPT:
+No problem. It simply means the Supabase CLI is not installed or isn't available in your system's PATH.
+Let's install it first. Since you're using Linux, I recommend installing it through the official installation script.
+Step 1 — Install Supabase CLI
+Run:
+npm install -g supabase
+
+Important: If npm reports that global installation is unsupported, don't use sudo immediately. Send me the error and we'll choose the appropriate installation method.
+Step 2 — Verify installation
+After installation, run:
+supabase --version
+
+Step 3 — Check authentication
+If the CLI works, run:
+supabase projects list
+
+If it asks you to log in, we'll authenticate using:
+supabase login
+
+Don't run any database migrations or push commands yet. We are only checking access and verifying the database state.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm install -g supabase
+npm error code EACCES
+npm error syscall mkdir
+npm error path /usr/local/lib/node_modules
+npm error errno -13
+npm error Error: EACCES: permission denied, mkdir '/usr/local/lib/node_modules'
+npm error     at async mkdir (node:internal/fs/promises:858:10)
+npm error     at async /usr/share/nodejs/@npmcli/arborist/lib/arborist/reify.js:585:20
+npm error     at async Promise.allSettled (index 0)
+npm error     at async #reifyPackages (/usr/share/nodejs/@npmcli/arborist/lib/arborist/reify.js:317:11)
+npm error     at async Arborist.reify (/usr/share/nodejs/@npmcli/arborist/lib/arborist/reify.js:127:5)
+npm error     at async Install.exec (/usr/share/nodejs/npm/lib/commands/install.js:146:5)
+npm error     at async Npm.exec (/usr/share/nodejs/npm/lib/npm.js:193:9)
+npm error     at async module.exports (/usr/share/nodejs/npm/lib/cli/entry.js:67:5) {
+npm error   errno: -13,
+npm error   code: 'EACCES',
+npm error   syscall: 'mkdir',
+npm error   path: '/usr/local/lib/node_modules'
+npm error }
+npm error
+npm error The operation was rejected by your operating system.
+npm error It is likely you do not have the permissions to access this file as the current user
+npm error
+npm error If you believe this might be a permissions issue, please double-check the permissions of the file and its containing directories, or try running the command again as root/Administrator.
+npm error A complete log of this run can be found in: /home/younes/.npm/_logs/2026-11-15T17_12_59_524Z-debug-0.log
+
+
+ChatGPT:
+That's a Linux permissions issue, not a Supabase problem.
+Let's avoid changing system-wide permissions or using sudo npm install.
+Step 1 — Install Supabase CLI locally in the project
+Run:
+npm install --save-dev supabase
+
+This installs the CLI inside your Ledgerwise project rather than /usr/local.
+Step 2 — Verify it
+Run:
+npx supabase --version
+
+You should get a version number.
+Step 3 — Check your Supabase projects
+Run:
+npx supabase projects list
+
+If you're not authenticated, it will tell us. We'll handle that next.
+One important detail: Installing Supabase as a development dependency modifies package.json and potentially package-lock.json. That's fine, but we'll review those changes afterward.
+For now, send me the output of Step 2 and Step 3. Don't run any migration or database push commands.
+
+
+You:
+There is no access token for Supabase access token though
+
+
+ChatGPT:
+That's fine. You don't need to have a Supabase access token already.
+You can generate one through the Supabase dashboard.
+Step 1 — Generate an access token
+
+Open the Supabase Dashboard.
+Sign in to your account.
+Click your profile/avatar.
+Open Account Preferences.
+Navigate to Access Tokens.
+Click Generate New Token.
+Give it a name, for example Ledgerwise CLI.
+Generate and copy the token.
+
+
+🖼️
+Generated image
+Supabase dashboard account preferences access tokens generate new token interface
+
+Step 2 — Authenticate through your terminal
+Run:
+npx supabase login
+
+When prompted, paste your access token.
+Security: Never paste the token here or commit it to Git. Treat it like a password.
+Step 3 — Verify access
+Run:
+npx supabase projects list
+
+Send me the output, but redact project references if you prefer.
+We'll then identify the correct Ledgerwise project and verify migrations 01–05 before touching the database further.
+
+
+You:
+I mean I checked the .env.local and found out that the API keys are matched ?
+
+
+ChatGPT:
+Ah, I see what you mean now. You're saying the Supabase API keys in your .env.local already match the project you are working with.
+That's good, but there are two different types of credentials involved:
+
+
+
+Credential
+Purpose
+
+
+
+NEXT_PUBLIC_SUPABASE_URL
+Identifies your Supabase project
+
+
+NEXT_PUBLIC_SUPABASE_ANON_KEY
+Allows the application to connect to Supabase using its configured permissions
+
+
+Supabase Access Token
+Authenticates the Supabase CLI to manage and inspect your projects
+
+
+The API keys in .env.local do not replace the CLI access token.
+What we should do next
+You don't need to change .env.local.
+
+Install the CLI locally if you haven't already:npm install --save-dev supabase
+
+
+Authenticate the CLI:npx supabase login
+
+
+List your projects:npx supabase projects list
+
+
+
+You can generate the CLI token from Supabase Access Tokens.
+One important distinction: even if the API keys match, we still need to verify that migrations 01–05 were applied to the correct remote database.
+Don't share your API keys or access token here.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npx supabase projects list
+│
+Cannot find project ref. Have you run supabase link?
+
+
+
+LINKED
+ORG ID
+REFERENCE ID
+NAME
+REGION
+CREATED AT (UTC)
+
+
+
+      | mrbzcuwyreoucyokavdt | pojlqkostcqrojwppljv | ledgerwise-prototype | West EU (Paris) | 2026-11-12 18:42:47
+
+
+
+ChatGPT:
+Great! We're authenticated successfully, and Supabase can see your project.
+
+  
+    **Supabase project**
+    Found
+  
+  - **Name:** `ledgerwise-prototype`
+  - **Project reference:** `pojlqkostcqrojwppljv`
+  - **Region:** West EU (Paris)
+  - **Organization ID:** `mrbzcuwyreoucyokavdt`
+
+
+The message Cannot find project ref. Have you run supabase link? means your local repository isn't linked to this remote project yet. It does not mean authentication failed.
+Step 1 — Link Ledgerwise to Supabase
+Run:
+npx supabase link --project-ref pojlqkostcqrojwppljv
+
+It may ask for your database password.
+This is the password for your Supabase database, not your API key or CLI access token.
+Step 2 — Verify migration history
+Once linking succeeds, run:
+npx supabase migration list
+
+This is read-only. It will show local and remote migration histories.
+Send me the complete output.
+We'll specifically check whether migrations 20261114_01 through 20261114_05 are registered remotely.
+Don't run db push, migration up, or any other migration command yet. We want to verify the database before proceeding.

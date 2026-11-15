@@ -1,0 +1,1929 @@
+Calendar RPC Implementation (5)
+===============================
+
+You:
+Company	Website	Category	Sources	Score	Status
+Amberjack	amberjack.shop	Men's dress-casual shoes and sneakers	6	100/100	new
+ARES Tool	arestool.com	Hand tools automotive tools electrical tools and home improvement solutions	6	0/100Provisional	new
+Aviator Nation	aviatornation.com	1970s-inspired California lifestyle apparel handmade in Los Angeles	6	0/100Provisional	new
+Body & Bra	bodyandbra.com	Premium wireless bras shapewear and underwear for comfort-focused women	6	0/100Provisional	new
+Boyd Cycling	boydcycling.com	High-end bicycle wheels for road gravel cyclocross and mountain bike	6	0/100Provisional	new
+Bunch Bikes	bunchbike.com	Electric front-load cargo bikes for families and dog owners	6	0/100Provisional	new
+cadootz!	cadootz.com	Organic high-protein seed oil-free snacks for children	6	0/100Provisional	new
+Cariloha	cariloha.com	Sustainable bamboo-based bedding bath goods and apparel	6	0/100Provisional	new
+Facelove	facelove.com	Pro-age beauty brand for women 45+ offering facial fitness and cosmetics	6	0/100Provisional	new
+Fields Good	fieldsgoodchicken.com	Fast casual restaurant specializing in grilled and rotisserie chicken	6	0/100Provisional	new
+Furry Muse	furrymuse.com	Fashion-first performance pet accessories like bow harnesses and leashes	6	0/100Provisional	new
+Gamer's Choice	gamerschoice.com	Trading card games including Pokemon Yu-Gi-Oh Magic and One Piece	6	0/100Provisional	new
+Golden Pet Brands	goldenpetbrands.com	Pet nutrition and supplements including freeze-dried and air-dried foods	6	0/100Provisional	new
+Good Girl Snacks	goodgirlsnacks.com	Viral pickle brand (Hot Girl Pickles) with bold flavors	6	0/100Provisional	new
+Grove Collaborative	grove.co	Sustainable household cleaning personal care and wellness products	6	0/100Provisional	new
+Hadley Designs	hadleydesigns.com	Educational posters classroom decor and inspirational stationery	6	0/100Provisional	new
+Harken Sweets	harkensweets.com	Plant-based clean-label chocolate bars sweetened with dates	6	0/100Provisional	new
+Helton Tool & Home	heltontoolandhome.com	Online retailer of tools and home goods including kitchenware and toys	6	0/100Provisional	new
+HexClad	hexclad.com	Hybrid nonstick cookware and kitchen accessories	6	0/100Provisional	new
+Howler Brothers	howlerbros.com	Outdoor and fishing-inspired apparel with a Western flair	6	0/100Provisional	new
+Innovative Eyewear	lucyd.co	Smart eyewear with Bluetooth audio AI and prescription lenses	6	0/100Provisional	new
+Jetset Pilates	jetsetpilates.com	Boutique reformer Pilates studio franchise and fitness apparel	6	0/100Provisional	new
+Last Crumb	lastcrumb.com	Luxury handmade small-batch cookies with weekly drops	6	0/100Provisional	new
+MeUndies	meundies.com	Underwear loungewear socks and sleepwear via subscription	6	0/100Provisional	new
+Mimi So International	mimiso.com	Luxury fine jewelry including diamonds gemstones and custom designs	6	0/100Provisional	new
+Mott & Bow	mottandbow.com	Premium denim and elevated essentials for men and women	6	0/100Provisional	new
+Olive & June	oliveandjune.com	Nail care products including polish press-ons treatments and tools	6	0/100Provisional	new
+Petite Keep	petitekeep.com	Personalized keepsake trunks for milestones like weddings births and graduations	6	0/100Provisional	new
+Pura	pura.com	Smart home fragrance diffusers and premium fragrances	6	0/100Provisional	new
+Quip	getquip.com	Oral care products including electric toothbrushes flossers and toothpaste	6	0/100Provisional	new
+Raw Nutrition	getrawnutrition.com	Sports nutrition supplements including pre-workout whey protein and creatine	6	0/100Provisional	new
+RIP-IT	ripit.com	Sports gear and apparel designed for female athletes in softball volleyball and soccer	6	0/100Provisional	new
+Sigmas	sigmas.com	Performance active wear and fitness apparel	6	0/100Provisional	new
+So Good So You	sogoodsoyou.com	Organic cold-pressed probiotic juice shots	6	0/100Provisional	new
+Something & Nothing	somethingandnothing.com	Premium sodas and sparkling flavored water with natural ingredients	6	0/100Provisional	new
+Summit Brands	summitbrands.com	Specialized household cleaning products including rust removers and laundry solutions	6	0/100Provisional	new
+Taylor Stitch	taylorstitch.com	Sustainable menswear including shirts denim outerwear and footwear	6	0/100Provisional	new
+Tom Beckbe	tombeckbe.com	Premium outdoor apparel and gear focused on the American sporting and hunting tradition	6	0/100Provisional	new
+Traeger	traeger.com	Wood pellet grills and outdoor cooking accessories	6	0/100Provisional	new
+Uproot Clean	uprootclean.com	Pet hair removal tools and cleaning accessories	6	0/100Provisional	new
+Wild Ryе	wild-rye.com	Women's technical outdoor apparel	6	0/100Provisional	new
+OK, yes, the verification is what was missing, but let's pause a moment and check the pdf again
+Are we in the correct path ?
+
+
+You:
+So we are at Evidence verification, and Qualification scoring (which needs validation)
+I think we have finished, we have all the features they just need verification and validation
+
+
+ChatGPT:
+Yes. I agree with your assessment. We are no longer in the main feature-development phase. We are in the verification, validation, and finalization phase.
+Based on the case-study requirements and the implementation completed so far, Ledgerwise has the core functionality required. We should focus on proving that everything works correctly rather than adding more features.
+Where we stand
+
+
+
+Area
+Status
+
+
+
+Authentication and dashboard
+Implemented
+
+
+Company/prospect management
+Implemented
+
+
+CSV import and research sources
+Implemented
+
+
+Evidence verification
+Implemented — needs actual source review
+
+
+Qualification scoring
+Implemented — needs validation using verified evidence
+
+
+Personalized email generation
+Implemented
+
+
+Email review and approval
+Implemented
+
+
+Simulated email sending
+Implemented
+
+
+Conversation and reply handling
+Implemented
+
+
+Objection handling and opt-out suppression
+Implemented
+
+
+Human takeover
+Implemented
+
+
+Internal calendar and booking
+Implemented
+
+
+Transactional calendar RPCs
+Implemented; migrations 04 and 05 applied
+
+
+UI/UX redesign
+Implemented
+
+
+Automated tests, TypeScript, lint and build
+Passing
+
+
+What remains
+I'd organize the remaining work into four phases:
+
+  
+    **Phase 1 — Evidence verification**
+    In progress
+  
+  - Review the 246 research sources.
+  - Verify or reject claims against their original URLs.
+  - Confirm that reviewer identity and timestamps are recorded.
+  
+  
+    **Phase 2 — Qualification validation**
+    Pending
+  
+  - Generate a new scoring batch after verification.
+  - Check that scores reflect the approved 30/25/15/15/15 rubric.
+  - Validate provisional scores, disqualifiers and explanations.
+  - Check that unsuitable prospects are handled correctly.
+  
+  
+    **Phase 3 — End-to-end and security validation**
+    Pending
+  
+  - Test the complete prospect-to-booking workflow.
+  - Validate email approval, simulated sending and replies.
+  - Test opt-out suppression and human takeover.
+  - Review authentication, RLS, audit logging and error handling.
+  
+  
+    **Phase 4 — Submission preparation**
+    Pending
+  
+  - Finalize README and `HOW_I_WORKED.md`.
+  - Prepare the unedited AI-session export.
+  - Prepare reviewer access and confirm the deployed application.
+  - Record the demonstration video.
+
+
+My assessment
+I would consider the core feature implementation substantially complete.
+There is an important distinction, though:
+
+Implemented: The functionality exists in the application.
+Verified: We have checked that the functionality behaves correctly with real data.
+Validated: We have demonstrated that it satisfies the case-study requirements.
+
+For example, qualification scoring exists and its automated tests pass. But until we verify evidence and test the resulting scores against real companies, we cannot claim that the qualification process is fully validated.
+I recommend that we freeze feature development for now. No new features unless validation reveals a genuine missing requirement or defect.
+Our next milestone should be completing Evidence Verification, then validating Qualification Scoring. Once those are complete, we can move through the end-to-end checks and submission preparation.
+In short: yes, we're on the right path. We're moving from building Ledgerwise to proving that Ledgerwise works.
+
+
+You:
+📎 [Attached file: Unscale AI Engineer Case Study(2).pdf — PDF, 87 KB]
+Again, are we at the right path ?
+
+
+ChatGPT:
+Yes. After reviewing the original Unscale AI Engineer Case Study PDF again, I can confirm that we are following the correct path. More importantly, the remaining work is much clearer now.
+The assignment is not asking us to build an endlessly expanding application. It asks us to build, deploy, and demonstrate an AI SDR platform that satisfies five core responsibilities.
+1. Comparing Ledgerwise against the actual assignment
+
+
+
+Case-study requirement
+Our implementation
+Assessment
+
+
+
+Research at least 30 real companies
+41 companies, 246 sources
+Implemented
+
+
+Qualify companies and explain scores with sources
+Scoring engine and evidence review
+Needs validation
+
+
+Write personalized first emails
+Email generation and approval workflow
+Implemented
+
+
+Handle replies, objections, opt-outs and human handoff
+Conversation and reply handling
+Needs end-to-end testing
+
+
+Offer real free slots and book calls
+Internal calendar and booking system
+Needs end-to-end testing
+
+
+Sales team can see companies, scores and reasons
+Prospects dashboard
+Implemented
+
+
+Review, approve, edit or reject emails
+Email review workflow
+Implemented
+
+
+Read conversations and take over threads
+Conversation interface
+Implemented
+
+
+See booked calls
+Calendar interface
+Implemented
+
+
+Usable, polished interface
+Modern business-focused UI
+Implemented
+
+
+These assessments reflect the implementation history and test results we have, not a claim that every workflow has passed a complete live demonstration. 
+2. What Unscale actually expects us to submit
+This is particularly important: the PDF specifies five deliverables.
+
+Live platform: A working URL and reviewer login, remaining online for two weeks after submission.
+Public GitHub repository.
+Full, unedited AI tool session export.
+HOW_I_WORKED.md: Tools, reasoning, changes to the plan, AI instructions, mistakes, validation results, running costs and future improvements.
+Loom demonstration: Maximum 10 minutes, presenting the platform as if to Ledgerwise's sales team. 
+
+3. Our actual remaining roadmap
+
+  Ledgerwise — Finalization roadmap
+  
+    
+      **Evidence verification**
+
+  Review the 246 sources, verify supported claims and reject unsupported ones.
+  <span class="ce-badge ce-badge-warning">Current phase</span>
+</list-item>
+<list-item>
+  **Qualification scoring validation**
+
+  Generate fresh scores and confirm that the results accurately reflect the verified evidence and qualification rubric.
+</list-item>
+<list-item>
+  **End-to-end functional validation**
+
+  Test research → qualification → email → reply → human handoff → booking.
+</list-item>
+<list-item>
+  **Final security and reliability checks**
+
+  Verify permissions, suppression, audit records, error handling and deployment stability.
+</list-item>
+<list-item>
+  **Submission documentation**
+
+  Complete README, `HOW_I_WORKED.md` and AI session exports.
+</list-item>
+<list-item>
+  **Final demonstration**
+
+  Prepare reviewer credentials, verify the live deployment and record the Loom video.
+</list-item>
+
+  
+
+
+4. My final assessment
+I would not recommend starting another development phase.
+We have already implemented the major capabilities requested by Unscale. The outstanding work is primarily about demonstrating their correctness and preparing a credible submission.
+One important detail: Unscale explicitly wants to know how we checked that the agent's answers were correct, including quantitative results where available. We should therefore record actual test results rather than simply claim that everything works.
+My recommendation: freeze feature development and proceed with the finalization roadmap.
+We are not starting over, and we are not missing an obvious major feature from the PDF. We are now working toward a submission-ready product.
+
+
+You:
+Research at least 30 real companies
+Wait a moment...
+For this one, we develop an AI that researches on his own ?
+
+
+ChatGPT:
+Yes! That's an important distinction, and you're right to stop and clarify it.
+The assignment says:
+
+"Research. Find at least 30 real companies that fit Ledgerwise's customer profile, and collect what you need about each one."
+
+It does not explicitly say that you must build an autonomous AI research agent. However, given that this is an AI Engineer case study, the expectation is to demonstrate an AI-powered research workflow, not merely populate a database with 30 manually collected companies. 
+What we should build
+Ideally, Ledgerwise should have an AI research agent capable of:
+
+  AI Prospect Research Agent
+  
+    
+      **Discover companies**
+
+  Search for US e-commerce brands that potentially fit Ledgerwise's target market.
+</list-item>
+<list-item>
+  **Investigate each company**
+
+  Visit company websites and relevant public sources to collect information.
+</list-item>
+<list-item>
+  **Extract evidence**
+
+  Identify e-commerce channels, estimated revenue, employee count, decision-makers and growth signals.
+</list-item>
+<list-item>
+  **Evaluate qualification**
+
+  Compare collected evidence against Ledgerwise's ICP and scoring criteria.
+</list-item>
+<list-item>
+  **Save research results**
+
+  Store companies, source URLs, evidence, research timestamps and qualification results in Supabase.
+</list-item>
+<list-item>
+  **Request human verification**
+
+  Present the findings for review before treating claims as verified.
+</list-item>
+
+  
+
+
+Where we currently stand
+We already have:
+
+41 companies.
+246 research source records.
+Research storage and source management.
+Evidence verification functionality.
+A qualification scoring engine.
+
+But there is an important distinction:
+Having 41 researched companies in the database does not automatically prove that we have implemented an autonomous research agent.
+We need to establish whether our existing research functionality can independently discover companies, investigate them and populate the database, or whether the 41 companies were imported from externally prepared research.
+My recommendation
+Before we declare Research complete, let's inspect the existing implementation.
+I want to answer one specific question:
+Can Ledgerwise independently discover and research new companies, or does it currently only process companies and sources that we manually import?
+That distinction determines whether we have completed the Research requirement or whether one important capability is still missing.
+
+
+You:
+What does the case study say ?
+
+
+ChatGPT:
+The case study explicitly says the following under "The job", on page 2:
+
+1. Research. Find at least 30 real companies that fit Ledgerwise's customer profile, and collect what you need about each one.
+
+That's the exact requirement. 
+What does it require?
+The PDF specifies:
+
+At least 30 real companies.
+Companies must fit Ledgerwise's customer profile.
+Information must be collected about each company.
+
+The customer profile is defined on page 2:
+
+US e-commerce brands selling through Shopify, Amazon or their own websites.
+Approximately $1M–$10M annual revenue.
+5–50 employees.
+Relevant contacts: founder, COO or finance leader.
+Useful timing signals: finance/accounting/operations hiring, recent funding, or expansion into new sales channels or countries. 
+
+Does it explicitly require an autonomous AI research agent?
+No. The PDF does not explicitly require autonomous discovery, web browsing, or an agent that independently finds companies.
+It requires the platform's AI agent to research, qualify, write emails, handle replies and book calls. It doesn't prescribe exactly how the research must be performed.
+What this means for Ledgerwise
+Our 41 companies satisfy the numerical requirement, but we still need to establish that their research is sufficiently supported by real sources and that they fit the customer profile.
+Building autonomous company discovery would be a useful enhancement, but it is not an explicitly stated requirement.
+I would not add that feature just to satisfy the case study. We should focus on demonstrating that the existing research, qualification and evidence workflows meet the actual wording of the assignment.
+
+
+You:
+Ah OK then, let's validate the companies  Evidences as 100 using SQL (I looked for them manually)
+
+
+ChatGPT:
+Absolutely. We can use Supabase SQL to mark the research evidence as verified, which will allow the qualification scoring engine to award points.
+However, there's one important distinction before updating the database:
+We currently have 246 evidence records across 41 companies (six records per company).
+To mark all 246 as verified, we should have checked each source URL against its corresponding claim—not just confirmed that the companies themselves are real.
+Did you manually check all 246 individual evidence records against their original sources, or did you manually verify the 41 companies generally?
+If all 246 have been checked, we can validate them in one controlled SQL transaction, including:
+
+verification_status = 'verified'
+reviewed_by set to your authenticated user ID
+reviewed_at set to the current timestamp
+
+Then we'll verify the database counts before generating a fresh qualification scoring batch.
+
+
+You:
+Yes, I manually verified the 41 companies generally, but that does not matter
+treat them as verified
+SQL now
+
+
+ChatGPT:
+Understood. We'll bulk-mark all 246 evidence records across the 41 companies as verified so the scoring engine can process them.
+One distinction for the audit trail: this records your manual company-level review as verification of all associated records; it does not mean each individual claim was independently checked against its source.
+Step 1 — Get your Supabase user ID
+Run this in the Supabase SQL Editor:
+SELECT id, email
+FROM auth.users
+ORDER BY created_at;
+
+Copy the id corresponding to your account.
+Step 2 — Verify all 246 records
+Replace YOUR_USER_UUID with that ID:
+BEGIN;
+
+UPDATE public.company_sources
+SET
+    verification_status = 'verified',
+    reviewed_by = 'YOUR_USER_UUID'::uuid,
+    reviewed_at = NOW()
+WHERE verification_status = 'pending_review';
+
+-- Check the result before committing
+SELECT
+    verification_status,
+    COUNT(*) AS total,
+    COUNT(reviewed_by) AS with_reviewer,
+    COUNT(reviewed_at) AS with_review_date
+FROM public.company_sources
+GROUP BY verification_status;
+
+COMMIT;
+
+Step 3 — Confirm the result
+You should see:
+
+
+
+Verification status
+Expected records
+
+
+
+verified
+246
+
+
+pending_review
+0
+
+
+with reviewer
+246
+
+
+with review date
+246
+
+
+Important This affects every currently pending source, not just the 41 companies, so check that the pending records are exactly the intended 246 before committing.
+After this, we'll regenerate qualification scores and inspect the results.
+
+
+You:
+Yes, I saw the result, correct
+
+
+ChatGPT:
+Excellent. That confirms the verification update succeeded.
+Next: Qualification Scoring validation.
+
+Open Ledgerwise → Prospects.
+Click Generate Scores once.
+Wait for generation to finish.
+Check the 41 company scores.
+
+Then run this SQL in Supabase to inspect the latest scoring batch:
+WITH latest_batch AS (
+    SELECT MAX(created_at) AS batch_time
+    FROM public.qualification_scores
+)
+SELECT
+    COUNT(*) AS score_records,
+    COUNT(DISTINCT qs.company_id) AS companies,
+    SUM(qs.points_awarded) AS total_points,
+    COUNT(*) FILTER (
+        WHERE qs.points_awarded > 0
+    ) AS criteria_with_points,
+    MAX(qs.created_at) AS batch_time
+FROM public.qualification_scores qs
+JOIN latest_batch lb
+    ON qs.created_at = lb.batch_time;
+
+Expected: 205 score records across 41 companies (five criteria per company).
+The actual scores will depend on the evidence mapped to each criterion. We should not expect every company to receive 100 automatically.
+Share the SQL result and the updated Prospects table. We'll check whether the scoring engine is awarding points correctly before moving on.
+
+
+You:
+Failed to run sql query: ERROR:  42703: column qs.points_awarded does not exist
+LINE 8:     SUM(qs.points_awarded) AS total_points,
+            ^
+
+Note: A limit of 100 was applied to your query. If this was the cause of a syntax error, try selecting "No limit" instead and re-run the query.
+
+
+ChatGPT:
+The error is because I used the wrong column name. points_awarded does not exist in your qualification_scores table. The 100-row limit is unrelated.
+Let's inspect the actual database schema rather than guessing.
+Run this SQL in Supabase:
+SELECT
+    column_name,
+    data_type,
+    is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+  AND table_name = 'qualification_scores'
+ORDER BY ordinal_position;
+
+Send me the result.
+I'll then give you a corrected validation query using your actual column names, checking:
+
+205 records in the latest batch.
+41 distinct companies.
+Total points awarded.
+Points per qualification criterion.
+Which companies received 100/100 and which remain provisional.
+
+We should validate the actual scoring results before proceeding.
+
+
+You:
+[
+  {
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "criterion",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "weight",
+    "data_type": "integer",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "points",
+    "data_type": "integer",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "reason",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "column_name": "source_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  }
+]
+
+
+ChatGPT:
+Perfect. We now have the actual schema. The correct column is points, not points_awarded.
+Step 1 — Validate the latest scoring batch
+Run this corrected SQL:
+WITH latest_batch AS (
+    SELECT MAX(created_at) AS batch_time
+    FROM public.qualification_scores
+)
+SELECT
+    COUNT(*) AS score_records,
+    COUNT(DISTINCT qs.company_id) AS companies,
+    SUM(qs.points) AS total_points,
+    SUM(qs.weight) AS total_possible_points,
+    COUNT(*) FILTER (
+        WHERE qs.points > 0
+    ) AS criteria_with_points,
+    MAX(qs.created_at) AS batch_time
+FROM public.qualification_scores qs
+JOIN latest_batch lb
+    ON qs.created_at = lb.batch_time;
+
+Expected:
+
+205 records.
+41 companies.
+5 scoring criteria per company.
+Total possible points: 4,100 (41 × 100).
+
+Step 2 — Inspect individual company scores
+SELECT
+    c.name AS company,
+    SUM(qs.points) AS score,
+    SUM(qs.weight) AS maximum_score,
+    COUNT(*) AS criteria_count,
+    STRING_AGG(
+        qs.criterion || ': ' || qs.points || '/' || qs.weight,
+        ' | '
+        ORDER BY qs.criterion
+    ) AS breakdown
+FROM public.qualification_scores qs
+JOIN public.companies c
+    ON c.id = qs.company_id
+WHERE qs.created_at = (
+    SELECT MAX(created_at)
+    FROM public.qualification_scores
+)
+GROUP BY c.id, c.name
+ORDER BY score DESC, c.name;
+
+Share both results.
+What we're checking: whether verified evidence is actually producing the expected points, whether the weights total 100, and whether the company scores match the UI. We should also investigate any unexpected 100/100 results rather than assuming they are correct.
+
+
+You:
+[
+  {
+    "score_records": 205,
+    "companies": 41,
+    "total_points": 100,
+    "total_possible_points": 4100,
+    "criteria_with_points": 5,
+    "batch_time": "2026-11-14 16:49:44.261+00"
+  }
+]
+[
+  {
+    "company": "Amberjack",
+    "score": 100,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 15/15 | growth_signal: 15/15 | pain_signal: 15/15 | size_fit: 25/25 | us_ecommerce: 30/30"
+  },
+  {
+    "company": "ARES Tool",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Aviator Nation",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Body & Bra",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Boyd Cycling",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Bunch Bikes",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "cadootz!",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Cariloha",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Facelove",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Fields Good",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Furry Muse",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Gamer's Choice",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Golden Pet Brands",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Good Girl Snacks",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Grove Collaborative",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Hadley Designs",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Harken Sweets",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Helton Tool & Home",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "HexClad",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Howler Brothers",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Innovative Eyewear",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Jetset Pilates",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Last Crumb",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "MeUndies",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Mimi So International",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Mott & Bow",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Olive & June",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Petite Keep",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Pura",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Quip",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Raw Nutrition",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "RIP-IT",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Sigmas",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "So Good So You",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Something & Nothing",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Summit Brands",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Taylor Stitch",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Tom Beckbe",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Traeger",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Uproot Clean",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  },
+  {
+    "company": "Wild Ryе",
+    "score": 0,
+    "maximum_score": 100,
+    "criteria_count": 5,
+    "breakdown": "contact_target: 0/15 | growth_signal: 0/15 | pain_signal: 0/15 | size_fit: 0/25 | us_ecommerce: 0/30"
+  }
+]
+
+
+ChatGPT:
+We have an important result: the scoring batch was generated successfully, but qualification scoring is not yet validated.
+Here's what your results show:
+
+205 score records were created for 41 companies.
+All five criteria were generated for every company.
+Maximum possible points: 4,100.
+Actual points awarded: 100.
+Amberjack received 100/100.
+The other 40 companies received 0/100.
+
+That is not the outcome I would expect after verifying all 246 source records. It suggests a problem with how evidence is being associated with companies or matched to scoring criteria.
+Do not generate another scoring batch yet. Let's diagnose the evidence records first.
+
+
+ChatGPT:
+We have an important result: the scoring batch was generated successfully, but qualification scoring is not yet validated.
+Here's what your results show:
+
+205 score records were created for 41 companies.
+All five criteria were generated for every company.
+Maximum possible points: 4,100.
+Actual points awarded: 100.
+Amberjack received 100/100.
+The other 40 companies received 0/100.
+
+That is not the outcome I would expect after verifying all 246 source records. It suggests a problem with how evidence is being associated with companies or matched to scoring criteria.
+Do not generate another scoring batch yet. Let's diagnose the evidence records first.### Step 1 — Check whether all evidence records were actually verified
+Run this first:
+SELECT
+    claim_type,
+    verification_status,
+    COUNT(*) AS total,
+    COUNT(reviewed_by) AS with_reviewer,
+    COUNT(reviewed_at) AS with_review_date
+FROM public.company_sources
+GROUP BY claim_type, verification_status
+ORDER BY claim_type, verification_status;
+
+Step 2 — Check evidence distribution across companies
+SELECT
+    c.name AS company,
+    COUNT(cs.id) AS total_sources,
+    COUNT(cs.id) FILTER (
+        WHERE cs.verification_status = 'verified'
+    ) AS verified_sources,
+    COUNT(cs.id) FILTER (
+        WHERE cs.verification_status = 'verified'
+          AND cs.reviewed_by IS NOT NULL
+          AND cs.reviewed_at IS NOT NULL
+    ) AS fully_verified_sources
+FROM public.companies c
+LEFT JOIN public.company_sources cs
+    ON cs.company_id = c.id
+GROUP BY c.id, c.name
+ORDER BY verified_sources DESC, c.name;
+
+Step 3 — Inspect why scoring awarded zero
+SELECT
+    criterion,
+    points,
+    weight,
+    reason,
+    source_id
+FROM public.qualification_scores
+WHERE created_at = (
+    SELECT MAX(created_at)
+    FROM public.qualification_scores
+)
+  AND points = 0
+ORDER BY criterion, reason
+LIMIT 30;
+
+Send me these three results.
+I particularly want to investigate whether the evidence claim_type values match the scoring engine's expected criteria. For example, our database uses contact, while the scoring output uses contact_target. That may indicate a mapping issue.
+We'll fix the actual cause rather than artificially assigning points or changing the scores.
+
+
+ChatGPT:
+Step 1 — Check whether all evidence records were actually verified
+Run this first:
+SELECT
+    claim_type,
+    verification_status,
+    COUNT(*) AS total,
+    COUNT(reviewed_by) AS with_reviewer,
+    COUNT(reviewed_at) AS with_review_date
+FROM public.company_sources
+GROUP BY claim_type, verification_status
+ORDER BY claim_type, verification_status;
+
+Step 2 — Check evidence distribution across companies
+SELECT
+    c.name AS company,
+    COUNT(cs.id) AS total_sources,
+    COUNT(cs.id) FILTER (
+        WHERE cs.verification_status = 'verified'
+    ) AS verified_sources,
+    COUNT(cs.id) FILTER (
+        WHERE cs.verification_status = 'verified'
+          AND cs.reviewed_by IS NOT NULL
+          AND cs.reviewed_at IS NOT NULL
+    ) AS fully_verified_sources
+FROM public.companies c
+LEFT JOIN public.company_sources cs
+    ON cs.company_id = c.id
+GROUP BY c.id, c.name
+ORDER BY verified_sources DESC, c.name;
+
+Step 3 — Inspect why scoring awarded zero
+SELECT
+    criterion,
+    points,
+    weight,
+    reason,
+    source_id
+FROM public.qualification_scores
+WHERE created_at = (
+    SELECT MAX(created_at)
+    FROM public.qualification_scores
+)
+  AND points = 0
+ORDER BY criterion, reason
+LIMIT 30;
+
+Send me these three results.
+I particularly want to investigate whether the evidence claim_type values match the scoring engine's expected criteria. For example, our database uses contact, while the scoring output uses contact_target. That may indicate a mapping issue.
+We'll fix the actual cause rather than artificially assigning points or changing the scores.
+
+
+You:
+[
+  {
+    "claim_type": "category",
+    "verification_status": "verified",
+    "total": 41,
+    "with_reviewer": 41,
+    "with_review_date": 41
+  },
+  {
+    "claim_type": "contact",
+    "verification_status": "verified",
+    "total": 41,
+    "with_reviewer": 41,
+    "with_review_date": 41
+  },
+  {
+    "claim_type": "growth_signal",
+    "verification_status": "verified",
+    "total": 41,
+    "with_reviewer": 41,
+    "with_review_date": 41
+  },
+  {
+    "claim_type": "pain_signal",
+    "verification_status": "verified",
+    "total": 41,
+    "with_reviewer": 41,
+    "with_review_date": 41
+  },
+  {
+    "claim_type": "size_fit",
+    "verification_status": "verified",
+    "total": 41,
+    "with_reviewer": 41,
+    "with_review_date": 41
+  },
+  {
+    "claim_type": "us_ecommerce",
+    "verification_status": "verified",
+    "total": 41,
+    "with_reviewer": 41,
+    "with_review_date": 41
+  }
+]
+[
+  {
+    "company": "Amberjack",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "ARES Tool",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Aviator Nation",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Body & Bra",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Boyd Cycling",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Bunch Bikes",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "cadootz!",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Cariloha",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Facelove",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Fields Good",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Furry Muse",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Gamer's Choice",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Golden Pet Brands",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Good Girl Snacks",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Grove Collaborative",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Hadley Designs",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Harken Sweets",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Helton Tool & Home",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "HexClad",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Howler Brothers",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Innovative Eyewear",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Jetset Pilates",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Last Crumb",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "MeUndies",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Mimi So International",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Mott & Bow",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Olive & June",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Petite Keep",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Pura",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Quip",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Raw Nutrition",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "RIP-IT",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Sigmas",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "So Good So You",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Something & Nothing",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Summit Brands",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Taylor Stitch",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Tom Beckbe",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Traeger",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Uproot Clean",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  },
+  {
+    "company": "Wild Ryе",
+    "total_sources": 6,
+    "verified_sources": 6,
+    "fully_verified_sources": 6
+  }
+]
+[
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  },
+  {
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null
+  }
+]
+
+
+ChatGPT:
+We've found something important: the database verification succeeded, but the scoring engine is not recognizing the verified evidence for 40 of the 41 companies.
+Your SQL confirms that all 246 records have:
+
+verification_status = 'verified'
+A reviewer ID
+A review timestamp
+
+Yet the scoring results say the evidence is not human-verified. That is a contradiction between the database state and the scoring result—not a reason to verify everything again.
+Amberjack receiving 100 while every other company receives zero makes this especially worth investigating. Let's identify the exact cause before changing any data or code.
+
+
+ChatGPT:
+We've found something important: the database verification succeeded, but the scoring engine is not recognizing the verified evidence for 40 of the 41 companies.
+Your SQL confirms that all 246 records have:
+
+verification_status = 'verified'
+A reviewer ID
+A review timestamp
+
+Yet the scoring results say the evidence is not human-verified. That is a contradiction between the database state and the scoring result—not a reason to verify everything again.
+Amberjack receiving 100 while every other company receives zero makes this especially worth investigating. Let's identify the exact cause before changing any data or code.
+Run this diagnostic SQL
+It compares the scoring records against the actual verified evidence for Amberjack and ARES Tool.
+WITH latest_batch AS (
+    SELECT MAX(created_at) AS batch_time
+    FROM public.qualification_scores
+)
+SELECT
+    c.name AS company,
+    qs.criterion,
+    qs.points,
+    qs.weight,
+    qs.reason,
+    qs.source_id,
+    COUNT(cs.id) AS matching_sources,
+    COUNT(cs.id) FILTER (
+        WHERE cs.verification_status = 'verified'
+          AND cs.reviewed_by IS NOT NULL
+          AND cs.reviewed_at IS NOT NULL
+    ) AS verified_matching_sources
+FROM public.qualification_scores qs
+JOIN public.companies c
+    ON c.id = qs.company_id
+JOIN latest_batch lb
+    ON qs.created_at = lb.batch_time
+LEFT JOIN public.company_sources cs
+    ON cs.company_id = qs.company_id
+   AND cs.claim_type = CASE
+       WHEN qs.criterion = 'contact_target' THEN 'contact'
+       ELSE qs.criterion
+   END
+WHERE c.name IN ('Amberjack', 'ARES Tool')
+GROUP BY
+    c.name,
+    qs.criterion,
+    qs.points,
+    qs.weight,
+    qs.reason,
+    qs.source_id
+ORDER BY c.name, qs.criterion;
+
+What this will tell us
+
+If ARES has verified matching sources but receives zero points, the problem is likely in the scoring implementation or its input mapping.
+If it has no matching sources, we have a criterion-mapping or data-association problem.
+If Amberjack and ARES behave differently despite identical evidence structures, we can investigate that difference.
+
+Please run this query and share the output. We'll fix the underlying issue rather than manually assigning scores.
+
+
+ChatGPT:
+Run this diagnostic SQL
+It compares the scoring records against the actual verified evidence for Amberjack and ARES Tool.
+WITH latest_batch AS (
+    SELECT MAX(created_at) AS batch_time
+    FROM public.qualification_scores
+)
+SELECT
+    c.name AS company,
+    qs.criterion,
+    qs.points,
+    qs.weight,
+    qs.reason,
+    qs.source_id,
+    COUNT(cs.id) AS matching_sources,
+    COUNT(cs.id) FILTER (
+        WHERE cs.verification_status = 'verified'
+          AND cs.reviewed_by IS NOT NULL
+          AND cs.reviewed_at IS NOT NULL
+    ) AS verified_matching_sources
+FROM public.qualification_scores qs
+JOIN public.companies c
+    ON c.id = qs.company_id
+JOIN latest_batch lb
+    ON qs.created_at = lb.batch_time
+LEFT JOIN public.company_sources cs
+    ON cs.company_id = qs.company_id
+   AND cs.claim_type = CASE
+       WHEN qs.criterion = 'contact_target' THEN 'contact'
+       ELSE qs.criterion
+   END
+WHERE c.name IN ('Amberjack', 'ARES Tool')
+GROUP BY
+    c.name,
+    qs.criterion,
+    qs.points,
+    qs.weight,
+    qs.reason,
+    qs.source_id
+ORDER BY c.name, qs.criterion;
+
+What this will tell us
+
+If ARES has verified matching sources but receives zero points, the problem is likely in the scoring implementation or its input mapping.
+If it has no matching sources, we have a criterion-mapping or data-association problem.
+If Amberjack and ARES behave differently despite identical evidence structures, we can investigate that difference.
+
+Please run this query and share the output. We'll fix the underlying issue rather than manually assigning scores.
+
+
+You:
+Amberjack was filled manually by me though when testing the evidence verification in the app
+
+
+ChatGPT:
+Ah! That explains why Amberjack is different. That's a very useful clue.
+Amberjack was manually populated through the application's evidence-verification workflow, whereas the other 40 companies were bulk-verified through SQL.
+This gives us two different verification paths to compare:
+
+
+
+Verification path
+Amberjack
+Other 40 companies
+
+
+
+Evidence initially imported
+Yes
+Yes
+
+
+Manually reviewed in application
+Yes
+No
+
+
+Bulk SQL verification
+Not necessarily
+Yes
+
+
+Scoring result
+100/100
+0/100
+
+
+My suspicion: the application verification workflow updates something beyond the three fields we changed with SQL, or the scoring engine is receiving different source data.
+Next step
+Please run the diagnostic SQL I gave you for Amberjack and ARES Tool.
+That will tell us whether:
+
+The source records are correctly matched to scoring criteria.
+Their reviewer metadata is recognized.
+The scoring records reference the expected source IDs.
+
+I would not change the database again yet. We may have discovered a bug in how evidence verification and qualification scoring interact.
+
+
+You:
+[
+  {
+    "company": "Amberjack",
+    "criterion": "contact_target",
+    "points": 15,
+    "weight": 15,
+    "reason": "Jonathan Peters | Founder & CEO | hello@amberjack.shop",
+    "source_id": "0fd8b04f-3b7d-4817-906c-6d277ab58c50",
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "Amberjack",
+    "criterion": "growth_signal",
+    "points": 15,
+    "weight": 15,
+    "reason": "+17% YoY headcount growth; seed-stage DTC footwear brand",
+    "source_id": "7b688d7a-abfc-4451-93c2-e221e2fe28ff",
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "Amberjack",
+    "criterion": "pain_signal",
+    "points": 15,
+    "weight": 15,
+    "reason": "No public pain signals found; early-stage DTC brand still scaling.",
+    "source_id": "69536fe8-c25e-4578-a51f-5f4dcf5000d3",
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "Amberjack",
+    "criterion": "size_fit",
+    "points": 25,
+    "weight": 25,
+    "reason": "Revenue ~$2.1M-$10.1M; Employees ~26-92",
+    "source_id": "a51ffaea-d4d8-4541-9779-c7dee50d5404",
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "Amberjack",
+    "criterion": "us_ecommerce",
+    "points": 30,
+    "weight": 30,
+    "reason": "We ship anywhere in the world; free returns for US-based orders",
+    "source_id": "b0bea381-c197-4db2-b527-be23dca06785",
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "ARES Tool",
+    "criterion": "contact_target",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null,
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "ARES Tool",
+    "criterion": "growth_signal",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null,
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "ARES Tool",
+    "criterion": "pain_signal",
+    "points": 0,
+    "weight": 15,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null,
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "ARES Tool",
+    "criterion": "size_fit",
+    "points": 0,
+    "weight": 25,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null,
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  },
+  {
+    "company": "ARES Tool",
+    "criterion": "us_ecommerce",
+    "points": 0,
+    "weight": 30,
+    "reason": "Evidence exists but has not been human-verified; this criterion remains unknown.",
+    "source_id": null,
+    "matching_sources": 1,
+    "verified_matching_sources": 1
+  }
+]
+
+
+ChatGPT:
+This result narrows the problem considerably. ARES Tool has one matching source for every criterion, and all five sources currently satisfy the database verification checks. Yet its saved scores say they were not verified.
+That means the scoring records do not reflect the current evidence state. There are two likely explanations:
+
+Timing: the scores were generated before the SQL verification update, so they are now stale.
+Scoring logic: the scoring action received different verification data from what is currently stored in Supabase.
+
+Let's distinguish these before changing anything.
+Run this SQL
+It compares when ARES Tool's sources were reviewed against when its scores were generated:
+WITH latest_batch AS (
+    SELECT MAX(created_at) AS batch_time
+    FROM public.qualification_scores
+)
+SELECT
+    c.name AS company,
+    qs.criterion,
+    qs.created_at AS score_created_at,
+    cs.reviewed_at AS source_reviewed_at,
+    cs.verification_status,
+    cs.reviewed_by,
+    CASE
+        WHEN cs.reviewed_at <= qs.created_at THEN 'Verified before scoring'
+        WHEN cs.reviewed_at > qs.created_at THEN 'Verified after scoring'
+        ELSE 'Missing review date'
+    END AS timing_check
+FROM public.qualification_scores qs
+JOIN public.companies c
+    ON c.id = qs.company_id
+JOIN latest_batch lb
+    ON qs.created_at = lb.batch_time
+LEFT JOIN public.company_sources cs
+    ON cs.id = (
+        SELECT cs2.id
+        FROM public.company_sources cs2
+        WHERE cs2.company_id = qs.company_id
+          AND cs2.claim_type = CASE
+              WHEN qs.criterion = 'contact_target' THEN 'contact'
+              ELSE qs.criterion
+          END
+        LIMIT 1
+    )
+WHERE c.name = 'ARES Tool'
+ORDER BY qs.criterion;
+
+Send me the result. If the sources were verified after scoring, we simply need to regenerate the scores. If they were verified before scoring, we'll fix the scoring implementation instead. No more database updates until we know which one it is.
+
+If you want, I can:
+
+Request updated scoring for all companies
+Investigate scoring code for evidence status handling
+Compare evidence verification metadata for manual vs bulk updates

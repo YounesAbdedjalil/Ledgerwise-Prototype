@@ -1,0 +1,1954 @@
+Calendar RPC Implementation (2)
+===============================
+
+ChatGPT:
+This confirms the issue. Both anon and authenticated have explicit grants on suppressed_contacts for:
+
+UPDATE and DELETE
+TRUNCATE — particularly important because TRUNCATE is not governed by row-level security
+REFERENCES and TRIGGER
+SELECT
+
+The absence of UPDATE and DELETE RLS policies currently blocks ordinary row-level updates and deletes, but the extra grants are unnecessary and weaken the database's least-privilege setup.
+Proposed correction
+I recommend revoking all direct table privileges from anon and authenticated, then granting back only SELECT to authenticated.
+BEGIN;
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.suppressed_contacts
+FROM anon, authenticated;
+
+GRANT SELECT
+ON TABLE public.suppressed_contacts
+TO authenticated;
+
+COMMIT;
+
+This preserves service_role and the table owner's privileges. The existing auth_select_suppressed_contacts policy remains in place.
+I have not applied this change. Do you approve this exact SQL correction?
+After that, we'll tackle the more important remaining issue: adding company/tenant authorization inside the calendar RPCs themselves, so an authenticated user cannot modify another company's bookings simply by supplying a UUID.
+
+
+You:
+Alright done, let's continue
+
+
+ChatGPT:
+Great. We'll treat the suppressed_contacts privilege correction as applied.
+Next is the more important security task: tenant isolation for the calendar RPCs. We need to establish how an authenticated user is associated with a company, then enforce that relationship inside each SECURITY DEFINER function. Checking only that auth.uid() exists is not sufficient.
+I don't want to guess your schema or invent an ownership relationship. Let's inspect the live database first. This is read-only; it won't modify anything.
+
+
+ChatGPT:
+Great. We'll treat the suppressed_contacts privilege correction as applied.
+Next is the more important security task: tenant isolation for the calendar RPCs. We need to establish how an authenticated user is associated with a company, then enforce that relationship inside each SECURITY DEFINER function. Checking only that auth.uid() exists is not sufficient.
+I don't want to guess your schema or invent an ownership relationship. Let's inspect the live database first. This is read-only; it won't modify anything.
+1. Inspect the relevant table structures
+Run this in Supabase SQL Editor:
+SELECT
+  table_name,
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+ORDER BY table_name, ordinal_position;
+
+This will reveal the actual user, company, conversation, and booking relationships.
+2. Inspect foreign-key relationships
+SELECT
+  tc.table_name,
+  kcu.column_name,
+  ccu.table_name AS foreign_table_name,
+  ccu.column_name AS foreign_column_name
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+  ON tc.constraint_name = kcu.constraint_name
+  AND tc.constraint_schema = kcu.constraint_schema
+JOIN information_schema.constraint_column_usage ccu
+  ON ccu.constraint_name = tc.constraint_name
+  AND ccu.constraint_schema = tc.constraint_schema
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND tc.table_schema = 'public'
+ORDER BY tc.table_name, kcu.column_name;
+
+3. Retrieve the current calendar RPC definitions
+SELECT
+  p.proname AS function_name,
+  pg_get_function_identity_arguments(p.oid) AS arguments,
+  pg_get_functiondef(p.oid) AS definition
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.proname IN (
+    'book_slot',
+    'cancel_booking',
+    'confirm_booking',
+    'create_calendar_slot',
+    'delete_calendar_slot',
+    'record_google_calendar_sync',
+    'reschedule_booking',
+    'suppress_contact'
+  )
+ORDER BY p.proname;
+
+Paste the results here. The first two queries establish the tenant ownership model; the third lets me inspect the actual authorization checks and transaction logic.
+Then I'll prepare a focused security migration that enforces company ownership inside the RPCs, while preserving their existing behavior. We won't apply it until you've reviewed and approved it.
+
+
+ChatGPT:
+1. Inspect the relevant table structures
+Run this in Supabase SQL Editor:
+SELECT
+  table_name,
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public'
+ORDER BY table_name, ordinal_position;
+
+This will reveal the actual user, company, conversation, and booking relationships.
+2. Inspect foreign-key relationships
+SELECT
+  tc.table_name,
+  kcu.column_name,
+  ccu.table_name AS foreign_table_name,
+  ccu.column_name AS foreign_column_name
+FROM information_schema.table_constraints tc
+JOIN information_schema.key_column_usage kcu
+  ON tc.constraint_name = kcu.constraint_name
+  AND tc.constraint_schema = kcu.constraint_schema
+JOIN information_schema.constraint_column_usage ccu
+  ON ccu.constraint_name = tc.constraint_name
+  AND ccu.constraint_schema = tc.constraint_schema
+WHERE tc.constraint_type = 'FOREIGN KEY'
+  AND tc.table_schema = 'public'
+ORDER BY tc.table_name, kcu.column_name;
+
+3. Retrieve the current calendar RPC definitions
+SELECT
+  p.proname AS function_name,
+  pg_get_function_identity_arguments(p.oid) AS arguments,
+  pg_get_functiondef(p.oid) AS definition
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.proname IN (
+    'book_slot',
+    'cancel_booking',
+    'confirm_booking',
+    'create_calendar_slot',
+    'delete_calendar_slot',
+    'record_google_calendar_sync',
+    'reschedule_booking',
+    'suppress_contact'
+  )
+ORDER BY p.proname;
+
+Paste the results here. The first two queries establish the tenant ownership model; the third lets me inspect the actual authorization checks and transaction logic.
+Then I'll prepare a focused security migration that enforces company ownership inside the RPCs, while preserving their existing behavior. We won't apply it until you've reviewed and approved it.
+
+
+You:
+[
+  {
+    "table_name": "audit_logs",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "actor_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "action",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "entity_type",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "entity_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "detail",
+    "data_type": "jsonb",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "conversation_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "slot_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "prospect_name",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "prospect_email",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "timezone",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "calcom_booking_uid",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "google_event_id",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "calendar_sync_status",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "calendar_synced_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "start_time",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "end_time",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "timezone",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "source",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "external_id",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "is_available",
+    "data_type": "boolean",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "fetched_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "google_calendar_id",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "name",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "website",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "category",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "us_ecommerce",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "contact_name",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "contact_role",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "contact_email",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "growth_signal",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "research_notes",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "total_score",
+    "data_type": "integer",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "qualification_status",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "spot_checked",
+    "data_type": "boolean",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "companies",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "claim",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "claim_type",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "source_url",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "source_title",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "retrieved_at",
+    "data_type": "date",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "evidence",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "verified_by",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "imported_by",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "verification_status",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "reviewed_by",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "reviewed_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "verification_note",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "contact_email",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "assigned_to",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "ai_processing_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "booking_request",
+    "data_type": "boolean",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "subject",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "body",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "source_ids",
+    "data_type": "ARRAY",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "revision_note",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "reviewed_by",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "reviewed_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "draft_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "event_type",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "actor_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "detail",
+    "data_type": "jsonb",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "conversation_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "sender",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "body",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "classification",
+    "data_type": "text",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "needs_review",
+    "data_type": "boolean",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "guardrail_flags",
+    "data_type": "ARRAY",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "is_simulated",
+    "data_type": "boolean",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "criterion",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "weight",
+    "data_type": "integer",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "points",
+    "data_type": "integer",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "reason",
+    "data_type": "text",
+    "is_nullable": "NO"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "source_id",
+    "data_type": "uuid",
+    "is_nullable": "YES"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO"
+  }
+]
+[
+  {
+    "table_name": "audit_logs",
+    "column_name": "actor_id",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "company_id",
+    "foreign_table_name": "companies",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "conversation_id",
+    "foreign_table_name": "conversations",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "slot_id",
+    "foreign_table_name": "calendar_slots",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "company_id",
+    "foreign_table_name": "companies",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "imported_by",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "reviewed_by",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "company_sources",
+    "column_name": "verified_by",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "assigned_to",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "company_id",
+    "foreign_table_name": "companies",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "company_id",
+    "foreign_table_name": "companies",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "email_drafts",
+    "column_name": "reviewed_by",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "actor_id",
+    "foreign_table_name": "users",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "email_events",
+    "column_name": "draft_id",
+    "foreign_table_name": "email_drafts",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "messages",
+    "column_name": "conversation_id",
+    "foreign_table_name": "conversations",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "company_id",
+    "foreign_table_name": "companies",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "qualification_scores",
+    "column_name": "source_id",
+    "foreign_table_name": "company_sources",
+    "foreign_column_name": "id"
+  },
+  {
+    "table_name": "suppressed_contacts",
+    "column_name": "source_message_id",
+    "foreign_table_name": "messages",
+    "foreign_column_name": "id"
+  }
+]
+[
+  {
+    "function_name": "book_slot",
+    "arguments": "p_slot_id uuid, p_company_id uuid, p_conversation_id uuid, p_prospect_name text, p_prospect_email text, p_timezone text",
+    "definition": "CREATE OR REPLACE FUNCTION public.book_slot(p_slot_id uuid, p_company_id uuid, p_conversation_id uuid, p_prospect_name text, p_prospect_email text, p_timezone text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_slot public.calendar_slots%rowtype;\n  v_booking_id uuid;\n  v_company_id uuid := p_company_id;\n  v_email text := lower(btrim(coalesce(p_prospect_email, '')));\n  v_conversation_company_id uuid;\n  v_conversation_email text;\n  v_conversation_status text;\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  perform pg_advisory_xact_lock(734921, 1);\n\n  if p_slot_id is null then\n    raise exception 'Slot ID is required';\n  end if;\n\n  if nullif(btrim(coalesce(p_prospect_name, '')), '') is null then\n    raise exception 'Prospect name is required';\n  end if;\n\n  if v_email !* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$' then\n    raise exception 'A valid prospect email is required';\n  end if;\n\n  if p_timezone is null or not exists (\n    select 1 from pg_timezone_names where name = p_timezone\n  ) then\n    raise exception 'Invalid timezone';\n  end if;\n\n  if exists (\n    select 1\n    from public.suppressed_contacts s\n    where lower(s.email) = v_email\n  ) then\n    raise exception 'This contact is suppressed';\n  end if;\n\n  if p_conversation_id is not null then\n    select c.company_id, lower(c.contact_email), c.status\n    into v_conversation_company_id, v_conversation_email, v_conversation_status\n    from public.conversations c\n    where c.id = p_conversation_id\n    for update;\n\n    if not found then\n      raise exception 'Conversation not found';\n    end if;\n\n    if v_conversation_status = 'suppressed' then\n      raise exception 'This conversation is suppressed';\n    end if;\n\n    if v_conversation_email <> v_email then\n      raise exception 'Prospect email does not match the conversation';\n    end if;\n\n    if v_company_id is null then\n      v_company_id := v_conversation_company_id;\n    elsif v_company_id <> v_conversation_company_id then\n      raise exception 'Company does not match the conversation';\n    end if;\n  end if;\n\n  select *\n  into v_slot\n  from public.calendar_slots\n  where id = p_slot_id\n  for update;\n\n  if not found then\n    raise exception 'Calendar slot not found';\n  end if;\n\n  if not v_slot.is_available then\n    raise exception 'This slot is not available';\n  end if;\n\n  if v_slot.start_time <= now() then\n    raise exception 'This slot is in the past';\n  end if;\n\n  if exists (\n    select 1\n    from public.bookings b\n    join public.calendar_slots s on s.id = b.slot_id\n    where b.status in ('pending', 'confirmed', 'needs_human')\n      and s.start_time < v_slot.end_time\n      and s.end_time > v_slot.start_time\n  ) then\n    raise exception 'This time overlaps an existing booking';\n  end if;\n\n  insert into public.bookings (\n    company_id,\n    conversation_id,\n    slot_id,\n    prospect_name,\n    prospect_email,\n    timezone,\n    status\n  )\n  values (\n    v_company_id,\n    p_conversation_id,\n    p_slot_id,\n    btrim(p_prospect_name),\n    v_email,\n    p_timezone,\n    'pending'\n  )\n  returning id into v_booking_id;\n\n  if p_conversation_id is not null then\n    update public.conversations\n    set status = 'human_takeover',\n        booking_request = false\n    where id = p_conversation_id;\n  end if;\n\n  insert into public.audit_logs (\n    actor_id, action, entity_type, entity_id, detail\n  )\n  values (\n    v_actor,\n    'booking_created',\n    'booking',\n    v_booking_id,\n    jsonb_build_object(\n      'slot_id', p_slot_id,\n      'company_id', v_company_id,\n      'conversation_id', p_conversation_id,\n      'prospect_email', v_email,\n      'status', 'pending'\n    )\n  );\n\n  return v_booking_id;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "cancel_booking",
+    "arguments": "p_booking_id uuid, p_reason text",
+    "definition": "CREATE OR REPLACE FUNCTION public.cancel_booking(p_booking_id uuid, p_reason text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_booking public.bookings%rowtype;\n  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  if p_booking_id is null then\n    raise exception 'Booking ID is required';\n  end if;\n\n  if v_reason is null then\n    raise exception 'A cancellation reason is required';\n  end if;\n\n  perform pg_advisory_xact_lock(734921, 1);\n\n  select *\n  into v_booking\n  from public.bookings\n  where id = p_booking_id\n  for update;\n\n  if not found then\n    raise exception 'Booking not found';\n  end if;\n\n  if v_booking.status not in ('pending', 'confirmed', 'needs_human') then\n    raise exception 'This booking cannot be cancelled from its current status';\n  end if;\n\n  update public.bookings\n  set status = 'cancelled'\n  where id = p_booking_id;\n\n  insert into public.audit_logs (\n    actor_id, action, entity_type, entity_id, detail\n  )\n  values (\n    v_actor,\n    'booking_cancelled',\n    'booking',\n    p_booking_id,\n    jsonb_build_object(\n      'previous_status', v_booking.status,\n      'reason', v_reason,\n      'slot_id', v_booking.slot_id\n    )\n  );\n\n  return true;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "confirm_booking",
+    "arguments": "p_booking_id uuid",
+    "definition": "CREATE OR REPLACE FUNCTION public.confirm_booking(p_booking_id uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_booking public.bookings%rowtype;\n  v_slot public.calendar_slots%rowtype;\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  if p_booking_id is null then\n    raise exception 'Booking ID is required';\n  end if;\n\n  perform pg_advisory_xact_lock(734921, 1);\n\n  select *\n  into v_booking\n  from public.bookings\n  where id = p_booking_id\n  for update;\n\n  if not found then\n    raise exception 'Booking not found';\n  end if;\n\n  if v_booking.status not in ('pending', 'needs_human') then\n    raise exception 'This booking cannot be confirmed from its current status';\n  end if;\n\n  if exists (\n    select 1\n    from public.suppressed_contacts s\n    where lower(s.email) = lower(v_booking.prospect_email)\n  ) then\n    raise exception 'This contact is suppressed';\n  end if;\n\n  if v_booking.slot_id is null then\n    raise exception 'Booking has no calendar slot';\n  end if;\n\n  select *\n  into v_slot\n  from public.calendar_slots\n  where id = v_booking.slot_id\n  for update;\n\n  if not found or not v_slot.is_available or v_slot.start_time <= now() then\n    raise exception 'The booked slot is no longer available';\n  end if;\n\n  if exists (\n    select 1\n    from public.bookings b\n    join public.calendar_slots s on s.id = b.slot_id\n    where b.id <> p_booking_id\n      and b.status in ('pending', 'confirmed', 'needs_human')\n      and s.start_time < v_slot.end_time\n      and s.end_time > v_slot.start_time\n  ) then\n    raise exception 'Another active booking overlaps this slot';\n  end if;\n\n  update public.bookings\n  set status = 'confirmed'\n  where id = p_booking_id;\n\n  insert into public.audit_logs (\n    actor_id, action, entity_type, entity_id, detail\n  )\n  values (\n    v_actor,\n    'booking_confirmed',\n    'booking',\n    p_booking_id,\n    jsonb_build_object('previous_status', v_booking.status)\n  );\n\n  return true;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "create_calendar_slot",
+    "arguments": "p_start_time timestamp with time zone, p_end_time timestamp with time zone, p_timezone text",
+    "definition": "CREATE OR REPLACE FUNCTION public.create_calendar_slot(p_start_time timestamp with time zone, p_end_time timestamp with time zone, p_timezone text)\n RETURNS uuid\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_slot_id uuid;\n  v_local_start timestamp;\n  v_local_end timestamp;\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  perform pg_advisory_xact_lock(734921, 1);\n\n  if p_start_time is null or p_end_time is null\n     or p_end_time <= p_start_time then\n    raise exception 'Invalid slot time range';\n  end if;\n\n  if p_start_time <= now() then\n    raise exception 'A calendar slot must be in the future';\n  end if;\n\n  if p_timezone is null or not exists (\n    select 1 from pg_timezone_names where name = p_timezone\n  ) then\n    raise exception 'Invalid timezone';\n  end if;\n\n  if extract(epoch from (p_end_time - p_start_time)) / 60 not between 15 and 120 then\n    raise exception 'Slot duration must be between 15 and 120 minutes';\n  end if;\n\n  v_local_start := p_start_time at time zone p_timezone;\n  v_local_end := p_end_time at time zone p_timezone;\n\n  if v_local_start::date <> v_local_end::date\n     or v_local_start::time < time '09:00'\n     or v_local_end::time > time '17:00' then\n    raise exception 'Slots must remain within 09:00-17:00 local business hours';\n  end if;\n\n  if exists (\n    select 1\n    from public.calendar_slots s\n    where s.is_available = true\n      and s.start_time < p_end_time\n      and s.end_time > p_start_time\n  ) then\n    raise exception 'This slot overlaps an existing available slot';\n  end if;\n\n  insert into public.calendar_slots (\n    start_time,\n    end_time,\n    timezone,\n    source,\n    external_id,\n    is_available,\n    fetched_at\n  )\n  values (\n    p_start_time,\n    p_end_time,\n    p_timezone,\n    'internal',\n    null,\n    true,\n    now()\n  )\n  returning id into v_slot_id;\n\n  insert into public.audit_logs (\n    actor_id, action, entity_type, entity_id, detail\n  )\n  values (\n    v_actor,\n    'calendar_slot_created',\n    'calendar_slot',\n    v_slot_id,\n    jsonb_build_object(\n      'start_time', p_start_time,\n      'end_time', p_end_time,\n      'timezone', p_timezone\n    )\n  );\n\n  return v_slot_id;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "delete_calendar_slot",
+    "arguments": "p_slot_id uuid",
+    "definition": "CREATE OR REPLACE FUNCTION public.delete_calendar_slot(p_slot_id uuid)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_slot public.calendar_slots%rowtype;\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  if p_slot_id is null then\n    raise exception 'Slot ID is required';\n  end if;\n\n  perform pg_advisory_xact_lock(734921, 1);\n\n  select *\n  into v_slot\n  from public.calendar_slots\n  where id = p_slot_id\n  for update;\n\n  if not found then\n    raise exception 'Calendar slot not found';\n  end if;\n\n  if exists (\n    select 1\n    from public.bookings b\n    where b.slot_id = p_slot_id\n      and b.status in ('pending', 'confirmed', 'needs_human')\n  ) then\n    raise exception 'Cannot delete a slot with an active booking';\n  end if;\n\n  if exists (\n    select 1\n    from public.bookings b\n    where b.slot_id = p_slot_id\n  ) then\n    raise exception 'Cannot delete a slot referenced by booking history';\n  end if;\n\n  delete from public.calendar_slots\n  where id = p_slot_id;\n\n  insert into public.audit_logs (\n    actor_id, action, entity_type, entity_id, detail\n  )\n  values (\n    v_actor,\n    'calendar_slot_deleted',\n    'calendar_slot',\n    p_slot_id,\n    jsonb_build_object(\n      'start_time', v_slot.start_time,\n      'end_time', v_slot.end_time,\n      'timezone', v_slot.timezone\n    )\n  );\n\n  return true;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "record_google_calendar_sync",
+    "arguments": "p_booking_id uuid, p_status text, p_event_id text",
+    "definition": "CREATE OR REPLACE FUNCTION public.record_google_calendar_sync(p_booking_id uuid, p_status text, p_event_id text DEFAULT NULL::text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  if p_booking_id is null then\n    raise exception 'Booking ID is required';\n  end if;\n\n  if p_status not in ('pending', 'synced', 'failed', 'deleted', 'not_configured') then\n    raise exception 'Invalid Google Calendar sync status';\n  end if;\n\n  if p_status = 'synced' and nullif(btrim(coalesce(p_event_id, '')), '') is null then\n    raise exception 'A Google event ID is required for synced status';\n  end if;\n\n  update public.bookings\n  set google_event_id = case\n        when p_status = 'deleted' then null\n        when p_event_id is not null then p_event_id\n        else google_event_id\n      end,\n      calendar_sync_status = p_status,\n      calendar_synced_at = now()\n  where id = p_booking_id;\n\n  if not found then\n    raise exception 'Booking not found';\n  end if;\n\n  return true;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "reschedule_booking",
+    "arguments": "p_booking_id uuid, p_new_slot_id uuid, p_reason text",
+    "definition": "CREATE OR REPLACE FUNCTION public.reschedule_booking(p_booking_id uuid, p_new_slot_id uuid, p_reason text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_actor uuid := auth.uid();\n  v_booking public.bookings%rowtype;\n  v_new_slot public.calendar_slots%rowtype;\n  v_reason text := nullif(btrim(coalesce(p_reason, '')), '');\n  v_old_slot_id uuid;\nbegin\n  if v_actor is null then\n    raise exception 'Authentication required';\n  end if;\n\n  if p_booking_id is null or p_new_slot_id is null then\n    raise exception 'Booking ID and new slot ID are required';\n  end if;\n\n  if v_reason is null then\n    raise exception 'A rescheduling reason is required';\n  end if;\n\n  perform pg_advisory_xact_lock(734921, 1);\n\n  select *\n  into v_booking\n  from public.bookings\n  where id = p_booking_id\n  for update;\n\n  if not found then\n    raise exception 'Booking not found';\n  end if;\n\n  if v_booking.status not in ('pending', 'confirmed', 'needs_human') then\n    raise exception 'This booking cannot be rescheduled from its current status';\n  end if;\n\n  if v_booking.slot_id = p_new_slot_id then\n    raise exception 'Choose a different slot';\n  end if;\n\n  if exists (\n    select 1\n    from public.suppressed_contacts s\n    where lower(s.email) = lower(v_booking.prospect_email)\n  ) then\n    raise exception 'This contact is suppressed';\n  end if;\n\n  v_old_slot_id := v_booking.slot_id;\n\n  -- Lock both slot rows in stable ID order.\n  perform s.id\n  from public.calendar_slots s\n  where s.id in (v_old_slot_id, p_new_slot_id)\n  order by s.id\n  for update;\n\n  select *\n  into v_new_slot\n  from public.calendar_slots\n  where id = p_new_slot_id;\n\n  if not found then\n    raise exception 'New calendar slot not found';\n  end if;\n\n  if not v_new_slot.is_available or v_new_slot.start_time <= now() then\n    raise exception 'New slot is not available';\n  end if;\n\n  if exists (\n    select 1\n    from public.bookings b\n    join public.calendar_slots s on s.id = b.slot_id\n    where b.id <> p_booking_id\n      and b.status in ('pending', 'confirmed', 'needs_human')\n      and s.start_time < v_new_slot.end_time\n      and s.end_time > v_new_slot.start_time\n  ) then\n    raise exception 'New slot overlaps an existing booking';\n  end if;\n\n  update public.bookings\n  set slot_id = p_new_slot_id,\n      status = 'pending'\n  where id = p_booking_id;\n\n  insert into public.audit_logs (\n    actor_id, action, entity_type, entity_id, detail\n  )\n  values (\n    v_actor,\n    'booking_rescheduled',\n    'booking',\n    p_booking_id,\n    jsonb_build_object(\n      'old_slot_id', v_old_slot_id,\n      'new_slot_id', p_new_slot_id,\n      'previous_status', v_booking.status,\n      'reason', v_reason\n    )\n  );\n\n  return true;\nend;\n$function$\n"
+  },
+  {
+    "function_name": "suppress_contact",
+    "arguments": "p_email text, p_reason text, p_source_message_id uuid",
+    "definition": "CREATE OR REPLACE FUNCTION public.suppress_contact(p_email text, p_reason text, p_source_message_id uuid DEFAULT NULL::uuid)\n RETURNS suppressed_contacts\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'pg_temp'\nAS $function$\ndeclare\n  v_email text := lower(trim(coalesce(p_email, '')));\n  v_row public.suppressed_contacts;\nbegin\n  if auth.uid() is null then\n    raise exception 'not_authenticated';\n  end if;\n\n  if v_email = ''\n    or v_email ! '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'\n  then\n    raise exception 'invalid_email';\n  end if;\n\n  -- Shared transaction lock with book_slot and other calendar mutations.\n  perform pg_advisory_xact_lock(734921, 1);\n\n  insert into public.suppressed_contacts (\n    email,\n    reason,\n    source_message_id\n  )\n  values (\n    v_email,\n    coalesce(nullif(trim(p_reason), ''), 'opt_out'),\n    p_source_message_id\n  )\n  on conflict (lower(email)) do nothing\n  returning * into v_row;\n\n  if v_row.id is null then\n    select *\n      into v_row\n      from public.suppressed_contacts\n      where lower(email) = v_email;\n\n    return v_row;\n  end if;\n\n  insert into public.audit_logs (\n    actor_id,\n    action,\n    entity_type,\n    entity_id,\n    detail\n  )\n  values (\n    auth.uid(),\n    'contact_suppressed',\n    'suppressed_contacts',\n    v_row.id,\n    jsonb_build_object(\n      'email', v_email,\n      'reason', v_row.reason,\n      'source_message_id', p_source_message_id\n    )\n  );\n\n  return v_row;\nend;\n$function$\n"
+  }
+]
+
+
+ChatGPT:
+Thanks. This gives us enough to identify the core problem.
+The current schema does not show a company-membership relationship for authenticated users. companies has no owner_id or user_id; there is no membership table in the schema you supplied; and the users foreign keys point to the authentication user records, not to a company.
+That means we cannot safely add a check like company_id = auth.uid() or assume conversations.assigned_to is the tenant boundary. Either could break legitimate workflows or provide false security.
+There are also two distinct authorization concerns:
+
+Company-scoped operations: creating bookings, confirming, cancelling, and rescheduling must verify that the caller belongs to the booking's company.
+Shared calendar operations: creating and deleting slots currently affect a global calendar_slots table. We need to establish whether the calendar is intentionally shared by the whole workspace or should be company-scoped.
+
+Let's inspect the existing RLS policies before designing the migration.
+
+
+ChatGPT:
+Thanks. This gives us enough to identify the core problem.
+The current schema does not show a company-membership relationship for authenticated users. companies has no owner_id or user_id; there is no membership table in the schema you supplied; and the users foreign keys point to the authentication user records, not to a company.
+That means we cannot safely add a check like company_id = auth.uid() or assume conversations.assigned_to is the tenant boundary. Either could break legitimate workflows or provide false security.
+There are also two distinct authorization concerns:
+
+Company-scoped operations: creating bookings, confirming, cancelling, and rescheduling must verify that the caller belongs to the booking's company.
+Shared calendar operations: creating and deleting slots currently affect a global calendar_slots table. We need to establish whether the calendar is intentionally shared by the whole workspace or should be company-scoped.
+
+Let's inspect the existing RLS policies before designing the migration.
+1. Inspect RLS policies on the calendar and company tables
+Run this read-only query:
+SELECT
+  tablename,
+  policyname,
+  permissive,
+  roles,
+  cmd,
+  qual,
+  with_check
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename IN (
+    'companies',
+    'conversations',
+    'bookings',
+    'calendar_slots',
+    'audit_logs',
+    'suppressed_contacts'
+  )
+ORDER BY tablename, policyname;
+
+2. Check which tables actually have RLS enabled
+SELECT
+  c.relname AS table_name,
+  c.relrowsecurity AS rls_enabled,
+  c.relforcerowsecurity AS rls_forced
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relkind = 'r'
+ORDER BY c.relname;
+
+3. Check the application for an existing membership convention
+In your project terminal, run:
+rg -n "company_id|assigned_to|user_metadata|app_metadata|auth\.uid|profiles|memberships|organization_id" \
+  app lib supabase --glob '!supabase/.temp/**'
+
+Paste the outputs.
+Why this matters: I want the security migration to match your actual application architecture. If this is currently a single-workspace prototype, we can enforce authenticated workspace access without pretending it already supports multiple tenants. If multi-company membership is intended, we'll need a real membership relationship and enforce it in the database.
+We should not rewrite the eight RPCs until that distinction is clear.
+
+
+ChatGPT:
+1. Inspect RLS policies on the calendar and company tables
+Run this read-only query:
+SELECT
+  tablename,
+  policyname,
+  permissive,
+  roles,
+  cmd,
+  qual,
+  with_check
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename IN (
+    'companies',
+    'conversations',
+    'bookings',
+    'calendar_slots',
+    'audit_logs',
+    'suppressed_contacts'
+  )
+ORDER BY tablename, policyname;
+
+2. Check which tables actually have RLS enabled
+SELECT
+  c.relname AS table_name,
+  c.relrowsecurity AS rls_enabled,
+  c.relforcerowsecurity AS rls_forced
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relkind = 'r'
+ORDER BY c.relname;
+
+3. Check the application for an existing membership convention
+In your project terminal, run:
+rg -n "company_id|assigned_to|user_metadata|app_metadata|auth\.uid|profiles|memberships|organization_id" \
+  app lib supabase --glob '!supabase/.temp/**'
+
+Paste the outputs.
+Why this matters: I want the security migration to match your actual application architecture. If this is currently a single-workspace prototype, we can enforce authenticated workspace access without pretending it already supports multiple tenants. If multi-company membership is intended, we'll need a real membership relationship and enforce it in the database.
+We should not rewrite the eight RPCs until that distinction is clear.
+
+
+You:
+[
+  {
+    "tablename": "audit_logs",
+    "policyname": "auth_insert_audit_logs",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "(actor_id = auth.uid())"
+  },
+  {
+    "tablename": "audit_logs",
+    "policyname": "auth_select_audit_logs",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "tablename": "bookings",
+    "policyname": "auth_insert_bookings",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "tablename": "bookings",
+    "policyname": "auth_select_bookings",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "tablename": "bookings",
+    "policyname": "auth_update_bookings",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "true",
+    "with_check": "true"
+  },
+  {
+    "tablename": "calendar_slots",
+    "policyname": "auth_delete_calendar_slots",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "DELETE",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "tablename": "calendar_slots",
+    "policyname": "auth_insert_calendar_slots",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "tablename": "calendar_slots",
+    "policyname": "auth_select_calendar_slots",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "tablename": "calendar_slots",
+    "policyname": "auth_update_calendar_slots",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "true",
+    "with_check": "true"
+  },
+  {
+    "tablename": "companies",
+    "policyname": "auth_insert_companies",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "tablename": "companies",
+    "policyname": "auth_select_companies",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "tablename": "companies",
+    "policyname": "auth_update_companies",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "true",
+    "with_check": "true"
+  },
+  {
+    "tablename": "conversations",
+    "policyname": "auth_insert_conversations",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "INSERT",
+    "qual": null,
+    "with_check": "true"
+  },
+  {
+    "tablename": "conversations",
+    "policyname": "auth_select_conversations",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  },
+  {
+    "tablename": "conversations",
+    "policyname": "auth_update_conversations",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "UPDATE",
+    "qual": "true",
+    "with_check": "true"
+  },
+  {
+    "tablename": "suppressed_contacts",
+    "policyname": "auth_select_suppressed_contacts",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  }
+]
+[
+  {
+    "table_name": "audit_logs",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "bookings",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "calendar_slots",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "companies",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "company_sources",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "conversations",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "email_drafts",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "email_events",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "messages",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "qualification_scores",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "suppressed_contacts",
+    "rls_enabled": true,
+    "rls_forced": false
+  },
+  {
+    "table_name": "users",
+    "rls_enabled": true,
+    "rls_forced": false
+  }
+]
+
+
+ChatGPT:
+These results reveal a broader security issue than the RPCs alone.
+What we've established
+
+RLS is enabled on all 12 public tables, which is good.
+However, most policies use true for their access conditions. For example:
+Any authenticated user can select companies and conversations.
+Any authenticated user can insert and update companies and conversations.
+Any authenticated user can select, insert, and update bookings.
+Any authenticated user can insert, update, and delete calendar slots.
+
+
+SECURITY DEFINER RPCs execute with their owner's privileges and can bypass ordinary RLS checks. Therefore, their own authorization checks are essential.
+
+This confirms that the current database policies do not implement company-level tenant isolation. It doesn't necessarily mean the prototype is currently exposed to untrusted users, but we should not consider it secure for multiple independent customer workspaces.
+One last schema check
+Please run the terminal command from my previous message:
+rg -n "company_id|assigned_to|user_metadata|app_metadata|auth\.uid|profiles|memberships|organization_id" \
+  app lib supabase --glob '!supabase/.temp/**'
+
+I want to see whether the application already has a workspace or user-role convention that wasn't represented in the database schema.
+Also, one architectural question: Is Ledgerwise intended to be a single private workspace for your team initially, or should different customer companies have isolated workspaces with their own users?
+That distinction determines whether we should implement a simple workspace access model first or a proper company-membership model.
+I recommend the latter if multi-customer SaaS is the intended destination. We can implement it incrementally without breaking the calendar RPCs or existing data.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ rg -n "company_id|assigned_to|user_metadata|app_metadata|auth.uid|profiles|memberships|organization_id" 
+  app lib supabase --glob '!supabase/.temp/**'
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+53:create index if not exists bookings_company_idx
+54:  on public.bookings (company_id);
+app/(dashboard)/emails/page.tsx
+29:type ContactSourceRow = SourceLike & { company_id: string };
+57:        "company_id,claim,claim_type,source_url,evidence,verification_status,reviewed_by,reviewed_at"
+70:        source.company_id === company.id && isUsableVerifiedContact(source, email)
+app/(dashboard)/calendar/actions.ts
+38:  company_id: string | null;
+75:      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+94:      Company: ${booking.company_id ?? "unknown"},
+223:      .select("id,company_id,contact_email,status")
+231:    if (companyId && companyId !== conversation.company_id) {
+234:    companyId = companyId ?? conversation.company_id;
+281:    p_company_id: companyId,
+app/(dashboard)/prospects/import/actions.ts
+74:      .eq("company_id", company.id);
+88:        company_id: company!.id,
+app/(dashboard)/conversations/actions.ts
+34:  company_id: string;
+49:const CONVERSATION_FIELDS = "id,company_id,contact_email,status,booking_request";
+102:    .eq("company_id", companyId);
+397:  const sources = await loadCompanySources(supabase, conversation.company_id);
+628:    .update({ status: "human_takeover", assigned_to: user.id })
+705:    .update({ status: "human_takeover", assigned_to: user.id })
+supabase/migrations/20261114_01_source_verification_and_security.sql
+69:create index if not exists company_sources_company_id_idx
+70:  on public.company_sources (company_id);
+74:  on public.company_sources (company_id, verification_status);
+75:create index if not exists qualification_scores_company_id_idx
+76:  on public.qualification_scores (company_id);
+78:  on public.email_drafts (company_id, status);
+82:  on public.conversations (company_id, status);
+292:  if auth.uid() is null then
+318:    auth.uid(),
+app/(dashboard)/conversations/[id]/page.tsx
+13:  company_id: string;
+17:  assigned_to: string | null;
+81:      "id,company_id,contact_email,status,booking_request,assigned_to,created_at,companies(id,name,website,contact_name)"
+103:      .eq("company_id", conversation.company_id),
+213:                companyId={conversation.company_id}
+supabase/unapplied/20261114_04_transactional_calendar_operations.sql
+23:  v_actor uuid := auth.uid();
+125:  v_actor uuid := auth.uid();
+194:  p_company_id uuid,
+206:  v_actor uuid := auth.uid();
+209:  v_company_id uuid := p_company_id;
+211:  v_conversation_company_id uuid;
+248:    select c.company_id, lower(c.contact_email), c.status
+249:    into v_conversation_company_id, v_conversation_email, v_conversation_status
+266:    if v_company_id is null then
+267:      v_company_id := v_conversation_company_id;
+268:    elsif v_company_id <> v_conversation_company_id then
+303:    company_id,
+312:    v_company_id,
+339:      'company_id', v_company_id,
+364:  v_actor uuid := auth.uid();
+460:  v_actor uuid := auth.uid();
+531:  v_actor uuid := auth.uid();
+654:  v_actor uuid := auth.uid();
+app/(dashboard)/calendar/page.tsx
+32:  company_id: string | null;
+47:  company_id: string;
+87:        "id,slot_id,status,prospect_name,prospect_email,timezone,created_at,company_id,conversation_id,google_event_id,calendar_sync_status,companies(name)"
+98:      .select("id,contact_email,company_id,status,companies(name)")
+166:            company_id: conversation.company_id,
+app/(dashboard)/emails/[id]/page.tsx
+21:  company_id: string;
+78:      "id,company_id,subject,body,status,source_ids,revision_note,reviewed_by,reviewed_at,created_at,updated_at,companies(id,name,website,contact_name,contact_role,contact_email)"
+app/(dashboard)/prospects/[id]/page.tsx
+28:      "id,company_id,claim,claim_type,source_url,source_title,retrieved_at,evidence,verification_status,imported_by,reviewed_by,reviewed_at,verification_note,created_at"
+30:    .eq("company_id", id)
+app/(dashboard)/emails/actions.ts
+33:  company_id: string;
+44:  "id,company_id,subject,body,status,source_ids,revision_note,reviewed_by,reviewed_at";
+182:    .eq("company_id", companyId);
+217:      company_id: companyId,
+252:      company_id: companyId,
+338:    detail: { company_id: draft.company_id },
+399:    detail: { company_id: draft.company_id },
+459:    detail: { company_id: draft.company_id, note: cleanNote },
+488:    .eq("id", draft.company_id)
+496:    .eq("company_id", draft.company_id);
+581:    detail: { company_id: draft.company_id, note: cleanNote },
+606:    .eq("id", draft.company_id)
+622:    .eq("company_id", draft.company_id);
+644:    .eq("company_id", draft.company_id)
+655:        company_id: draft.company_id,
+722:      company_id: draft.company_id,
+753:    .eq("id", loaded.draft.company_id)
+769:    detail: { company_id: loaded.draft.company_id, email, reason: cleanReason },
+app/(dashboard)/prospects/review/page.tsx
+9:  "id,company_id,claim,claim_type,source_url,source_title,retrieved_at,evidence,verification_status,imported_by,reviewed_by,reviewed_at,verification_note,created_at,companies(name,website)";
+28:  if (companyFilter) query = query.eq("company_id", companyFilter);
+supabase/unapplied/20261114_05_calendar_security_corrections.sql
+20:--    Existing application writers already supply actor_id = auth.uid().
+28:  with check (actor_id = auth.uid());
+47:  if auth.uid() is null then
+90:    auth.uid(),
+app/(dashboard)/prospects/source-actions.ts
+25:  company_id: string;
+39:    .select("id,company_id,claim,claim_type,source_url,evidence,verification_status")
+95:      company_id: source.company_id,
+100:  revalidateSourcePages(source.company_id);
+145:      company_id: source.company_id,
+151:  revalidateSourcePages(source.company_id);
+199:      company_id: source.company_id,
+205:  revalidateSourcePages(source.company_id);
+
+
+ChatGPT:
+Excellent. The search confirms that the application currently has no implemented company-membership or organization model.
+What exists today:
+
+companies are linked to conversations, bookings, sources, and email drafts.
+conversations.assigned_to identifies an assigned user, but does not establish company membership.
+auth.uid() is used for audit attribution and authentication checks.
+No profiles, memberships, organization_id, or user-to-company authorization convention appears in the application or migrations searched.
+
+This means we should not try to bolt tenant isolation onto the existing RPCs using assigned_to. We need a proper authorization model.
+My recommendation
+Build toward a multi-tenant SaaS model:
+
+Add a company-membership table linking authenticated users to companies.
+Define roles, initially owner, admin, and member.
+Add a database helper that checks whether auth.uid() belongs to a specified company.
+Enforce membership in RLS policies and all relevant SECURITY DEFINER RPCs.
+Scope calendar resources appropriately instead of leaving them globally accessible.
+Preserve existing data and introduce a controlled migration path.
+
+One decision before implementation
+Is Ledgerwise intended to support multiple independent customer companies, each with its own users and isolated data?
+Recommended architecture Multi-tenant SaaS.
+If yes, we'll implement that model rather than a temporary single-workspace workaround.
+
+
+You:
+📎 [Attached file: Unscale AI Engineer Case Study.pdf — PDF, 87 KB]
+Nah no need, let's proceed with the project's phase
+Since this is our request after all (read the pdf)
+
+
+ChatGPT:
+You're right. I was interpreting the database's companies table as customer tenants, but the case study makes the intended model clear. I misread the purpose of that table.
+The PDF describes one Ledgerwise bookkeeping firm whose sales team uses the platform to manage prospective customers. Those companies are leads—not separate Ledgerwise customers with isolated workspaces. The brief asks the team to review company scores, approve emails, take over conversations, and see booked calls. 
+So let's correct our direction:
+
+No multi-tenant architecture.
+No company-membership table or tenant migration.
+Keep one shared Ledgerwise workspace for its authenticated sales team.
+Keep company_id as the relationship between a prospect and its related records.
+Continue enforcing authentication and the case study's safety rules.
+
+Back to the implementation
+We've completed the transactional calendar RPC work, applied migrations 04 and 05, and passed the local tests, type-check, lint, and production build.
+The next sensible step is to verify that access is restricted to the intended internal team—not to introduce tenant isolation.
+Run this read-only scan from the project root:
+rg -n "signUp|signIn|signOut|auth\.getUser|auth\.getSession|createServerClient|createBrowserClient|middleware|proxy" \
+  app lib supabase
+
+Paste the output. I'll use the existing authentication implementation to determine the smallest necessary security correction, without changing the data model or disturbing the calendar work.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ rg -n "signUp|signIn|signOut|auth.getUser|auth.getSession|createServerClient|createBrowserClient|middleware|proxy" 
+  app lib supabase
+app/auth/signout/route.ts
+6:  await supabase.auth.signOut();
+app/(dashboard)/layout.tsx
+12:  } = await supabase.auth.getUser();
+app/login/page.tsx
+19:    const { error } = await supabase.auth.signInWithPassword({ email, password });
+lib/server/auth.ts
+16:  } = await supabase.auth.getUser();
+lib/supabase/client.ts
+1:import { createBrowserClient } from "@supabase/ssr";
+4:  return createBrowserClient(
+lib/supabase/server.ts
+1:import { createServerClient } from "@supabase/ssr";
+6:  return createServerClient(
+20:            // Called from a Server Component; the middleware refreshes sessions.
+app/(dashboard)/prospects/import/actions.ts
+26:  } = await supabase.auth.getUser();
+
+
+ChatGPT:
+Good. This confirms the project currently has a password-based login, a sign-out route, and authentication checks in the dashboard. There is no sign-up implementation and no middleware.ts or proxy.ts appearing in the search results.
+One detail needs checking: lib/supabase/server.ts says session refresh is handled by middleware, but our scan did not find any middleware or proxy. Let's inspect the actual guards and session handling before changing anything.
+Run:
+printf '\n===== DASHBOARD LAYOUT =====\n'
+sed -n '1,220p' "app/(dashboard)/layout.tsx"
+
+printf '\n===== SERVER AUTH HELPER =====\n'
+sed -n '1,220p' lib/server/auth.ts
+
+printf '\n===== SUPABASE SERVER CLIENT =====\n'
+sed -n '1,180p' lib/supabase/server.ts
+
+printf '\n===== LOGIN PAGE =====\n'
+sed -n '1,220p' app/login/page.tsx
+
+printf '\n===== ROOT FILES =====\n'
+find . -maxdepth 1 -type f \
+  ! -name '.env*' \
+  ! -name 'package-lock.json' \
+  -printf '%f\n' | sort
+
+Paste the output. Then we'll address only what the actual implementation needs and move on with the case study—not build an unnecessary multi-tenant system.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ >....
+printf '\n===== SERVER AUTH HELPER =====\n'
+sed -n '1,220p' lib/server/auth.ts
+printf '\n===== SUPABASE SERVER CLIENT =====\n'
+sed -n '1,180p' lib/supabase/server.ts
+printf '\n===== LOGIN PAGE =====\n'
+sed -n '1,220p' app/login/page.tsx
+printf '\n===== ROOT FILES =====\n'
+find . -maxdepth 1 -type f 
+  ! -name '.env*' 
+  ! -name 'package-lock.json' 
+  -printf '%f\n' | sort
+===== DASHBOARD LAYOUT =====
+import { createClient } from "@/lib/supabase/server";
+import NavLink from "@/components/NavLink";
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return (
+    
+      
+        Ledgerwise Prototype
+        
+          
+          
+          
+          
+        
+        {user?.email}
+        
+          
+            Log out
+          
+        
+      
+      {children}
+    
+  );
+}
+===== SERVER AUTH HELPER =====
+import type { createClient } from "@/lib/supabase/server";
+export type ServerSupabase = Awaited<ReturnType>;
+export type SessionUser = {
+  id: string;
+  email: string | null;
+};
+export async function getSessionUser(
+  supabase: ServerSupabase
+): Promise<SessionUser | null> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error || !user) return null;
+  return { id: user.id, email: user.email ?? null };
+}
+===== SUPABASE SERVER CLIENT =====
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+export async function createClient() {
+  const cookieStore = await cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(list) {
+          try {
+            list.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Called from a Server Component; the middleware refreshes sessions.
+          }
+        },
+      },
+    }
+  );
+}
+===== LOGIN PAGE =====
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+    router.push("/prospects");
+    router.refresh();
+  }
+  return (
+    
+      
+        Ledgerwise Prototype
+        Sign in to the sales assistant.
+        <input
+          type="email"
+          required
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border rounded px-3 py-2"
+        />
+        <input
+          type="password"
+          required
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full border rounded px-3 py-2"
+        />
+        {error && {error}}
+        
+          {loading ? "Signing in..." : "Sign in"}
+        
+      
+    
+  );
+}
+===== ROOT FILES =====
+AGENTS.md
+eslint.config.mjs
+.gitignore
+next.config.ts
+next-env.d.ts
+package.json
+postcss.config.mjs
+proxy.ts
+README.md
+tsconfig.json
+tsconfig.tsbuildinfo
+
+
+ChatGPT:
+The output reveals an important detail: proxy.ts exists. It was missed by our earlier search because the search only matched specific authentication-related terms.
+The dashboard layout itself calls getUser() but does not redirect unauthenticated visitors. That may be handled by proxy.ts, so we should inspect it before changing the authentication flow. Also, the Supabase server client has a comment expecting the proxy to refresh sessions.
+
+
+ChatGPT:
+The output reveals an important detail: proxy.ts exists. It was missed by our earlier search because the search only matched specific authentication-related terms.
+The dashboard layout itself calls getUser() but does not redirect unauthenticated visitors. That may be handled by proxy.ts, so we should inspect it before changing the authentication flow. Also, the Supabase server client has a comment expecting the proxy to refresh sessions.
+Run:
+printf '\n===== NEXT.JS PROXY =====\n'
+sed -n '1,260p' proxy.ts
+
+Paste the result. I'll verify whether it correctly refreshes sessions, protects dashboard routes, and redirects unauthenticated users. Then we'll make the smallest required correction and continue the project's actual deliverables.
+
+
+ChatGPT:
+Run:
+printf '\n===== NEXT.JS PROXY =====\n'
+sed -n '1,260p' proxy.ts
+
+Paste the result. I'll verify whether it correctly refreshes sessions, protects dashboard routes, and redirects unauthenticated users. Then we'll make the smallest required correction and continue the project's actual deliverables.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ printf '\n===== NEXT.JS PROXY =====\n'
+sed -n '1,260p' proxy.ts
+===== NEXT.JS PROXY =====
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+export async function proxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(list) {
+          list.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          list.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+  if (!user && path !== "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+  if (user && path === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/prospects";
+    return NextResponse.redirect(url);
+  }
+  return response;
+}
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
+
+
+ChatGPT:
+Your proxy.ts is doing the main job correctly:
+
+Calls supabase.auth.getUser() to validate the session.
+Redirects unauthenticated requests to /login.
+Redirects authenticated users away from /login to /prospects.
+Refreshes Supabase cookies through the proxy's setAll handler.
+
+So the earlier concern that the dashboard was unprotected is resolved: the proxy is the route-level guard.
+There is one small hardening detail: when the proxy redirects, it creates a new response, which can discard cookies refreshed on the original response. We should preserve refreshed cookies on redirects. More importantly, route protection is not a substitute for authorization inside server actions.
+
+
+ChatGPT:
+Your proxy.ts is doing the main job correctly:
+
+Calls supabase.auth.getUser() to validate the session.
+Redirects unauthenticated requests to /login.
+Redirects authenticated users away from /login to /prospects.
+Refreshes Supabase cookies through the proxy's setAll handler.
+
+So the earlier concern that the dashboard was unprotected is resolved: the proxy is the route-level guard.
+There is one small hardening detail: when the proxy redirects, it creates a new response, which can discard cookies refreshed on the original response. We should preserve refreshed cookies on redirects. More importantly, route protection is not a substitute for authorization inside server actions.
+Before editing, let's audit the server actions so we don't mistake a protected page for a fully protected operation.
+Run:
+printf '\n===== SERVER ACTIONS AND AUTH CHECKS =====\n'
+rg -n '"use server"|getUser\(|getSessionUser\(|auth\.getUser\(' app lib
+
+printf '\n===== API AND ROUTE HANDLERS =====\n'
+find app -type f \( -name 'route.ts' -o -name 'route.tsx' \) -print
+
+Paste the output. I'll identify any actions that can modify data without verifying the authenticated user, then we can fix only the real gaps. After that, we can return to the case study's core work: research at least 30 real companies, qualification with evidence, personalized email drafts, reply handling, and booked calls. 
+
+
+ChatGPT:
+Before editing, let's audit the server actions so we don't mistake a protected page for a fully protected operation.
+Run:
+printf '\n===== SERVER ACTIONS AND AUTH CHECKS =====\n'
+rg -n '"use server"|getUser\(|getSessionUser\(|auth\.getUser\(' app lib
+
+printf '\n===== API AND ROUTE HANDLERS =====\n'
+find app -type f \( -name 'route.ts' -o -name 'route.tsx' \) -print
+
+Paste the output. I'll identify any actions that can modify data without verifying the authenticated user, then we can fix only the real gaps. After that, we can return to the case study's core work: research at least 30 real companies, qualification with evidence, personalized email drafts, reply handling, and booked calls. 
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ printf '\n===== SERVER ACTIONS AND AUTH CHECKS =====\n'
+rg -n '"use server"|getUser(|getSessionUser(|auth.getUser(' app lib
+printf '\n===== API AND ROUTE HANDLERS =====\n'
+find app -type f ( -name 'route.ts' -o -name 'route.tsx' ) -print
+===== SERVER ACTIONS AND AUTH CHECKS =====
+app/(dashboard)/calendar/actions.ts
+1:"use server";
+153:  const user = await getSessionUser(supabase);
+178:  const user = await getSessionUser(supabase);
+205:  const user = await getSessionUser(supabase);
+325:  const user = await getSessionUser(supabase);
+375:  const user = await getSessionUser(supabase);
+430:  const user = await getSessionUser(supabase);
+app/(dashboard)/emails/actions.ts
+1:"use server";
+153:  const user = await getSessionUser(supabase);
+273:  const user = await getSessionUser(supabase);
+347:  const user = await getSessionUser(supabase);
+411:  const user = await getSessionUser(supabase);
+471:  const user = await getSessionUser(supabase);
+592:  const user = await getSessionUser(supabase);
+740:  const user = await getSessionUser(supabase);
+app/(dashboard)/layout.tsx
+12:  } = await supabase.auth.getUser();
+app/(dashboard)/conversations/actions.ts
+1:"use server";
+180:  const user = await getSessionUser(supabase);
+472:  const user = await getSessionUser(supabase);
+561:  const user = await getSessionUser(supabase);
+610:  const user = await getSessionUser(supabase);
+649:  const user = await getSessionUser(supabase);
+732:  const user = await getSessionUser(supabase);
+765:  const user = await getSessionUser(supabase);
+820:  const user = await getSessionUser(supabase);
+lib/server/auth.ts
+10:export async function getSessionUser(
+16:  } = await supabase.auth.getUser();
+app/(dashboard)/prospects/import/actions.ts
+1:"use server";
+26:  } = await supabase.auth.getUser();
+app/(dashboard)/prospects/source-actions.ts
+1:"use server";
+57:  const user = await getSessionUser(supabase);
+109:  const user = await getSessionUser(supabase);
+160:  const user = await getSessionUser(supabase);
+===== API AND ROUTE HANDLERS =====
+app/auth/signout/route.ts
+
+
+ChatGPT:
+This is a good result: every server-action module has authentication checks, and the calendar, email, conversation, and source actions consistently use the shared getSessionUser() helper.
+The only exception worth inspecting is the prospect-import module, which calls supabase.auth.getUser() directly. That isn't inherently wrong; I just want to verify it rejects unauthenticated requests before doing any work.
+
+
+ChatGPT:
+This is a good result: every server-action module has authentication checks, and the calendar, email, conversation, and source actions consistently use the shared getSessionUser() helper.
+The only exception worth inspecting is the prospect-import module, which calls supabase.auth.getUser() directly. That isn't inherently wrong; I just want to verify it rejects unauthenticated requests before doing any work.
+The authentication audit is sufficient to move forward. We don't need to introduce a new authorization model for this case study.
+Next: measure progress against the actual brief
+The case study explicitly requires at least 30 real companies, qualification reasons backed by sources, and personalized first-email drafts. 
+Before building more, let's establish how much of that work is already present in the database.
+In Supabase SQL Editor, run this read-only query:
+SELECT 'companies' AS dataset, COUNT(*) AS total
+FROM public.companies
+
+UNION ALL
+
+SELECT 'company_sources', COUNT(*)
+FROM public.company_sources
+
+UNION ALL
+
+SELECT 'qualification_scores', COUNT(*)
+FROM public.qualification_scores
+
+UNION ALL
+
+SELECT 'email_drafts', COUNT(*)
+FROM public.email_drafts
+
+UNION ALL
+
+SELECT 'conversations', COUNT(*)
+FROM public.conversations
+
+UNION ALL
+
+SELECT 'bookings', COUNT(*)
+FROM public.bookings;
+
+Then run:
+SELECT qualification_status, COUNT(*)
+FROM public.companies
+GROUP BY qualification_status
+ORDER BY qualification_status;
+
+SELECT verification_status, COUNT(*)
+FROM public.company_sources
+GROUP BY verification_status
+ORDER BY verification_status;
+
+Paste the results. We'll use them to identify the next unfinished deliverable rather than repeat work that's already complete.
+One small follow-up security check can wait: the import action uses a direct getUser() call instead of the shared helper. It doesn't justify delaying the core project work.
+
+
+ChatGPT:
+The authentication audit is sufficient to move forward. We don't need to introduce a new authorization model for this case study.
+Next: measure progress against the actual brief
+The case study explicitly requires at least 30 real companies, qualification reasons backed by sources, and personalized first-email drafts. 
+Before building more, let's establish how much of that work is already present in the database.
+In Supabase SQL Editor, run this read-only query:
+SELECT 'companies' AS dataset, COUNT(*) AS total
+FROM public.companies
+
+UNION ALL
+
+SELECT 'company_sources', COUNT(*)
+FROM public.company_sources
+
+UNION ALL
+
+SELECT 'qualification_scores', COUNT(*)
+FROM public.qualification_scores
+
+UNION ALL
+
+SELECT 'email_drafts', COUNT(*)
+FROM public.email_drafts
+
+UNION ALL
+
+SELECT 'conversations', COUNT(*)
+FROM public.conversations
+
+UNION ALL
+
+SELECT 'bookings', COUNT(*)
+FROM public.bookings;
+
+Then run:
+SELECT qualification_status, COUNT(*)
+FROM public.companies
+GROUP BY qualification_status
+ORDER BY qualification_status;
+
+SELECT verification_status, COUNT(*)
+FROM public.company_sources
+GROUP BY verification_status
+ORDER BY verification_status;
+
+Paste the results. We'll use them to identify the next unfinished deliverable rather than repeat work that's already complete.
+One small follow-up security check can wait: the import action uses a direct getUser() call instead of the shared helper. It doesn't justify delaying the core project work.
+
+
+You:
+[
+  {
+    "dataset": "companies",
+    "total": 0
+  },
+  {
+    "dataset": "company_sources",
+    "total": 0
+  },
+  {
+    "dataset": "qualification_scores",
+    "total": 0
+  },
+  {
+    "dataset": "email_drafts",
+    "total": 0
+  },
+  {
+    "dataset": "conversations",
+    "total": 0
+  },
+  {
+    "dataset": "bookings",
+    "total": 0
+  }
+]
+
+
+ChatGPT:
+This gives us a clear picture: the database is empty. None of the case study's core workflows has any real data to demonstrate yet.
+That means the next major phase is not more database security work. It's building the actual demonstration dataset.
+According to the brief, we need at least 30 real US e-commerce companies, with research evidence for qualification, followed by personalized email drafts. 
+Next phase: populate the research dataset
+Let's use the existing import functionality rather than bypassing the application with ad hoc SQL. First, I need to inspect its expected input format and how it creates company records.
+Run this from your project root:
+printf '\n===== PROSPECT IMPORT ACTIONS =====\n'
+sed -n '1,240p' "app/(dashboard)/prospects/import/actions.ts"
+
+printf '\n===== PROSPECT IMPORT UI =====\n'
+find "app/(dashboard)/prospects/import" -maxdepth 2 -type f -print
+
+printf '\n===== IMPORT REFERENCES =====\n'
+rg -n "import|CSV|csv|qualification_scores|company_sources" \
+  app components lib --glob '!**/node_modules/**'
+
+Paste the output.
+Then we'll prepare a properly structured dataset of 30 real prospects, import them, attach verifiable source evidence, and run qualification. We should not populate fake companies or invent research facts just to make the dashboard look full.
+
+If you want, I can:
+
+Show full source of prospect import actions.ts file
+List files in the prospects import UI folder
+Search project for CSV and qualification references

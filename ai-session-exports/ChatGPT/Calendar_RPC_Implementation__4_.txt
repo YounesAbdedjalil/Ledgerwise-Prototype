@@ -1,0 +1,3118 @@
+Calendar RPC Implementation (4)
+===============================
+
+You:
+This is the latest development of the app
+Which phases are remaining now ?
+
+
+You:
+Well for qualification scores, Start with your own suggested weights, we really don't much time (You assign the weights and scores)
+
+
+ChatGPT:
+I'll assign the following weights. They total 100 points and match the five criteria already defined in Ledgerwise.
+
+
+
+Qualification criterion
+Weight
+
+
+
+US e-commerce presence
+30
+
+
+Revenue and employee-size fit
+25
+
+
+Reachable decision-maker
+15
+
+
+Growth signals
+15
+
+
+Bookkeeping pain signals
+15
+
+
+Total
+100
+
+
+How scores should work
+
+Full points: there is supporting evidence for the criterion.
+Zero points: evidence confirms the criterion is not met.
+Unknown: there is not enough evidence to make a decision.
+Disqualifier: a confirmed disqualifying condition overrides the numerical score.
+
+Important finding in the latest ZIP
+I inspected lib/scoring/config.ts, lib/scoring/score.ts, and the Prospects page.
+The project already has a scoring function, but:
+
+The five weights are currently null.
+The Prospects page still displays "not scored".
+Nothing in the supplied project currently calls scoreCompany or writes results into qualification_scores.
+The current scoring function counts matching source records without checking whether they have been human-verified.
+
+So assigning weights alone will not generate scores in the application. Also, your imported sources are still pending review, so treating all of them as verified would risk giving companies misleading scores.
+What remains for qualification
+Weights decided Scoring integration required
+
+Set the five weights above in lib/scoring/config.ts.
+Update scoring to use verified evidence and preserve unknowns.
+Connect the scoring function to the qualification_scores table.
+Run qualification for all 41 companies.
+Display each company's score and the reasons behind it in Prospects.
+
+My recommendation: use these weights as the project's official scoring rubric, and generate scores only from evidence that has actually been verified. That gives us a defensible result without inventing qualification facts.
+
+
+You:
+Alright Alright, just proceed
+
+
+ChatGPT:
+I'll use the agreed 30 / 25 / 15 / 15 / 15 weighting.
+I've inspected the latest project and identified the changes needed:
+
+Configure the five weights.
+Count only human-verified evidence toward positive scores.
+Save five criterion-level score records per company.
+Add a Generate scores action to the Prospects page.
+Display scores and mark incomplete assessments as provisional.
+
+One important point: the latest ZIP is an uploaded snapshot, not your live Git working directory. I prepared these changes in an isolated copy, but couldn't install its dependencies or validate a production build here. I haven't changed your GitHub repository or deployed application.
+Use this prompt in Claude from your project directory to apply the implementation and validate it:
+Implement the Ledgerwise qualification-scoring feature in the existing repository.
+Use this approved scoring rubric:
+
+US e-commerce presence: 30 points
+Revenue and employee-size fit: 25 points
+Reachable decision-maker: 15 points
+Growth signal: 15 points
+Bookkeeping pain signal: 15 points
+Total: 100 points
+
+Requirements:
+
+Update lib/scoring/config.ts with these weights.
+Update lib/scoring/score.ts so that only sources with verification_status = 'verified' can earn positive points.
+Unverified or missing evidence must be displayed as UNKNOWN, not as confirmed failure.
+A company with incomplete evidence must have a provisional score.
+Verified disqualifier evidence must be prominently displayed and must not earn points.
+Implement an authenticated server action that scores all companies and inserts five criterion records per company into qualification_scores, using the existing schema.
+Preserve previous scoring batches rather than deleting historical records.
+Add a Generate scores button to the Prospects page.
+Display the latest scoring batch's total score on the Prospects page.
+Display each criterion's weight, points, explanation, and supporting verified sources on the company detail page.
+Write an audit log entry when scoring is generated.
+Do not automatically mark pending sources as verified, invent evidence, or change qualification status without a defined rule.
+Do not modify existing Supabase migrations or apply database changes unless genuinely required. The existing qualification_scores table should be used.
+Add or update tests for the weights, verified evidence, pending evidence, partial scores, and disqualifiers.
+
+After implementation, run:
+
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+Fix any errors introduced by your changes. Report the exact files changed and actual test results. Do not commit, push, or deploy.
+One final distinction: because the 246 imported source records are awaiting human verification, the initial scores may be 0/100 — provisional. That is intentional; positive points should appear as evidence is verified.
+
+
+You:
+I will not use Claude, he has hit his free limit
+Imma use you
+
+
+ChatGPT:
+Absolutely. We'll continue developing Ledgerwise together, directly here. No need for Claude.
+I'll take responsibility for the implementation: inspect the actual project files, make the changes, troubleshoot errors, and guide you through terminal commands or Supabase steps when necessary.
+I also have the project history, including the calendar RPC implementation, migrations 04 and 05, the CSV import, and our agreed qualification-scoring rubric.
+Let's continue with qualification scoring. The next step is to apply the implementation to your actual Git working directory, not just the ZIP snapshot I previously inspected.
+Please upload your latest project ZIP, or share the current files if you prefer. We'll work through it step by step, validate everything, and keep the existing deployment safe.
+
+
+You:
+📎 [Attached file: ledgerwise-latest(1).zip — ZIP, 224 KB]
+
+
+ChatGPT:
+I've received the latest Ledgerwise snapshot and inspected its scoring implementation.
+The qualification-scoring feature is not implemented yet in this version: the five weights are still blank, the scoring engine currently counts unverified sources, and the Prospects page has no score-generation action.
+I'll use the agreed rubric:
+
+
+
+Qualification criterion
+Weight
+
+
+
+US e-commerce presence
+30
+
+
+Revenue and employee-size fit
+25
+
+
+Reachable decision-maker
+15
+
+
+Growth signals
+15
+
+
+Bookkeeping pain signals
+15
+
+
+Total
+100
+
+
+
+
+ChatGPT:
+I've received the latest Ledgerwise snapshot and inspected its scoring implementation.
+The qualification-scoring feature is not implemented yet in this version: the five weights are still blank, the scoring engine currently counts unverified sources, and the Prospects page has no score-generation action.
+I'll use the agreed rubric:
+
+
+
+Qualification criterion
+Weight
+
+
+
+US e-commerce presence
+30
+
+
+Revenue and employee-size fit
+25
+
+
+Reachable decision-maker
+15
+
+
+Growth signals
+15
+
+
+Bookkeeping pain signals
+15
+
+
+Total
+100
+
+
+Qualification scoring is prepared
+I've made the implementation in an isolated copy of your uploaded project.
+Files changed:
+
+
+
+File
+Change
+
+
+
+lib/scoring/config.ts
+Approved 100-point weighting
+
+
+lib/scoring/score.ts
+Only verified evidence earns points
+
+
+scoring-actions.ts
+Authenticated scoring action, database persistence and audit logging
+
+
+ScoreGenerationButton.tsx
+Generate scores button and feedback
+
+
+prospects/page.tsx
+Latest batch scores and provisional indicators
+
+
+components/ScoreBreakdown.tsx
+Improved criterion-by-criterion breakdown
+
+
+tests/score.test.ts
+Six scoring tests
+
+
+Important implementation decisions:
+
+Pending and rejected sources earn zero points and remain unknown.
+Verified sources provide the supporting evidence for positive scores.
+Verified disqualifiers are highlighted separately.
+Five scoring records are saved per company.
+Previous scoring batches are preserved.
+No Supabase migration is required.
+
+Validation results
+6/6 scoring tests passed
+
+Scoring module TypeScript check: passed.
+Syntax checks for all seven changed files: passed.
+Full npm test: couldn't run because tsx was unavailable after dependency installation timed out.
+Full application build and lint: not yet validated.
+
+One important distinction
+The changes currently exist in my isolated working copy, not in your local Git repository or deployed application. I won't pretend otherwise.
+Next, I'll give you a copy-paste terminal procedure to transfer these changes into your actual project, then we'll run the complete checks before pushing anything. No new migration or deployment needed at this stage.
+
+
+ChatGPT:
+Qualification scoring is prepared
+I've made the implementation in an isolated copy of your uploaded project.
+Files changed:
+
+
+
+File
+Change
+
+
+
+lib/scoring/config.ts
+Approved 100-point weighting
+
+
+lib/scoring/score.ts
+Only verified evidence earns points
+
+
+scoring-actions.ts
+Authenticated scoring action, database persistence and audit logging
+
+
+ScoreGenerationButton.tsx
+Generate scores button and feedback
+
+
+prospects/page.tsx
+Latest batch scores and provisional indicators
+
+
+components/ScoreBreakdown.tsx
+Improved criterion-by-criterion breakdown
+
+
+tests/score.test.ts
+Six scoring tests
+
+
+Important implementation decisions:
+
+Pending and rejected sources earn zero points and remain unknown.
+Verified sources provide the supporting evidence for positive scores.
+Verified disqualifiers are highlighted separately.
+Five scoring records are saved per company.
+Previous scoring batches are preserved.
+No Supabase migration is required.
+
+Validation results
+6/6 scoring tests passed
+
+Scoring module TypeScript check: passed.
+Syntax checks for all seven changed files: passed.
+Full npm test: couldn't run because tsx was unavailable after dependency installation timed out.
+Full application build and lint: not yet validated.
+
+One important distinction
+The changes currently exist in my isolated working copy, not in your local Git repository or deployed application. I won't pretend otherwise.
+Next, I'll give you a copy-paste terminal procedure to transfer these changes into your actual project, then we'll run the complete checks before pushing anything. No new migration or deployment needed at this stage.
+
+
+You:
+OK give the terminal procedures at once
+
+
+ChatGPT:
+I checked the newly uploaded ZIP again. It already contains scoring-actions.ts and ScoreGenerationButton.tsx, so we can reuse those rather than create duplicates. The missing pieces are the approved weights, verified-only scoring logic, score display on the Prospects page, and updated tests.
+The procedure below changes your existing project directly. It does not touch your environment variables, Supabase migrations, or deployment.
+
+
+ChatGPT:
+I checked the newly uploaded ZIP again. It already contains scoring-actions.ts and ScoreGenerationButton.tsx, so we can reuse those rather than create duplicates. The missing pieces are the approved weights, verified-only scoring logic, score display on the Prospects page, and updated tests.
+The procedure below changes your existing project directly. It does not touch your environment variables, Supabase migrations, or deployment.
+1. Open your project terminal
+Run these commands from your Ledgerwise repository:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/"ChatGPT Uploads"/ledgerwise-prototype
+
+git status --short
+
+Check that you're in the correct repository and that you don't have uncommitted changes in the scoring files we're about to edit. If you do, stop and show me the output first.
+2. Apply the implementation
+Copy and paste this entire block into your terminal:
+
+python3 - <<'PY'
+from pathlib import Path
+
+def write(path, content):
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content.strip() + "\n", encoding="utf-8")
+    print(f"Updated: {path}")
+write("lib/scoring/config.ts", r'''
+import type { ClaimType } from "../import-schema";
+export type Criterion = {
+  key: string;
+  label: string;
+  measures: string;
+  claimType: Exclude<ClaimType, "disqualifier" | "category">;
+  weight: number | null;
+};
+export const CRITERIA: Criterion[] = [
+  {
+    key: "us_ecommerce",
+    label: "US e-commerce presence",
+    measures: "Sells online to US customers (Shopify, Amazon, or own site)",
+    claimType: "us_ecommerce",
+    weight: 30,
+  },
+  {
+    key: "size_fit",
+    label: "Revenue and employee-size fit",
+    measures: "Sourced evidence of $1M-$10M yearly revenue and 5-50 employees",
+    claimType: "size_fit",
+    weight: 25,
+  },
+  {
+    key: "contact_target",
+    label: "Reachable decision-maker",
+    measures: "Publicly listed founder, COO, or whoever runs finance",
+    claimType: "contact",
+    weight: 15,
+  },
+  {
+    key: "growth_signal",
+    label: "Growth signal",
+    measures:
+      "Finance/accounting/ops hiring, recent funding, or a new channel (wholesale, Amazon, retail, new countries)",
+    claimType: "growth_signal",
+    weight: 15,
+  },
+  {
+    key: "pain_signal",
+    label: "Bookkeeping pain signal",
+    measures: "Sourced evidence of bookkeeping or finance-operations strain",
+    claimType: "pain_signal",
+    weight: 15,
+  },
+];
+''')
+write("lib/scoring/score.ts", r'''
+import { CRITERIA, type Criterion } from "./config";
+export type SourceRow = {
+  id: string;
+  claim: string;
+  claim_type: string;
+  source_url: string;
+  source_title: string;
+  retrieved_at: string;
+  evidence: string;
+  verification_status?: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+};
+export type CriterionResult = {
+  criterion: Criterion;
+  met: boolean;
+  points: number | null;
+  reason: string;
+  sources: SourceRow[];
+};
+export type ScoreResult = {
+  criteria: CriterionResult[];
+  disqualifiers: SourceRow[];
+  weightsComplete: boolean;
+  total: number | null;
+  maxTotal: number | null;
+  provisional: boolean;
+};
+function isHumanVerified(source: SourceRow): boolean {
+  return (
+    source.verification_status === "verified" &&
+    Boolean(source.reviewed_by) &&
+    Boolean(source.reviewed_at)
+  );
+}
+export function scoreCompany(
+  sources: SourceRow[],
+  criteria: Criterion[] = CRITERIA
+): ScoreResult {
+  const weightsComplete = criteria.every(
+    (criterion) =>
+      criterion.weight !== null &&
+      Number.isInteger(criterion.weight) &&
+      criterion.weight > 0
+  );
+  const verifiedSources = sources.filter(isHumanVerified);
+  const results: CriterionResult[] = criteria.map((criterion) => {
+    const matched = verifiedSources.filter(
+      (source) => source.claim_type === criterion.claimType
+    );
+    const met = matched.length > 0;
+    const points =
+      criterion.weight === null ? null : met ? criterion.weight : 0;
+const hasUnverifiedEvidence = sources.some(
+  (source) => source.claim_type === criterion.claimType
+);
+
+const reason = met
+  ? matched.map((source) => source.claim).join("; ")
+  : hasUnverifiedEvidence
+    ? "Evidence exists but has not been human-verified; this criterion remains unknown."
+    : "No human-verified evidence recorded; this criterion remains unknown.";
+
+return {
+  criterion,
+  met,
+  points,
+  reason,
+  sources: matched,
+};
+
+  });
+  const disqualifiers = verifiedSources.filter(
+    (source) => source.claim_type === "disqualifier"
+  );
+  const provisional = results.some((result) => !result.met);
+  return {
+    criteria: results,
+    disqualifiers,
+    weightsComplete,
+    total: weightsComplete
+      ? results.reduce((sum, result) => sum + (result.points ?? 0), 0)
+      : null,
+    maxTotal: weightsComplete
+      ? criteria.reduce((sum, criterion) => sum + (criterion.weight ?? 0), 0)
+      : null,
+    provisional,
+  };
+}
+''')
+write("components/ScoreBreakdown.tsx", r'''
+import type { ScoreResult, SourceRow } from "@/lib/scoring/score";
+import { isHttpUrl } from "@/lib/validation";
+import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
+export function SourceItem({ s }: { s: SourceRow }) {
+  return (
+    
+      {isHttpUrl(s.source_url) ? (
+        
+          {s.source_title}
+        
+      ) : (
+        
+          {s.source_title || "Invalid source URL"}
+        
+      )}{" "}
+      · retrieved {s.retrieved_at}
+      {s.verification_status && (
+        <>
+          {" "}
+          
+        </>
+      )}
+      Evidence: {s.evidence}
+    
+  );
+}
+export default function ScoreBreakdown({ score }: { score: ScoreResult }) {
+  return (
+    
+      {score.disqualifiers.length > 0 && (
+        
+          
+            Verified disqualifier evidence recorded. Review before any outreach.
+          
+          
+            {score.disqualifiers.map((source) => (
+              
+                {source.claim}
+                
+                  
+                
+              
+            ))}
+          
+        
+      )}
+  <div className="bg-white border rounded p-4 text-sm flex flex-wrap items-center justify-between gap-2">
+    {score.total === null ? (
+      <span className="text-gray-600">
+        Score not computed: weights are incomplete.
+      </span>
+    ) : (
+      <span>
+        Score: <b>{score.total}</b> / {score.maxTotal}
+      </span>
+    )}
+    {score.provisional && (
+      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+        Provisional — evidence incomplete
+      </span>
+    )}
+    {!score.provisional && (
+      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+        All criteria supported
+      </span>
+    )}
+  </div>
+
+  {score.criteria.map((result) => (
+    <div
+      key={result.criterion.key}
+      className="bg-white border rounded p-4 space-y-2"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-medium">{result.criterion.label}</h3>
+          <p className="text-xs text-gray-500">
+            {result.criterion.measures}
+          </p>
+        </div>
+        <div className="text-right text-xs shrink-0">
+          <div>
+            Weight: <b>{result.criterion.weight ?? "not set"}</b>
+          </div>
+          <div>
+            Points: <b>{result.points ?? "n/a"}</b>
+          </div>
+          <div className={result.met ? "text-green-700" : "text-amber-700"}>
+            {result.met ? "Verified evidence" : "Unknown"}
+          </div>
+        </div>
+      </div>
+      <p className="text-sm">
+        <span className="text-gray-500">Reason: </span>
+        {result.reason}
+      </p>
+      {result.sources.length > 0 && (
+        <ul className="space-y-1 border-t pt-2">
+          {result.sources.map((source) => (
+            <SourceItem key={source.id} s={source} />
+          ))}
+        </ul>
+      )}
+    </div>
+  ))}
+</div>
+
+  );
+}
+''')
+write("app/(dashboard)/prospects/scoring-actions.ts", r'''
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { CRITERIA } from "@/lib/scoring/config";
+import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
+export type GenerateScoresResult = {
+  ok: boolean;
+  companiesScored?: number;
+  scoreRowsCreated?: number;
+  warning?: string;
+  error?: string;
+};
+type CompanyRow = { id: string; name: string };
+export async function generateQualificationScores(): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const totalWeight = CRITERIA.reduce(
+    (sum, criterion) => sum + (criterion.weight ?? 0),
+    0
+  );
+  if (
+    CRITERIA.some(
+      (criterion) =>
+        criterion.weight === null ||
+        !Number.isInteger(criterion.weight) ||
+        criterion.weight <= 0
+    ) ||
+    totalWeight !== 100
+  ) {
+    return {
+      ok: false,
+      error: "Scoring configuration is invalid. Criteria weights must total 100.",
+    };
+  }
+  const [
+    { data: companies, error: companyError },
+    { data: sources, error: sourceError },
+  ] = await Promise.all([
+    supabase.from("companies").select("id,name").order("name").limit(5000),
+    supabase
+      .from("company_sources")
+      .select(
+        "id,company_id,claim,claim_type,source_url,source_title,retrieved_at,evidence,verification_status,reviewed_by,reviewed_at"
+      )
+      .limit(10000),
+  ]);
+  if (companyError) return { ok: false, error: companyError.message };
+  if (sourceError) return { ok: false, error: sourceError.message };
+  const companyRows = (companies ?? []) as CompanyRow[];
+  if (companyRows.length === 0) {
+    return { ok: false, error: "There are no companies to score." };
+  }
+  const sourcesByCompany = new Map<string, SourceRow[]>();
+  for (const source of (sources ?? []) as (SourceRow & {
+    company_id: string;
+  })[]) {
+    const current = sourcesByCompany.get(source.company_id) ?? [];
+    current.push(source);
+    sourcesByCompany.set(source.company_id, current);
+  }
+  const batchTimestamp = new Date().toISOString();
+  const scoreRows = companyRows.flatMap((company) => {
+    const score = scoreCompany(sourcesByCompany.get(company.id) ?? []);
+    return score.criteria.map((result) => ({
+      company_id: company.id,
+      criterion: result.criterion.key,
+      weight: result.criterion.weight!,
+      points: result.points ?? 0,
+      reason: result.reason,
+      source_id:
+        result.points && result.sources.length > 0
+          ? result.sources[0].id
+          : null,
+      created_at: batchTimestamp,
+    }));
+  });
+  const { error: insertError } = await supabase
+    .from("qualification_scores")
+    .insert(scoreRows);
+  if (insertError) return { ok: false, error: insertError.message };
+  const audit = await writeAudit(supabase, {
+    actorId: user.id,
+    action: "qualification_scores_generated",
+    entityType: "qualification_scores",
+    detail: {
+      companies_scored: companyRows.length,
+      score_rows_created: scoreRows.length,
+      scoring_batch: batchTimestamp,
+      weights: Object.fromEntries(
+        CRITERIA.map((criterion) => [criterion.key, criterion.weight])
+      ),
+      evidence_rule: "Only human-verified sources earn positive points.",
+    },
+  });
+  revalidatePath("/prospects");
+  for (const company of companyRows) {
+    revalidatePath(/prospects/${company.id});
+  }
+  return {
+    ok: true,
+    companiesScored: companyRows.length,
+    scoreRowsCreated: scoreRows.length,
+    warning: audit.ok
+      ? undefined
+      : Scores were saved, but the audit entry failed: ${audit.error},
+  };
+}
+''')
+write("app/(dashboard)/prospects/page.tsx", r'''
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import ScoreGenerationButton from "./ScoreGenerationButton";
+type Row = {
+  id: string;
+  name: string;
+  website: string;
+  category: string;
+  qualification_status: string;
+  company_sources: { count: number }[];
+};
+type ScoreRow = {
+  company_id: string;
+  criterion: string;
+  weight: number;
+  points: number;
+  reason: string;
+  created_at: string;
+};
+type LatestScore = {
+  total: number;
+  criterionCount: number;
+  provisional: boolean;
+};
+export default async function ProspectsPage() {
+  const supabase = await createClient();
+  const [
+    { data, error },
+    pendingReview,
+    { data: scoreRows, error: scoreError },
+  ] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id,name,website,category,qualification_status,company_sources(count)")
+      .order("name"),
+    supabase
+      .from("company_sources")
+      .select("*", { count: "exact", head: true })
+      .eq("verification_status", "pending_review"),
+    supabase
+      .from("qualification_scores")
+      .select("company_id,criterion,weight,points,reason,created_at")
+      .order("created_at", { ascending: false })
+      .limit(25000),
+  ]);
+  const companies = (data ?? []) as Row[];
+  const pendingCount = pendingReview.count ?? 0;
+  const latestScores = new Map<string, LatestScore>();
+  const rows = (scoreRows ?? []) as ScoreRow[];
+  // Rows are newest first. Keep only the newest batch for each company.
+  for (const row of rows) {
+    const current = latestScores.get(row.company_id);
+    if (!current) {
+      latestScores.set(row.company_id, {
+        total: row.points,
+        criterionCount: 1,
+        provisional: row.reason.includes("remains unknown"),
+      });
+      continue;
+    }
+const latestTimestamp = rows.find(
+  (candidate) => candidate.company_id === row.company_id
+)?.created_at;
+
+if (row.created_at === latestTimestamp) {
+  current.total += row.points;
+  current.criterionCount += 1;
+  current.provisional ||= row.reason.includes("remains unknown");
+}
+
+  }
+  return (
+    
+      
+        
+          Prospects ({companies.length})
+        
+        
+    </div>
+  </div>
+
+  {error && <p className="text-red-600 text-sm">{error.message}</p>}
+  {scoreError && (
+    <p className="text-red-600 text-sm">
+      Could not load saved qualification scores: {scoreError.message}
+    </p>
+  )}
+
+  {companies.length === 0 ? (
+    <p className="text-gray-500">
+      No companies yet. Import your research CSV to begin.
+    </p>
+  ) : (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-slate-600">
+          <tr>
+            <th className="p-3">Company</th>
+            <th className="p-3">Website</th>
+            <th className="p-3">Category</th>
+            <th className="p-3">Sources</th>
+            <th className="p-3">Score</th>
+            <th className="p-3">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {companies.map((company) => {
+            const score = latestScores.get(company.id);
+            const hasCompleteBatch =
+              score?.criterionCount === 5;
+
+            return (
+              <tr key={company.id} className="border-t border-slate-100">
+                <td className="p-3 font-medium">
+                  <Link
+                    href={`/prospects/${company.id}`}
+                    className="text-blue-700 underline"
+                  >
+                    {company.name}
+                  </Link>
+                </td>
+                <td className="p-3">
+                  {company.website.replace("https://", "")}
+                </td>
+                <td className="p-3">{company.category}</td>
+                <td className="p-3">
+                  {company.company_sources[0]?.count ?? 0}
+                </td>
+                <td className="p-3">
+                  {score && hasCompleteBatch ? (
+                    <span className="font-semibold text-slate-800">
+                      {score.total}/100
+                      {score.provisional && (
+                        <span className="ml-2 text-xs font-medium text-amber-700">
+                          Provisional
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Not scored</span>
+                  )}
+                </td>
+                <td className="p-3">{company.qualification_status}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
+
+  );
+}
+''')
+write("tests/score.test.ts", r'''
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { scoreCompany, type SourceRow } from "../lib/scoring/score";
+import { CRITERIA } from "../lib/scoring/config";
+const src = (
+  claim_type: string,
+  claim: string,
+  verification_status = "pending_review"
+): SourceRow => ({
+  id: ${claim_type}-${claim},
+  claim,
+  claim_type,
+  source_url: "https://example.com/x",
+  source_title: "Example source",
+  retrieved_at: "2026-11-12",
+  evidence: "Fixture evidence text",
+  verification_status,
+  reviewed_by: verification_status === "verified" ? "reviewer-1" : null,
+  reviewed_at:
+    verification_status === "verified" ? "2026-11-13T10:00:00.000Z" : null,
+});
+const allVerified = [
+  src("us_ecommerce", "US shipping", "verified"),
+  src("size_fit", "About $4M revenue, 12 staff", "verified"),
+  src("contact", "Jane | Founder", "verified"),
+  src("growth_signal", "Hiring bookkeeper", "verified"),
+  src("pain_signal", "Multi-channel bookkeeping complexity", "verified"),
+];
+test("qualification weights match the approved 100-point rubric", () => {
+  assert.deepEqual(
+    CRITERIA.map((criterion) => criterion.weight),
+    [30, 25, 15, 15, 15]
+  );
+  assert.equal(
+    CRITERIA.reduce((sum, criterion) => sum + (criterion.weight ?? 0), 0),
+    100
+  );
+});
+test("all verified evidence earns the full 100 points", () => {
+  const result = scoreCompany(allVerified);
+  assert.equal(result.weightsComplete, true);
+  assert.equal(result.total, 100);
+  assert.equal(result.maxTotal, 100);
+  assert.equal(result.provisional, false);
+  assert.ok(result.criteria.every((criterion) => criterion.met));
+});
+test("pending evidence remains unknown and earns no points", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "US shipping", "pending_review"),
+  ]);
+  assert.equal(result.total, 0);
+  assert.equal(result.provisional, true);
+  assert.equal(result.criteria[0].met, false);
+  assert.equal(result.criteria[0].points, 0);
+  assert.equal(result.criteria[0].sources.length, 0);
+  assert.match(result.criteria[0].reason, /not been human-verified/);
+});
+test("rejected evidence cannot earn points", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "US shipping", "rejected"),
+  ]);
+  assert.equal(result.criteria[0].points, 0);
+  assert.equal(result.criteria[0].met, false);
+  assert.equal(result.criteria[0].sources.length, 0);
+});
+test("partial verified evidence produces a provisional partial score", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "US shipping", "verified"),
+  ]);
+  assert.equal(result.total, 30);
+  assert.equal(result.maxTotal, 100);
+  assert.equal(result.provisional, true);
+});
+test("only human-verified sources are attached to criterion results", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "Verified US shipping", "verified"),
+    src("us_ecommerce", "Pending US shipping", "pending_review"),
+  ]);
+  assert.equal(result.criteria[0].sources.length, 1);
+  assert.equal(result.criteria[0].sources[0].claim, "Verified US shipping");
+});
+test("only verified disqualifiers are surfaced and they earn no points", () => {
+  const result = scoreCompany([
+    src("disqualifier", "Verified opt-out", "verified"),
+    src("disqualifier", "Pending concern", "pending_review"),
+  ]);
+  assert.equal(result.disqualifiers.length, 1);
+  assert.equal(result.disqualifiers[0].claim, "Verified opt-out");
+  assert.equal(result.total, 0);
+});
+''')
+print("\nQualification-scoring files updated.")
+PY
+
+3. Install dependencies and validate
+Run these commands in order:
+npm ci
+
+If that completes successfully:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+Expected scoring tests: 7 passing.
+Do not push or deploy yet if any command fails. Send me the complete error output and I'll help fix it.
+4. Review the changes
+git status --short
+git diff --check
+git diff --stat
+
+You should see changes to:
+
+lib/scoring/config.ts
+lib/scoring/score.ts
+components/ScoreBreakdown.tsx
+app/(dashboard)/prospects/page.tsx
+app/(dashboard)/prospects/scoring-actions.ts
+tests/score.test.ts
+
+ScoreGenerationButton.tsx is already present in your uploaded snapshot and is reused.
+5. Test the feature in the application
+Start the app:
+npm run dev
+
+Then:
+
+Open Ledgerwise and sign in.
+Navigate to Prospects.
+Click Generate scores.
+Open a company profile.
+Inspect its score breakdown.
+Verify one source manually, regenerate scores, and check that the relevant criterion earns points.
+
+Expected initial result: since your imported 246 source records were awaiting human review, companies may initially show 0/100 — Provisional. That is intentional. Scores should increase only as you verify supporting evidence.
+6. After everything passes
+Send me the output of:
+git status --short
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+We'll review the results together before deciding whether to commit and push. No Supabase SQL changes are required for this scoring implementation.
+
+
+ChatGPT:
+1. Open your project terminal
+Run these commands from your Ledgerwise repository:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/"ChatGPT Uploads"/ledgerwise-prototype
+
+git status --short
+
+Check that you're in the correct repository and that you don't have uncommitted changes in the scoring files we're about to edit. If you do, stop and show me the output first.
+2. Apply the implementation
+Copy and paste this entire block into your terminal:
+
+python3 - <<'PY'
+from pathlib import Path
+
+def write(path, content):
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(content.strip() + "\n", encoding="utf-8")
+    print(f"Updated: {path}")
+write("lib/scoring/config.ts", r'''
+import type { ClaimType } from "../import-schema";
+export type Criterion = {
+  key: string;
+  label: string;
+  measures: string;
+  claimType: Exclude<ClaimType, "disqualifier" | "category">;
+  weight: number | null;
+};
+export const CRITERIA: Criterion[] = [
+  {
+    key: "us_ecommerce",
+    label: "US e-commerce presence",
+    measures: "Sells online to US customers (Shopify, Amazon, or own site)",
+    claimType: "us_ecommerce",
+    weight: 30,
+  },
+  {
+    key: "size_fit",
+    label: "Revenue and employee-size fit",
+    measures: "Sourced evidence of $1M-$10M yearly revenue and 5-50 employees",
+    claimType: "size_fit",
+    weight: 25,
+  },
+  {
+    key: "contact_target",
+    label: "Reachable decision-maker",
+    measures: "Publicly listed founder, COO, or whoever runs finance",
+    claimType: "contact",
+    weight: 15,
+  },
+  {
+    key: "growth_signal",
+    label: "Growth signal",
+    measures:
+      "Finance/accounting/ops hiring, recent funding, or a new channel (wholesale, Amazon, retail, new countries)",
+    claimType: "growth_signal",
+    weight: 15,
+  },
+  {
+    key: "pain_signal",
+    label: "Bookkeeping pain signal",
+    measures: "Sourced evidence of bookkeeping or finance-operations strain",
+    claimType: "pain_signal",
+    weight: 15,
+  },
+];
+''')
+write("lib/scoring/score.ts", r'''
+import { CRITERIA, type Criterion } from "./config";
+export type SourceRow = {
+  id: string;
+  claim: string;
+  claim_type: string;
+  source_url: string;
+  source_title: string;
+  retrieved_at: string;
+  evidence: string;
+  verification_status?: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+};
+export type CriterionResult = {
+  criterion: Criterion;
+  met: boolean;
+  points: number | null;
+  reason: string;
+  sources: SourceRow[];
+};
+export type ScoreResult = {
+  criteria: CriterionResult[];
+  disqualifiers: SourceRow[];
+  weightsComplete: boolean;
+  total: number | null;
+  maxTotal: number | null;
+  provisional: boolean;
+};
+function isHumanVerified(source: SourceRow): boolean {
+  return (
+    source.verification_status === "verified" &&
+    Boolean(source.reviewed_by) &&
+    Boolean(source.reviewed_at)
+  );
+}
+export function scoreCompany(
+  sources: SourceRow[],
+  criteria: Criterion[] = CRITERIA
+): ScoreResult {
+  const weightsComplete = criteria.every(
+    (criterion) =>
+      criterion.weight !== null &&
+      Number.isInteger(criterion.weight) &&
+      criterion.weight > 0
+  );
+  const verifiedSources = sources.filter(isHumanVerified);
+  const results: CriterionResult[] = criteria.map((criterion) => {
+    const matched = verifiedSources.filter(
+      (source) => source.claim_type === criterion.claimType
+    );
+    const met = matched.length > 0;
+    const points =
+      criterion.weight === null ? null : met ? criterion.weight : 0;
+const hasUnverifiedEvidence = sources.some(
+  (source) => source.claim_type === criterion.claimType
+);
+
+const reason = met
+  ? matched.map((source) => source.claim).join("; ")
+  : hasUnverifiedEvidence
+    ? "Evidence exists but has not been human-verified; this criterion remains unknown."
+    : "No human-verified evidence recorded; this criterion remains unknown.";
+
+return {
+  criterion,
+  met,
+  points,
+  reason,
+  sources: matched,
+};
+
+  });
+  const disqualifiers = verifiedSources.filter(
+    (source) => source.claim_type === "disqualifier"
+  );
+  const provisional = results.some((result) => !result.met);
+  return {
+    criteria: results,
+    disqualifiers,
+    weightsComplete,
+    total: weightsComplete
+      ? results.reduce((sum, result) => sum + (result.points ?? 0), 0)
+      : null,
+    maxTotal: weightsComplete
+      ? criteria.reduce((sum, criterion) => sum + (criterion.weight ?? 0), 0)
+      : null,
+    provisional,
+  };
+}
+''')
+write("components/ScoreBreakdown.tsx", r'''
+import type { ScoreResult, SourceRow } from "@/lib/scoring/score";
+import { isHttpUrl } from "@/lib/validation";
+import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
+export function SourceItem({ s }: { s: SourceRow }) {
+  return (
+    
+      {isHttpUrl(s.source_url) ? (
+        
+          {s.source_title}
+        
+      ) : (
+        
+          {s.source_title || "Invalid source URL"}
+        
+      )}{" "}
+      · retrieved {s.retrieved_at}
+      {s.verification_status && (
+        <>
+          {" "}
+          
+        </>
+      )}
+      Evidence: {s.evidence}
+    
+  );
+}
+export default function ScoreBreakdown({ score }: { score: ScoreResult }) {
+  return (
+    
+      {score.disqualifiers.length > 0 && (
+        
+          
+            Verified disqualifier evidence recorded. Review before any outreach.
+          
+          
+            {score.disqualifiers.map((source) => (
+              
+                {source.claim}
+                
+                  
+                
+              
+            ))}
+          
+        
+      )}
+  <div className="bg-white border rounded p-4 text-sm flex flex-wrap items-center justify-between gap-2">
+    {score.total === null ? (
+      <span className="text-gray-600">
+        Score not computed: weights are incomplete.
+      </span>
+    ) : (
+      <span>
+        Score: <b>{score.total}</b> / {score.maxTotal}
+      </span>
+    )}
+    {score.provisional && (
+      <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+        Provisional — evidence incomplete
+      </span>
+    )}
+    {!score.provisional && (
+      <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-800">
+        All criteria supported
+      </span>
+    )}
+  </div>
+
+  {score.criteria.map((result) => (
+    <div
+      key={result.criterion.key}
+      className="bg-white border rounded p-4 space-y-2"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-medium">{result.criterion.label}</h3>
+          <p className="text-xs text-gray-500">
+            {result.criterion.measures}
+          </p>
+        </div>
+        <div className="text-right text-xs shrink-0">
+          <div>
+            Weight: <b>{result.criterion.weight ?? "not set"}</b>
+          </div>
+          <div>
+            Points: <b>{result.points ?? "n/a"}</b>
+          </div>
+          <div className={result.met ? "text-green-700" : "text-amber-700"}>
+            {result.met ? "Verified evidence" : "Unknown"}
+          </div>
+        </div>
+      </div>
+      <p className="text-sm">
+        <span className="text-gray-500">Reason: </span>
+        {result.reason}
+      </p>
+      {result.sources.length > 0 && (
+        <ul className="space-y-1 border-t pt-2">
+          {result.sources.map((source) => (
+            <SourceItem key={source.id} s={source} />
+          ))}
+        </ul>
+      )}
+    </div>
+  ))}
+</div>
+
+  );
+}
+''')
+write("app/(dashboard)/prospects/scoring-actions.ts", r'''
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { CRITERIA } from "@/lib/scoring/config";
+import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
+export type GenerateScoresResult = {
+  ok: boolean;
+  companiesScored?: number;
+  scoreRowsCreated?: number;
+  warning?: string;
+  error?: string;
+};
+type CompanyRow = { id: string; name: string };
+export async function generateQualificationScores(): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const totalWeight = CRITERIA.reduce(
+    (sum, criterion) => sum + (criterion.weight ?? 0),
+    0
+  );
+  if (
+    CRITERIA.some(
+      (criterion) =>
+        criterion.weight === null ||
+        !Number.isInteger(criterion.weight) ||
+        criterion.weight <= 0
+    ) ||
+    totalWeight !== 100
+  ) {
+    return {
+      ok: false,
+      error: "Scoring configuration is invalid. Criteria weights must total 100.",
+    };
+  }
+  const [
+    { data: companies, error: companyError },
+    { data: sources, error: sourceError },
+  ] = await Promise.all([
+    supabase.from("companies").select("id,name").order("name").limit(5000),
+    supabase
+      .from("company_sources")
+      .select(
+        "id,company_id,claim,claim_type,source_url,source_title,retrieved_at,evidence,verification_status,reviewed_by,reviewed_at"
+      )
+      .limit(10000),
+  ]);
+  if (companyError) return { ok: false, error: companyError.message };
+  if (sourceError) return { ok: false, error: sourceError.message };
+  const companyRows = (companies ?? []) as CompanyRow[];
+  if (companyRows.length === 0) {
+    return { ok: false, error: "There are no companies to score." };
+  }
+  const sourcesByCompany = new Map<string, SourceRow[]>();
+  for (const source of (sources ?? []) as (SourceRow & {
+    company_id: string;
+  })[]) {
+    const current = sourcesByCompany.get(source.company_id) ?? [];
+    current.push(source);
+    sourcesByCompany.set(source.company_id, current);
+  }
+  const batchTimestamp = new Date().toISOString();
+  const scoreRows = companyRows.flatMap((company) => {
+    const score = scoreCompany(sourcesByCompany.get(company.id) ?? []);
+    return score.criteria.map((result) => ({
+      company_id: company.id,
+      criterion: result.criterion.key,
+      weight: result.criterion.weight!,
+      points: result.points ?? 0,
+      reason: result.reason,
+      source_id:
+        result.points && result.sources.length > 0
+          ? result.sources[0].id
+          : null,
+      created_at: batchTimestamp,
+    }));
+  });
+  const { error: insertError } = await supabase
+    .from("qualification_scores")
+    .insert(scoreRows);
+  if (insertError) return { ok: false, error: insertError.message };
+  const audit = await writeAudit(supabase, {
+    actorId: user.id,
+    action: "qualification_scores_generated",
+    entityType: "qualification_scores",
+    detail: {
+      companies_scored: companyRows.length,
+      score_rows_created: scoreRows.length,
+      scoring_batch: batchTimestamp,
+      weights: Object.fromEntries(
+        CRITERIA.map((criterion) => [criterion.key, criterion.weight])
+      ),
+      evidence_rule: "Only human-verified sources earn positive points.",
+    },
+  });
+  revalidatePath("/prospects");
+  for (const company of companyRows) {
+    revalidatePath(/prospects/${company.id});
+  }
+  return {
+    ok: true,
+    companiesScored: companyRows.length,
+    scoreRowsCreated: scoreRows.length,
+    warning: audit.ok
+      ? undefined
+      : Scores were saved, but the audit entry failed: ${audit.error},
+  };
+}
+''')
+write("app/(dashboard)/prospects/page.tsx", r'''
+import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
+import ScoreGenerationButton from "./ScoreGenerationButton";
+type Row = {
+  id: string;
+  name: string;
+  website: string;
+  category: string;
+  qualification_status: string;
+  company_sources: { count: number }[];
+};
+type ScoreRow = {
+  company_id: string;
+  criterion: string;
+  weight: number;
+  points: number;
+  reason: string;
+  created_at: string;
+};
+type LatestScore = {
+  total: number;
+  criterionCount: number;
+  provisional: boolean;
+};
+export default async function ProspectsPage() {
+  const supabase = await createClient();
+  const [
+    { data, error },
+    pendingReview,
+    { data: scoreRows, error: scoreError },
+  ] = await Promise.all([
+    supabase
+      .from("companies")
+      .select("id,name,website,category,qualification_status,company_sources(count)")
+      .order("name"),
+    supabase
+      .from("company_sources")
+      .select("*", { count: "exact", head: true })
+      .eq("verification_status", "pending_review"),
+    supabase
+      .from("qualification_scores")
+      .select("company_id,criterion,weight,points,reason,created_at")
+      .order("created_at", { ascending: false })
+      .limit(25000),
+  ]);
+  const companies = (data ?? []) as Row[];
+  const pendingCount = pendingReview.count ?? 0;
+  const latestScores = new Map<string, LatestScore>();
+  const rows = (scoreRows ?? []) as ScoreRow[];
+  // Rows are newest first. Keep only the newest batch for each company.
+  for (const row of rows) {
+    const current = latestScores.get(row.company_id);
+    if (!current) {
+      latestScores.set(row.company_id, {
+        total: row.points,
+        criterionCount: 1,
+        provisional: row.reason.includes("remains unknown"),
+      });
+      continue;
+    }
+const latestTimestamp = rows.find(
+  (candidate) => candidate.company_id === row.company_id
+)?.created_at;
+
+if (row.created_at === latestTimestamp) {
+  current.total += row.points;
+  current.criterionCount += 1;
+  current.provisional ||= row.reason.includes("remains unknown");
+}
+
+  }
+  return (
+    
+      
+        
+          Prospects ({companies.length})
+        
+        
+    </div>
+  </div>
+
+  {error && <p className="text-red-600 text-sm">{error.message}</p>}
+  {scoreError && (
+    <p className="text-red-600 text-sm">
+      Could not load saved qualification scores: {scoreError.message}
+    </p>
+  )}
+
+  {companies.length === 0 ? (
+    <p className="text-gray-500">
+      No companies yet. Import your research CSV to begin.
+    </p>
+  ) : (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-slate-600">
+          <tr>
+            <th className="p-3">Company</th>
+            <th className="p-3">Website</th>
+            <th className="p-3">Category</th>
+            <th className="p-3">Sources</th>
+            <th className="p-3">Score</th>
+            <th className="p-3">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {companies.map((company) => {
+            const score = latestScores.get(company.id);
+            const hasCompleteBatch =
+              score?.criterionCount === 5;
+
+            return (
+              <tr key={company.id} className="border-t border-slate-100">
+                <td className="p-3 font-medium">
+                  <Link
+                    href={`/prospects/${company.id}`}
+                    className="text-blue-700 underline"
+                  >
+                    {company.name}
+                  </Link>
+                </td>
+                <td className="p-3">
+                  {company.website.replace("https://", "")}
+                </td>
+                <td className="p-3">{company.category}</td>
+                <td className="p-3">
+                  {company.company_sources[0]?.count ?? 0}
+                </td>
+                <td className="p-3">
+                  {score && hasCompleteBatch ? (
+                    <span className="font-semibold text-slate-800">
+                      {score.total}/100
+                      {score.provisional && (
+                        <span className="ml-2 text-xs font-medium text-amber-700">
+                          Provisional
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Not scored</span>
+                  )}
+                </td>
+                <td className="p-3">{company.qualification_status}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</div>
+
+  );
+}
+''')
+write("tests/score.test.ts", r'''
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { scoreCompany, type SourceRow } from "../lib/scoring/score";
+import { CRITERIA } from "../lib/scoring/config";
+const src = (
+  claim_type: string,
+  claim: string,
+  verification_status = "pending_review"
+): SourceRow => ({
+  id: ${claim_type}-${claim},
+  claim,
+  claim_type,
+  source_url: "https://example.com/x",
+  source_title: "Example source",
+  retrieved_at: "2026-11-12",
+  evidence: "Fixture evidence text",
+  verification_status,
+  reviewed_by: verification_status === "verified" ? "reviewer-1" : null,
+  reviewed_at:
+    verification_status === "verified" ? "2026-11-13T10:00:00.000Z" : null,
+});
+const allVerified = [
+  src("us_ecommerce", "US shipping", "verified"),
+  src("size_fit", "About $4M revenue, 12 staff", "verified"),
+  src("contact", "Jane | Founder", "verified"),
+  src("growth_signal", "Hiring bookkeeper", "verified"),
+  src("pain_signal", "Multi-channel bookkeeping complexity", "verified"),
+];
+test("qualification weights match the approved 100-point rubric", () => {
+  assert.deepEqual(
+    CRITERIA.map((criterion) => criterion.weight),
+    [30, 25, 15, 15, 15]
+  );
+  assert.equal(
+    CRITERIA.reduce((sum, criterion) => sum + (criterion.weight ?? 0), 0),
+    100
+  );
+});
+test("all verified evidence earns the full 100 points", () => {
+  const result = scoreCompany(allVerified);
+  assert.equal(result.weightsComplete, true);
+  assert.equal(result.total, 100);
+  assert.equal(result.maxTotal, 100);
+  assert.equal(result.provisional, false);
+  assert.ok(result.criteria.every((criterion) => criterion.met));
+});
+test("pending evidence remains unknown and earns no points", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "US shipping", "pending_review"),
+  ]);
+  assert.equal(result.total, 0);
+  assert.equal(result.provisional, true);
+  assert.equal(result.criteria[0].met, false);
+  assert.equal(result.criteria[0].points, 0);
+  assert.equal(result.criteria[0].sources.length, 0);
+  assert.match(result.criteria[0].reason, /not been human-verified/);
+});
+test("rejected evidence cannot earn points", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "US shipping", "rejected"),
+  ]);
+  assert.equal(result.criteria[0].points, 0);
+  assert.equal(result.criteria[0].met, false);
+  assert.equal(result.criteria[0].sources.length, 0);
+});
+test("partial verified evidence produces a provisional partial score", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "US shipping", "verified"),
+  ]);
+  assert.equal(result.total, 30);
+  assert.equal(result.maxTotal, 100);
+  assert.equal(result.provisional, true);
+});
+test("only human-verified sources are attached to criterion results", () => {
+  const result = scoreCompany([
+    src("us_ecommerce", "Verified US shipping", "verified"),
+    src("us_ecommerce", "Pending US shipping", "pending_review"),
+  ]);
+  assert.equal(result.criteria[0].sources.length, 1);
+  assert.equal(result.criteria[0].sources[0].claim, "Verified US shipping");
+});
+test("only verified disqualifiers are surfaced and they earn no points", () => {
+  const result = scoreCompany([
+    src("disqualifier", "Verified opt-out", "verified"),
+    src("disqualifier", "Pending concern", "pending_review"),
+  ]);
+  assert.equal(result.disqualifiers.length, 1);
+  assert.equal(result.disqualifiers[0].claim, "Verified opt-out");
+  assert.equal(result.total, 0);
+});
+''')
+print("\nQualification-scoring files updated.")
+PY
+
+3. Install dependencies and validate
+Run these commands in order:
+npm ci
+
+If that completes successfully:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+Expected scoring tests: 7 passing.
+Do not push or deploy yet if any command fails. Send me the complete error output and I'll help fix it.
+4. Review the changes
+git status --short
+git diff --check
+git diff --stat
+
+You should see changes to:
+
+lib/scoring/config.ts
+lib/scoring/score.ts
+components/ScoreBreakdown.tsx
+app/(dashboard)/prospects/page.tsx
+app/(dashboard)/prospects/scoring-actions.ts
+tests/score.test.ts
+
+ScoreGenerationButton.tsx is already present in your uploaded snapshot and is reused.
+5. Test the feature in the application
+Start the app:
+npm run dev
+
+Then:
+
+Open Ledgerwise and sign in.
+Navigate to Prospects.
+Click Generate scores.
+Open a company profile.
+Inspect its score breakdown.
+Verify one source manually, regenerate scores, and check that the relevant criterion earns points.
+
+Expected initial result: since your imported 246 source records were awaiting human review, companies may initially show 0/100 — Provisional. That is intentional. Scores should increase only as you verify supporting evidence.
+6. After everything passes
+Send me the output of:
+git status --short
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+We'll review the results together before deciding whether to commit and push. No Supabase SQL changes are required for this scoring implementation.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ >....
+test("only verified disqualifiers are surfaced and they earn no points", () => {
+  const result = scoreCompany([
+    src("disqualifier", "Verified opt-out", "verified"),
+    src("disqualifier", "Pending concern", "pending_review"),
+  ]);
+  assert.equal(result.disqualifiers.length, 1);
+  assert.equal(result.disqualifiers[0].claim, "Verified opt-out");
+  assert.equal(result.total, 0);
+});
+''')
+print("\nQualification-scoring files updated.")
+PY
+Updated: lib/scoring/config.ts
+Updated: lib/scoring/score.ts
+Updated: components/ScoreBreakdown.tsx
+Updated: app/(dashboard)/prospects/scoring-actions.ts
+Updated: app/(dashboard)/prospects/page.tsx
+Updated: tests/score.test.ts
+Qualification-scoring files updated.
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm ci
+npm warn deprecated eslint@9.39.5: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+added 390 packages, and audited 397 packages in 8s
+151 packages are looking for funding
+  run npm fund for details
+7 moderate severity vulnerabilities
+To address all issues, run:
+  npm audit fix
+Run npm audit for details.
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (69.53574ms)
+✔ falls through to the next provider on a 429 (2.002634ms)
+✔ a rate-limited model is skipped on the next call (1.481013ms)
+✔ a model is retried after its cooldown expires (2.326199ms)
+✔ a Retry-After header sets the cooldown (3.142572ms)
+✔ repeated 429s escalate the cooldown (1.640162ms)
+✔ a success resets the escalation (1.509341ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.632335ms)
+✔ truncated output tries the next model without cooling the first (1.432037ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (1.025414ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.470631ms)
+✔ oversized input is never sent to Groq (0.596096ms)
+✔ when every model is cooling down it throws without any network call (0.718091ms)
+✔ nothing configured throws and makes no network call (0.316126ms)
+✔ consecutive calls to one provider are spaced out (0.613289ms)
+✔ extractJson strips code fences (2.314789ms)
+✔ extractJson throws on garbage (0.368187ms)
+✔ a valid 30-minute business-hours slot passes (44.941071ms)
+✔ slot durations are limited to 15–120 minutes (43.32675ms)
+✔ slots must fit inside 9:00–17:00 local time (37.131248ms)
+✔ slots must be in the future and use a valid timezone (13.985204ms)
+✔ zoned conversion handles standard and daylight time (15.853491ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.44746ms)
+✔ booking input requires a name, a valid email, and a timezone (0.653694ms)
+✔ slot range formatting includes the timezone (0.861331ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (15.726149ms)
+✔ zoned conversion rejects malformed and impossible local dates (0.992313ms)
+✔ default slot advances by calendar day in New York timezone (2.563483ms)
+✔ opt-out requests suppress and stop all replies (2.414687ms)
+✔ opt-out wins over a pricing question in the same message (0.261812ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.631376ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.856718ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.473517ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.229373ms)
+✔ bot disclosure is explicit and safe (3.101739ms)
+✔ general fallback is safe and contains no invented facts (2.585056ms)
+✔ reply validation blocks pricing and human claims (0.866775ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.731673ms)
+✔ parseReply accepts JSON and rejects empty output (4.139621ms)
+✔ selectEmailSources keeps only human-verified, usable sources (6.204856ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.530788ms)
+✔ the fallback draft uses verified claims and passes guardrails (2.040897ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (0.966021ms)
+✔ draft validation rejects placeholders and unsafe content (0.340947ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.040137ms)
+✔ the prompt carries only supplied facts and the revision note (0.689242ms)
+✔ contact first name handles unknown contacts (3.069196ms)
+✔ Google status never claims operational without explicit verification (2.014122ms)
+✔ sync is a no-op unless explicitly enabled (0.320945ms)
+✔ access token exchange sends a refresh-token grant (63.700935ms)
+✔ sync creates a Google event and returns its id (3.232941ms)
+✔ Google HTTP failures are reported without claiming success (1.285551ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.212515ms)
+✔ events can be updated with PATCH using the new slot details (1.713408ms)
+✔ deletion treats an already-removed event as success (1.082922ms)
+✔ update and delete are no-ops unless sync is enabled (0.535074ms)
+✔ claim types are exactly the closed set of seven (4.125892ms)
+✔ accepts us_ecommerce (1.198219ms)
+✔ accepts category (0.496663ms)
+✔ accepts size_fit (0.197283ms)
+✔ accepts growth_signal (0.163382ms)
+✔ accepts pain_signal (0.162373ms)
+✔ accepts disqualifier (0.302191ms)
+✔ accepts contact (0.236147ms)
+✔ rejects claim_type "size" (0.528462ms)
+✔ rejects claim_type "other" (0.727787ms)
+✔ rejects claim_type "pain_sigal" (0.206238ms)
+✔ rejects claim_type "" (0.146511ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.199718ms)
+✔ disqualifier rows still need a source (0.184858ms)
+✔ retrieved_at must be a real calendar date (0.227123ms)
+✔ contact must be Name | Role (0.171541ms)
+✔ extracts claims and attaches the actual fetched page URL (2.695389ms)
+✔ ignores any source URL supplied by the AI (0.605633ms)
+✔ returns an empty array when the AI finds no supported claims (2.558862ms)
+✔ rejects malformed JSON (0.806773ms)
+✔ rejects a response without a claims array (1.297492ms)
+✔ rejects malformed claim objects (0.353615ms)
+✔ splits long pages into overlapping chunks (0.441736ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.466893ms)
+✔ CSV output uses the exact importer columns and preserves values (12.673753ms)
+✔ CSV output includes headers when no claims were accepted (0.446942ms)
+✔ report includes totals, sources, rejected claims, and errors (0.774754ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.186691ms)
+✔ uses a fallback title when Reader provides no title (1.959697ms)
+✔ rejects an empty Reader response (0.74642ms)
+✔ discovers same-site links and prioritizes useful pages (3.130548ms)
+✔ ignores duplicate links and removes tracking query strings (0.293864ms)
+✔ rejects non-HTTP and private/local URLs (0.314181ms)
+✔ fetches through Jina Reader and returns the original page URL (75.029522ms)
+✔ reports Reader HTTP errors clearly (0.717514ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.676116ms)
+✔ rejects local hostnames with a trailing dot (0.710611ms)
+✔ parses company names, homepages, and optional same-site pages (10.253178ms)
+✔ rejects invalid URLs and extra pages from another website (0.892122ms)
+✔ rejects empty research input (0.198912ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (2.781726ms)
+✔ continues to the next company when one homepage cannot be fetched (1.298522ms)
+✔ records an extraction failure without losing the company report (0.486512ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.606211ms)
+✔ runResearch rejects extra pages from another hostname (0.542432ms)
+✔ accepts a claim when its evidence appears on the fetched page (2.877084ms)
+✔ matches evidence despite case and whitespace differences (0.336252ms)
+✔ rejects evidence that does not appear on the page (0.547712ms)
+✔ rejects unsupported claim types (0.221885ms)
+✔ rejects a source URL that was not fetched (0.252717ms)
+✔ rejects evidence outside the permitted length (0.222721ms)
+✔ accepts a contact only when name and role appear in the evidence (0.654368ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.27261ms)
+✔ rejects a contact email that is not on the page (0.601408ms)
+✔ rejects duplicate claims (0.737424ms)
+✔ accepts no more than three claims of the same type (0.441116ms)
+✔ qualification weights match the approved 100-point rubric (3.853031ms)
+✔ all verified evidence earns the full 100 points (0.761312ms)
+✔ pending evidence remains unknown and earns no points (0.50784ms)
+✔ rejected evidence cannot earn points (0.195285ms)
+✔ partial verified evidence produces a provisional partial score (0.29975ms)
+✔ only human-verified sources are attached to criterion results (0.25825ms)
+✔ only verified disqualifiers are surfaced and they earn no points (0.338319ms)
+✔ newly imported sources are pending review and are not human-verified (1.323312ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.26494ms)
+✔ rejection requires a non-empty note (0.46042ms)
+✔ status transition guards (0.199199ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.916578ms)
+✔ structural validation does not imply human verification (0.270875ms)
+✔ a recipient email needs a verified contact source containing it (0.997673ms)
+✔ status labels are explicit (0.219905ms)
+✔ email normalization trims and lowercases (1.440083ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.337774ms)
+✔ trimText enforces required text and maximum length (0.220652ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1459.073094
+app/(dashboard)/prospects/page.tsx:3:35 - error TS2307: Cannot find module './ScoreGenerationButton' or its corresponding type declarations.
+3 import ScoreGenerationButton from "./ScoreGenerationButton";
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~
+Found 1 error in app/(dashboard)/prospects/page.tsx:3
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+
+ledgerwise-prototype@0.1.0 build
+next build
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Environments: .env.local
+✓ Running next.config.ts took 23ms
+
+Experiments (use with caution):
+· serverActions
+Creating an optimized production build ...
+
+
+
+Build error occurred
+Error: Turbopack build failed with 1 error:
+./app/(dashboard)/prospects/page.tsx:3:1
+Error: Module not found: Can't resolve './ScoreGenerationButton'
+  1 | import Link from "next/link";
+  2 | import { createClient } from "@/lib/supabase/server";
+3 | import ScoreGenerationButton from "./ScoreGenerationButton";
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  4 |
+  5 | type Row = {
+  6 |   id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+at <unknown> (https://nextjs.org/docs/messages/module-not-found)
+
+
+
+ChatGPT:
+Good news: all 130 tests passed, and ESLint passed. The TypeScript and production build failures have the same cause: ScoreGenerationButton.tsx is missing from your actual project directory.
+Let's fix that directly. You do not need to reinstall dependencies or change Supabase.
+
+
+ChatGPT:
+Good news: all 130 tests passed, and ESLint passed. The TypeScript and production build failures have the same cause: ScoreGenerationButton.tsx is missing from your actual project directory.
+Let's fix that directly. You do not need to reinstall dependencies or change Supabase.
+1. Create the missing component
+Copy and paste this into your terminal:
+
+cat > "app/(dashboard)/prospects/ScoreGenerationButton.tsx" <<'EOF'
+"use client";
+
+import { useState, useTransition } from "react";
+import { generateQualificationScores } from "./scoring-actions";
+export default function ScoreGenerationButton() {
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState("");
+  function handleGenerate() {
+    setMessage("");
+startTransition(async () => {
+  try {
+    const result = await generateQualificationScores();
+
+    if (!result.ok) {
+      setMessage(result.error ?? "Could not generate scores.");
+      return;
+    }
+
+    setMessage(
+      `Successfully scored ${result.companiesScored} companies (${result.scoreRowsCreated} criterion records).`
+    );
+
+    if (result.warning) {
+      setMessage((previous) => `${previous} Warning: ${result.warning}`);
+    }
+  } catch (error) {
+    setMessage(
+      error instanceof Error
+        ? error.message
+        : "An unexpected error occurred."
+    );
+  }
+});
+
+  }
+  return (
+    
+      
+        {pending ? "Generating scores..." : "Generate scores"}
+      
+  {message && (
+    <p
+      role="status"
+      aria-live="polite"
+      className="max-w-sm text-xs text-slate-600"
+    >
+      {message}
+    </p>
+  )}
+</div>
+
+  );
+}
+EOF
+
+2. Run the checks again
+npx tsc --noEmit
+npm run lint
+npm test
+npm run build
+
+3. Send me the results
+If everything passes, we'll move to testing the scoring feature against your actual Supabase data.
+One additional note: npm reported seven moderate vulnerabilities. Don't run npm audit fix yet; we'll inspect those separately rather than risk introducing dependency-breaking changes.
+Already passed: 130 tests Already passed: ESLint
+
+
+ChatGPT:
+1. Create the missing component
+Copy and paste this into your terminal:
+
+cat > "app/(dashboard)/prospects/ScoreGenerationButton.tsx" <<'EOF'
+"use client";
+
+import { useState, useTransition } from "react";
+import { generateQualificationScores } from "./scoring-actions";
+export default function ScoreGenerationButton() {
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState("");
+  function handleGenerate() {
+    setMessage("");
+startTransition(async () => {
+  try {
+    const result = await generateQualificationScores();
+
+    if (!result.ok) {
+      setMessage(result.error ?? "Could not generate scores.");
+      return;
+    }
+
+    setMessage(
+      `Successfully scored ${result.companiesScored} companies (${result.scoreRowsCreated} criterion records).`
+    );
+
+    if (result.warning) {
+      setMessage((previous) => `${previous} Warning: ${result.warning}`);
+    }
+  } catch (error) {
+    setMessage(
+      error instanceof Error
+        ? error.message
+        : "An unexpected error occurred."
+    );
+  }
+});
+
+  }
+  return (
+    
+      
+        {pending ? "Generating scores..." : "Generate scores"}
+      
+  {message && (
+    <p
+      role="status"
+      aria-live="polite"
+      className="max-w-sm text-xs text-slate-600"
+    >
+      {message}
+    </p>
+  )}
+</div>
+
+  );
+}
+EOF
+
+2. Run the checks again
+npx tsc --noEmit
+npm run lint
+npm test
+npm run build
+
+3. Send me the results
+If everything passes, we'll move to testing the scoring feature against your actual Supabase data.
+One additional note: npm reported seven moderate vulnerabilities. Don't run npm audit fix yet; we'll inspect those separately rather than risk introducing dependency-breaking changes.
+Already passed: 130 tests Already passed: ESLint
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npx tsc --noEmit
+npm run lint
+npm test
+npm run build
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (53.00015ms)
+✔ falls through to the next provider on a 429 (1.293029ms)
+✔ a rate-limited model is skipped on the next call (0.965506ms)
+✔ a model is retried after its cooldown expires (1.528581ms)
+✔ a Retry-After header sets the cooldown (2.168516ms)
+✔ repeated 429s escalate the cooldown (1.148492ms)
+✔ a success resets the escalation (1.406658ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.630956ms)
+✔ truncated output tries the next model without cooling the first (1.61179ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (0.808266ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.370848ms)
+✔ oversized input is never sent to Groq (0.42375ms)
+✔ when every model is cooling down it throws without any network call (0.505087ms)
+✔ nothing configured throws and makes no network call (0.21115ms)
+✔ consecutive calls to one provider are spaced out (0.410376ms)
+✔ extractJson strips code fences (1.59951ms)
+✔ extractJson throws on garbage (0.252821ms)
+✔ a valid 30-minute business-hours slot passes (39.074747ms)
+✔ slot durations are limited to 15–120 minutes (54.89662ms)
+✔ slots must fit inside 9:00–17:00 local time (49.397498ms)
+✔ slots must be in the future and use a valid timezone (16.987715ms)
+✔ zoned conversion handles standard and daylight time (16.151127ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.516764ms)
+✔ booking input requires a name, a valid email, and a timezone (0.700346ms)
+✔ slot range formatting includes the timezone (0.864367ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (16.546025ms)
+✔ zoned conversion rejects malformed and impossible local dates (1.080793ms)
+✔ default slot advances by calendar day in New York timezone (2.655819ms)
+✔ opt-out requests suppress and stop all replies (2.416368ms)
+✔ opt-out wins over a pricing question in the same message (0.241876ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.588844ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.607766ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.679614ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.32741ms)
+✔ bot disclosure is explicit and safe (3.128748ms)
+✔ general fallback is safe and contains no invented facts (2.555934ms)
+✔ reply validation blocks pricing and human claims (0.894469ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.718813ms)
+✔ parseReply accepts JSON and rejects empty output (3.093484ms)
+✔ selectEmailSources keeps only human-verified, usable sources (4.311732ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.492294ms)
+✔ the fallback draft uses verified claims and passes guardrails (3.057683ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (0.943627ms)
+✔ draft validation rejects placeholders and unsafe content (0.456628ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (0.992932ms)
+✔ the prompt carries only supplied facts and the revision note (0.706406ms)
+✔ contact first name handles unknown contacts (0.177153ms)
+✔ Google status never claims operational without explicit verification (2.387217ms)
+✔ sync is a no-op unless explicitly enabled (0.53178ms)
+✔ access token exchange sends a refresh-token grant (70.77483ms)
+✔ sync creates a Google event and returns its id (3.327995ms)
+✔ Google HTTP failures are reported without claiming success (1.025543ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.251055ms)
+✔ events can be updated with PATCH using the new slot details (1.508762ms)
+✔ deletion treats an already-removed event as success (1.09073ms)
+✔ update and delete are no-ops unless sync is enabled (0.511074ms)
+✔ claim types are exactly the closed set of seven (2.7997ms)
+✔ accepts us_ecommerce (0.851619ms)
+✔ accepts category (0.375129ms)
+✔ accepts size_fit (0.144411ms)
+✔ accepts growth_signal (0.13137ms)
+✔ accepts pain_signal (0.127057ms)
+✔ accepts disqualifier (0.284141ms)
+✔ accepts contact (0.237283ms)
+✔ rejects claim_type "size" (0.645868ms)
+✔ rejects claim_type "other" (0.644453ms)
+✔ rejects claim_type "pain_sigal" (0.174791ms)
+✔ rejects claim_type "" (0.110833ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.181714ms)
+✔ disqualifier rows still need a source (0.166715ms)
+✔ retrieved_at must be a real calendar date (0.19285ms)
+✔ contact must be Name | Role (0.147277ms)
+✔ extracts claims and attaches the actual fetched page URL (2.665995ms)
+✔ ignores any source URL supplied by the AI (0.46872ms)
+✔ returns an empty array when the AI finds no supported claims (2.150633ms)
+✔ rejects malformed JSON (0.638609ms)
+✔ rejects a response without a claims array (0.810828ms)
+✔ rejects malformed claim objects (0.353789ms)
+✔ splits long pages into overlapping chunks (0.428794ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.546963ms)
+✔ CSV output uses the exact importer columns and preserves values (8.712598ms)
+✔ CSV output includes headers when no claims were accepted (0.552242ms)
+✔ report includes totals, sources, rejected claims, and errors (0.799646ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.984815ms)
+✔ uses a fallback title when Reader provides no title (2.336385ms)
+✔ rejects an empty Reader response (0.771154ms)
+✔ discovers same-site links and prioritizes useful pages (3.571866ms)
+✔ ignores duplicate links and removes tracking query strings (0.322735ms)
+✔ rejects non-HTTP and private/local URLs (0.327409ms)
+✔ fetches through Jina Reader and returns the original page URL (73.284244ms)
+✔ reports Reader HTTP errors clearly (0.75695ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.705771ms)
+✔ rejects local hostnames with a trailing dot (0.851243ms)
+✔ parses company names, homepages, and optional same-site pages (11.254654ms)
+✔ rejects invalid URLs and extra pages from another website (1.007074ms)
+✔ rejects empty research input (0.226127ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (2.691191ms)
+✔ continues to the next company when one homepage cannot be fetched (1.520872ms)
+✔ records an extraction failure without losing the company report (0.492388ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.536577ms)
+✔ runResearch rejects extra pages from another hostname (0.527332ms)
+✔ accepts a claim when its evidence appears on the fetched page (9.048522ms)
+✔ matches evidence despite case and whitespace differences (0.421183ms)
+✔ rejects evidence that does not appear on the page (3.376145ms)
+✔ rejects unsupported claim types (0.403571ms)
+✔ rejects a source URL that was not fetched (0.299415ms)
+✔ rejects evidence outside the permitted length (0.248384ms)
+✔ accepts a contact only when name and role appear in the evidence (0.690019ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.278219ms)
+✔ rejects a contact email that is not on the page (0.613141ms)
+✔ rejects duplicate claims (1.058989ms)
+✔ accepts no more than three claims of the same type (0.680653ms)
+✔ qualification weights match the approved 100-point rubric (4.263078ms)
+✔ all verified evidence earns the full 100 points (0.749085ms)
+✔ pending evidence remains unknown and earns no points (0.700854ms)
+✔ rejected evidence cannot earn points (0.329052ms)
+✔ partial verified evidence produces a provisional partial score (0.296438ms)
+✔ only human-verified sources are attached to criterion results (0.18882ms)
+✔ only verified disqualifiers are surfaced and they earn no points (0.321973ms)
+✔ newly imported sources are pending review and are not human-verified (2.209684ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.387958ms)
+✔ rejection requires a non-empty note (0.597794ms)
+✔ status transition guards (0.192665ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.460806ms)
+✔ structural validation does not imply human verification (0.134371ms)
+✔ a recipient email needs a verified contact source containing it (0.471928ms)
+✔ status labels are explicit (0.137577ms)
+✔ email normalization trims and lowercases (1.211491ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.294703ms)
+✔ trimText enforces required text and maximum length (0.178787ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1417.225073
+
+ledgerwise-prototype@0.1.0 build
+next build
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Environments: .env.local
+✓ Running next.config.ts took 25ms
+
+Experiments (use with caution):
+· serverActions
+Creating an optimized production build ...
+
+
+✓ Compiled successfully in 1532ms
+  Running TypeScript ...
+  Finished TypeScript in 4.1s ...
+  Collecting page data using 7 workers ...
+✓ Collecting page data using 7 workers in 991ms
+  Generating static pages using 7 workers (0/12) ...
+  Generating static pages using 7 workers (3/12)
+  Generating static pages using 7 workers (6/12)
+  Generating static pages using 7 workers (9/12)
+✓ Generating static pages using 7 workers (12/12) in 353ms
+  Finalizing page optimization ...
+✓ Finalizing page optimization in 4ms
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /auth/signout
+├ ƒ /calendar
+├ ƒ /conversations
+├ ƒ /conversations/[id]
+├ ƒ /emails
+├ ƒ /emails/[id]
+├ ○ /login
+├ ƒ /prospects
+├ ƒ /prospects/[id]
+├ ƒ /prospects/import
+└ ƒ /prospects/review
+ƒ Proxy (Middleware)
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+ChatGPT:
+All checks passed Excellent! Your qualification-scoring implementation now compiles successfully.
+Here's the validation result:
+
+
+
+Check
+Result
+
+
+
+TypeScript (npx tsc --noEmit)
+Passed
+
+
+ESLint
+Passed
+
+
+Automated tests
+130/130 passed
+
+
+Production build
+Passed
+
+
+Your Next.js production build also generated all 12 static pages successfully.
+Next: Test scoring against Supabase
+We need to verify actual database persistence, not just code correctness.
+1. Start the application:
+npm run dev
+
+2. In Ledgerwise:
+
+Sign in.
+Open Prospects.
+Click Generate scores.
+Wait for the success message.
+Open a company profile and inspect its score breakdown.
+
+3. Verify the database
+Open Supabase → SQL Editor and execute:
+SELECT
+    COUNT(*) AS total_score_records,
+    COUNT(DISTINCT company_id) AS companies_scored,
+    COUNT(DISTINCT criterion) AS criteria_scored,
+    SUM(points) AS total_points
+FROM qualification_scores;
+
+For your previously imported 41 companies, the first scoring batch should produce:
+
+205 scoring records.
+41 companies scored.
+5 criteria per company.
+
+These are expected counts, not results we've confirmed yet.
+Where we stand
+
+  Qualification scoring
+  
+    Implementation
+
+<span class="ce-badge ce-badge-success">Complete</span>
+
+  
+  
+    Automated validation
+
+<span class="ce-badge ce-badge-success">Passed</span>
+
+  
+  
+    Supabase persistence
+
+<span class="ce-badge ce-badge-warning">Needs live test</span>
+
+  
+  
+    UI verification
+
+<span class="ce-badge ce-badge-warning">Needs live test</span>
+
+  
+
+
+Don't push or deploy just yet. First, send me the result of the SQL query and tell me whether Generate scores worked. Then we'll move to the next remaining project tasks.
+
+
+You:
+Here is the scoring:
+Company	Website	Category	Sources	Score	Status
+Amberjack	amberjack.shop	Men's dress-casual shoes and sneakers	6	0/100Provisional	new
+ARES Tool	arestool.com	Hand tools automotive tools electrical tools and home improvement solutions	6	0/100Provisional	new
+Aviator Nation	aviatornation.com	1970s-inspired California lifestyle apparel handmade in Los Angeles	6	0/100Provisional	new
+Body & Bra	bodyandbra.com	Premium wireless bras shapewear and underwear for comfort-focused women	6	0/100Provisional	new
+Boyd Cycling	boydcycling.com	High-end bicycle wheels for road gravel cyclocross and mountain bike	6	0/100Provisional	new
+Bunch Bikes	bunchbike.com	Electric front-load cargo bikes for families and dog owners	6	0/100Provisional	new
+cadootz!	cadootz.com	Organic high-protein seed oil-free snacks for children	6	0/100Provisional	new
+Cariloha	cariloha.com	Sustainable bamboo-based bedding bath goods and apparel	6	0/100Provisional	new
+Facelove	facelove.com	Pro-age beauty brand for women 45+ offering facial fitness and cosmetics	6	0/100Provisional	new
+Fields Good	fieldsgoodchicken.com	Fast casual restaurant specializing in grilled and rotisserie chicken	6	0/100Provisional	new
+Furry Muse	furrymuse.com	Fashion-first performance pet accessories like bow harnesses and leashes	6	0/100Provisional	new
+Gamer's Choice	gamerschoice.com	Trading card games including Pokemon Yu-Gi-Oh Magic and One Piece	6	0/100Provisional	new
+Golden Pet Brands	goldenpetbrands.com	Pet nutrition and supplements including freeze-dried and air-dried foods	6	0/100Provisional	new
+Good Girl Snacks	goodgirlsnacks.com	Viral pickle brand (Hot Girl Pickles) with bold flavors	6	0/100Provisional	new
+Grove Collaborative	grove.co	Sustainable household cleaning personal care and wellness products	6	0/100Provisional	new
+Hadley Designs	hadleydesigns.com	Educational posters classroom decor and inspirational stationery	6	0/100Provisional	new
+Harken Sweets	harkensweets.com	Plant-based clean-label chocolate bars sweetened with dates	6	0/100Provisional	new
+Helton Tool & Home	heltontoolandhome.com	Online retailer of tools and home goods including kitchenware and toys	6	0/100Provisional	new
+HexClad	hexclad.com	Hybrid nonstick cookware and kitchen accessories	6	0/100Provisional	new
+Howler Brothers	howlerbros.com	Outdoor and fishing-inspired apparel with a Western flair	6	0/100Provisional	new
+Innovative Eyewear	lucyd.co	Smart eyewear with Bluetooth audio AI and prescription lenses	6	0/100Provisional	new
+Jetset Pilates	jetsetpilates.com	Boutique reformer Pilates studio franchise and fitness apparel	6	0/100Provisional	new
+Last Crumb	lastcrumb.com	Luxury handmade small-batch cookies with weekly drops	6	0/100Provisional	new
+MeUndies	meundies.com	Underwear loungewear socks and sleepwear via subscription	6	0/100Provisional	new
+Mimi So International	mimiso.com	Luxury fine jewelry including diamonds gemstones and custom designs	6	0/100Provisional	new
+Mott & Bow	mottandbow.com	Premium denim and elevated essentials for men and women	6	0/100Provisional	new
+Olive & June	oliveandjune.com	Nail care products including polish press-ons treatments and tools	6	0/100Provisional	new
+Petite Keep	petitekeep.com	Personalized keepsake trunks for milestones like weddings births and graduations	6	0/100Provisional	new
+Pura	pura.com	Smart home fragrance diffusers and premium fragrances	6	0/100Provisional	new
+Quip	getquip.com	Oral care products including electric toothbrushes flossers and toothpaste	6	0/100Provisional	new
+Raw Nutrition	getrawnutrition.com	Sports nutrition supplements including pre-workout whey protein and creatine	6	0/100Provisional	new
+RIP-IT	ripit.com	Sports gear and apparel designed for female athletes in softball volleyball and soccer	6	0/100Provisional	new
+Sigmas	sigmas.com	Performance active wear and fitness apparel	6	0/100Provisional	new
+So Good So You	sogoodsoyou.com	Organic cold-pressed probiotic juice shots	6	0/100Provisional	new
+Something & Nothing	somethingandnothing.com	Premium sodas and sparkling flavored water with natural ingredients	6	0/100Provisional	new
+Summit Brands	summitbrands.com	Specialized household cleaning products including rust removers and laundry solutions	6	0/100Provisional	new
+Taylor Stitch	taylorstitch.com	Sustainable menswear including shirts denim outerwear and footwear	6	0/100Provisional	new
+Tom Beckbe	tombeckbe.com	Premium outdoor apparel and gear focused on the American sporting and hunting tradition	6	0/100Provisional	new
+Traeger	traeger.com	Wood pellet grills and outdoor cooking accessories	6	0/100Provisional	new
+Uproot Clean	uprootclean.com	Pet hair removal tools and cleaning accessories	6	0/100Provisional	new
+Wild Ryе	wild-rye.com	Women's technical outdoor apparel	6	0/100Provisional	new
+Also here is the SQL results:
+[
+  {
+    "total_score_records": 410,
+    "companies_scored": 41,
+    "criteria_scored": 5,
+    "total_points": 0
+  }
+]
+
+
+ChatGPT:
+Your results confirm that the scoring action is writing to Supabase, but there's an important issue to fix before trusting the scores.
+
+41 companies were scored.
+5 criteria were recorded per company.
+410 records means the scoring action has run twice: (41 \times 5 \times 2 = 410).
+0 total points means no criterion earned positive points in the saved records.
+
+The 0/100 Provisional result is consistent with the current rule that only human-verified evidence earns points. However, we need to check whether your source-review workflow is actually storing the verification metadata that the scoring engine expects.
+
+
+ChatGPT:
+Your results confirm that the scoring action is writing to Supabase, but there's an important issue to fix before trusting the scores.
+
+41 companies were scored.
+5 criteria were recorded per company.
+410 records means the scoring action has run twice: (41 \times 5 \times 2 = 410).
+0 total points means no criterion earned positive points in the saved records.
+
+The 0/100 Provisional result is consistent with the current rule that only human-verified evidence earns points. However, we need to check whether your source-review workflow is actually storing the verification metadata that the scoring engine expects.
+1. Let's inspect the source verification status
+Run this SQL in Supabase:
+SELECT
+    verification_status,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (
+        WHERE reviewed_by IS NOT NULL
+    ) AS with_reviewer,
+    COUNT(*) FILTER (
+        WHERE reviewed_at IS NOT NULL
+    ) AS with_review_date
+FROM company_sources
+GROUP BY verification_status
+ORDER BY verification_status;
+
+2. Check which evidence types have been verified
+SELECT
+    claim_type,
+    verification_status,
+    COUNT(*) AS total
+FROM company_sources
+GROUP BY claim_type, verification_status
+ORDER BY claim_type, verification_status;
+
+3. Check the two scoring batches
+SELECT
+    created_at,
+    COUNT(*) AS records,
+    COUNT(DISTINCT company_id) AS companies,
+    SUM(points) AS points_awarded
+FROM qualification_scores
+GROUP BY created_at
+ORDER BY created_at DESC;
+
+What I want to establish
+There are two possibilities:
+
+No sources have been verified yet. Then 0 points is expected. You'll need to review evidence in Prospects → Review sources.
+Sources have been verified, but scores remain zero. Then we have a mismatch between the verification data and scoring logic that I'll fix.
+
+One more observation: your prospect list includes restaurants, fitness studios and other businesses that may not fit Ledgerwise's ideal e-commerce customer profile. We should eventually flag those as potential disqualifications rather than treating every imported company as a suitable prospect.
+Send me the three SQL results. Don't generate another scoring batch yet. We should diagnose the evidence first.
+
+
+ChatGPT:
+1. Let's inspect the source verification status
+Run this SQL in Supabase:
+SELECT
+    verification_status,
+    COUNT(*) AS total,
+    COUNT(*) FILTER (
+        WHERE reviewed_by IS NOT NULL
+    ) AS with_reviewer,
+    COUNT(*) FILTER (
+        WHERE reviewed_at IS NOT NULL
+    ) AS with_review_date
+FROM company_sources
+GROUP BY verification_status
+ORDER BY verification_status;
+
+2. Check which evidence types have been verified
+SELECT
+    claim_type,
+    verification_status,
+    COUNT(*) AS total
+FROM company_sources
+GROUP BY claim_type, verification_status
+ORDER BY claim_type, verification_status;
+
+3. Check the two scoring batches
+SELECT
+    created_at,
+    COUNT(*) AS records,
+    COUNT(DISTINCT company_id) AS companies,
+    SUM(points) AS points_awarded
+FROM qualification_scores
+GROUP BY created_at
+ORDER BY created_at DESC;
+
+What I want to establish
+There are two possibilities:
+
+No sources have been verified yet. Then 0 points is expected. You'll need to review evidence in Prospects → Review sources.
+Sources have been verified, but scores remain zero. Then we have a mismatch between the verification data and scoring logic that I'll fix.
+
+One more observation: your prospect list includes restaurants, fitness studios and other businesses that may not fit Ledgerwise's ideal e-commerce customer profile. We should eventually flag those as potential disqualifications rather than treating every imported company as a suitable prospect.
+Send me the three SQL results. Don't generate another scoring batch yet. We should diagnose the evidence first.
+
+
+You:
+[
+  {
+    "verification_status": "pending_review",
+    "total": 246,
+    "with_reviewer": 0,
+    "with_review_date": 0
+  }
+]
+[
+  {
+    "claim_type": "category",
+    "verification_status": "pending_review",
+    "total": 41
+  },
+  {
+    "claim_type": "contact",
+    "verification_status": "pending_review",
+    "total": 41
+  },
+  {
+    "claim_type": "growth_signal",
+    "verification_status": "pending_review",
+    "total": 41
+  },
+  {
+    "claim_type": "pain_signal",
+    "verification_status": "pending_review",
+    "total": 41
+  },
+  {
+    "claim_type": "size_fit",
+    "verification_status": "pending_review",
+    "total": 41
+  },
+  {
+    "claim_type": "us_ecommerce",
+    "verification_status": "pending_review",
+    "total": 41
+  }
+]
+[
+  {
+    "created_at": "2026-11-14 16:46:11.578+00",
+    "records": 205,
+    "companies": 41,
+    "points_awarded": 0
+  },
+  {
+    "created_at": "2026-11-14 16:46:00.728+00",
+    "records": 205,
+    "companies": 41,
+    "points_awarded": 0
+  }
+]
+
+
+ChatGPT:
+Excellent. We've identified the cause. The scoring system is behaving as currently designed. There is no evidence-verification failure to fix at this point.
+1. What your results tell us
+
+  
+    
+      41
+      Companies imported
+    
+    
+      246
+      Evidence records
+    
+    
+      0
+      Verified records
+    
+    
+      410
+      Score records saved
+    
+  
+  
+  Evidence verification status
+  
+    Pending review
+
+**246 / 246**
+
+  
+  
+    
+  
+  No evidence verified yet
+
+
+Every company has six source records:
+
+
+
+Evidence type
+Records
+
+
+
+US e-commerce
+41
+
+
+Size fit
+41
+
+
+Contact
+41
+
+
+Growth signal
+41
+
+
+Pain signal
+41
+
+
+Category
+41
+
+
+Total
+246
+
+
+The category records are additional information, not one of our five scoring criteria.
+2. Why every company scores 0/100
+Our scoring rules deliberately require human verification before awarding points.
+For example:
+
+Pending US e-commerce evidence = 0/30.
+Pending size-fit evidence = 0/25.
+Pending contact evidence = 0/15.
+Pending growth evidence = 0/15.
+Pending bookkeeping-pain evidence = 0/15.
+
+This prevents Ledgerwise from treating unverified research as established facts.
+3. What we should do next
+Open Ledgerwise:
+
+Go to Prospects.
+Select Review sources.
+Open each pending source.
+Visit its source URL and compare the actual information with the recorded evidence.
+Verify it only if the source supports the claim. Reject unsupported claims.
+
+No database migration required
+One important detail: your imported evidence contains research summaries, so verify them against the original webpages rather than automatically approving all 246 records.
+4. My recommended order
+Start with these criteria:
+
+US e-commerce presence.
+Revenue and employee-size fit.
+Reachable decision-maker.
+Growth signals.
+Bookkeeping pain signals.
+
+Also, we should eventually flag companies that are clearly outside Ledgerwise's target market, such as restaurants and fitness studios.
+For now, verify a few companies first, then regenerate scores. We can check whether the scores increase correctly before reviewing the remaining companies.
+
+
+You:
+📎 [Attached file: Unscale AI Engineer Case Study(1).pdf — PDF, 87 KB]
+Company	Website	Category	Sources	Score	Status
+Amberjack	amberjack.shop	Men's dress-casual shoes and sneakers	6	100/100	new
+ARES Tool	arestool.com	Hand tools automotive tools electrical tools and home improvement solutions	6	0/100Provisional	new
+Aviator Nation	aviatornation.com	1970s-inspired California lifestyle apparel handmade in Los Angeles	6	0/100Provisional	new
+Body & Bra	bodyandbra.com	Premium wireless bras shapewear and underwear for comfort-focused women	6	0/100Provisional	new
+Boyd Cycling	boydcycling.com	High-end bicycle wheels for road gravel cyclocross and mountain bike	6	0/100Provisional	new
+Bunch Bikes	bunchbike.com	Electric front-load cargo bikes for families and dog owners	6	0/100Provisional	new
+cadootz!	cadootz.com	Organic high-protein seed oil-free snacks for children	6	0/100Provisional	new
+Cariloha	cariloha.com	Sustainable bamboo-based bedding bath goods and apparel	6	0/100Provisional	new
+Facelove	facelove.com	Pro-age beauty brand for women 45+ offering facial fitness and cosmetics	6	0/100Provisional	new
+Fields Good	fieldsgoodchicken.com	Fast casual restaurant specializing in grilled and rotisserie chicken	6	0/100Provisional	new
+Furry Muse	furrymuse.com	Fashion-first performance pet accessories like bow harnesses and leashes	6	0/100Provisional	new
+Gamer's Choice	gamerschoice.com	Trading card games including Pokemon Yu-Gi-Oh Magic and One Piece	6	0/100Provisional	new
+Golden Pet Brands	goldenpetbrands.com	Pet nutrition and supplements including freeze-dried and air-dried foods	6	0/100Provisional	new
+Good Girl Snacks	goodgirlsnacks.com	Viral pickle brand (Hot Girl Pickles) with bold flavors	6	0/100Provisional	new
+Grove Collaborative	grove.co	Sustainable household cleaning personal care and wellness products	6	0/100Provisional	new
+Hadley Designs	hadleydesigns.com	Educational posters classroom decor and inspirational stationery	6	0/100Provisional	new
+Harken Sweets	harkensweets.com	Plant-based clean-label chocolate bars sweetened with dates	6	0/100Provisional	new
+Helton Tool & Home	heltontoolandhome.com	Online retailer of tools and home goods including kitchenware and toys	6	0/100Provisional	new
+HexClad	hexclad.com	Hybrid nonstick cookware and kitchen accessories	6	0/100Provisional	new
+Howler Brothers	howlerbros.com	Outdoor and fishing-inspired apparel with a Western flair	6	0/100Provisional	new
+Innovative Eyewear	lucyd.co	Smart eyewear with Bluetooth audio AI and prescription lenses	6	0/100Provisional	new
+Jetset Pilates	jetsetpilates.com	Boutique reformer Pilates studio franchise and fitness apparel	6	0/100Provisional	new
+Last Crumb	lastcrumb.com	Luxury handmade small-batch cookies with weekly drops	6	0/100Provisional	new
+MeUndies	meundies.com	Underwear loungewear socks and sleepwear via subscription	6	0/100Provisional	new
+Mimi So International	mimiso.com	Luxury fine jewelry including diamonds gemstones and custom designs	6	0/100Provisional	new
+Mott & Bow	mottandbow.com	Premium denim and elevated essentials for men and women	6	0/100Provisional	new
+Olive & June	oliveandjune.com	Nail care products including polish press-ons treatments and tools	6	0/100Provisional	new
+Petite Keep	petitekeep.com	Personalized keepsake trunks for milestones like weddings births and graduations	6	0/100Provisional	new
+Pura	pura.com	Smart home fragrance diffusers and premium fragrances	6	0/100Provisional	new
+Quip	getquip.com	Oral care products including electric toothbrushes flossers and toothpaste	6	0/100Provisional	new
+Raw Nutrition	getrawnutrition.com	Sports nutrition supplements including pre-workout whey protein and creatine	6	0/100Provisional	new
+RIP-IT	ripit.com	Sports gear and apparel designed for female athletes in softball volleyball and soccer	6	0/100Provisional	new
+Sigmas	sigmas.com	Performance active wear and fitness apparel	6	0/100Provisional	new
+So Good So You	sogoodsoyou.com	Organic cold-pressed probiotic juice shots	6	0/100Provisional	new
+Something & Nothing	somethingandnothing.com	Premium sodas and sparkling flavored water with natural ingredients	6	0/100Provisional	new
+Summit Brands	summitbrands.com	Specialized household cleaning products including rust removers and laundry solutions	6	0/100Provisional	new
+Taylor Stitch	taylorstitch.com	Sustainable menswear including shirts denim outerwear and footwear	6	0/100Provisional	new
+Tom Beckbe	tombeckbe.com	Premium outdoor apparel and gear focused on the American sporting and hunting tradition	6	0/100Provisional	new
+Traeger	traeger.com	Wood pellet grills and outdoor cooking accessories	6	0/100Provisional	new
+Uproot Clean	uprootclean.com	Pet hair removal tools and cleaning accessories	6	0/100Provisional	new
+Wild Ryе	wild-rye.com	Women's technical outdoor apparel	6	0/100Provisional	new
+OK, yes, the verification is what was missing, but let's pause a moment and check the pdf again
+Are we in the correct path ?
+
+
+ChatGPT:
+Yes — after checking the original four-page Unscale case study again, we are broadly on the correct path, but we are not yet at the point where I would call Ledgerwise submission-ready.
+The key distinction is that the assignment is not simply to build a working dashboard. It is to demonstrate a complete AI-powered sales workflow, with evidence behind its decisions and humans retaining control.
+1. What Unscale actually requires
+The PDF defines five core capabilities:
+
+
+
+Requirement
+What it means for Ledgerwise
+
+
+
+Research
+Find at least 30 real companies matching Ledgerwise's target profile
+
+
+Qualify
+Score companies and show the source behind each reason
+
+
+Write
+Generate personalized first emails using researched facts
+
+
+Reply
+Handle prospect replies, objections, opt-outs and human handoffs
+
+
+Book calls
+Offer genuinely available slots and book calls in a calendar
+
+
+It also requires a usable sales interface where the team can review companies and scores, approve/edit/reject emails, read conversations and take over threads, and see booked calls. 
+
+
+ChatGPT:
+Yes — after checking the original four-page Unscale case study again, we are broadly on the correct path, but we are not yet at the point where I would call Ledgerwise submission-ready.
+The key distinction is that the assignment is not simply to build a working dashboard. It is to demonstrate a complete AI-powered sales workflow, with evidence behind its decisions and humans retaining control.
+1. What Unscale actually requires
+The PDF defines five core capabilities:
+
+
+
+Requirement
+What it means for Ledgerwise
+
+
+
+Research
+Find at least 30 real companies matching Ledgerwise's target profile
+
+
+Qualify
+Score companies and show the source behind each reason
+
+
+Write
+Generate personalized first emails using researched facts
+
+
+Reply
+Handle prospect replies, objections, opt-outs and human handoffs
+
+
+Book calls
+Offer genuinely available slots and book calls in a calendar
+
+
+It also requires a usable sales interface where the team can review companies and scores, approve/edit/reject emails, read conversations and take over threads, and see booked calls. 
+2. Where we stand today
+Based on the work completed and the latest company table:
+
+
+
+Area
+Current assessment
+
+
+
+Platform and dashboard
+Implemented
+
+
+Research and company import
+Implemented
+
+
+Minimum 30 companies
+41 imported
+
+
+Source collection
+246 sources collected
+
+
+Evidence verification
+Still in progress
+
+
+Qualification scoring
+Implemented, needs validation
+
+
+Email generation and approval
+Implemented
+
+
+Reply handling and human takeover
+Implemented
+
+
+Calendar booking
+Implemented, needs end-to-end validation
+
+
+Submission documentation
+Pending
+
+
+AI session exports
+Pending
+
+
+Loom demonstration
+Pending
+
+
+These statuses distinguish implementation from successful demonstration. We still need to run the complete workflow and confirm the deployed version behaves correctly.
+3. One important issue with your company list
+The case study gives a fairly specific ideal customer profile:
+
+US-based e-commerce brands selling through Shopify, Amazon or their own websites.
+Approximately $1M–$10M annual revenue.
+Approximately 5–50 employees.
+A founder, COO or finance decision-maker to contact.
+Ideally, a timely growth signal such as hiring, funding or expansion. 
+
+Your 41 companies satisfy the quantity requirement, but we cannot yet say that all 41 satisfy the qualification requirement.
+For example:
+
+Fields Good is described as a fast-casual restaurant.
+Jetset Pilates is described as a boutique Pilates studio and franchise.
+Some other entries may be e-commerce brands but still need evidence of revenue, employee size and decision-maker information.
+
+We should not automatically count every imported company as a qualified prospect.
+My recommendation: introduce a clear distinction between:
+
+Researched companies — companies we have collected information about.
+Qualified companies — companies whose fit is supported by verified evidence.
+Disqualified companies — companies that demonstrably fall outside the ICP.
+Pending review — companies for which the evidence is insufficient.
+
+This is important because Unscale asks for at least 30 real companies that fit the customer profile, not simply 30 company records. 
+4. What does Amberjack's 100/100 mean?
+Your table now shows:
+
+Amberjack: 100/100.
+The other 40 companies: 0/100 Provisional.
+
+That is consistent with the scoring implementation: Amberjack appears to have evidence satisfying all five scoring criteria, whereas the remaining companies have not yet received verified evidence.
+However, we should independently inspect Amberjack's evidence before treating that score as trustworthy. A 100/100 should mean the evidence supports every criterion, not merely that the records were marked verified.
+Also, the 0/100 provisional scores should not be interpreted as 40 failed prospects. They are unassessed scores, not negative qualification decisions.
+5. What remains before submission?
+I would organize the remaining work into these phases:
+
+  
+    **Phase 1 — Complete research verification**
+
+Review the 246 sources, verify supported claims, reject unsupported claims, and identify companies outside the ICP.
+
+  
+  
+    **Phase 2 — Validate qualification**
+
+Regenerate scores, inspect score breakdowns, verify disqualifications, and establish that at least 30 companies genuinely fit the target profile.
+
+  
+  
+    **Phase 3 — End-to-end sales workflow testing**
+
+Test research → qualification → email generation → human approval → reply handling → opt-out → human takeover → calendar booking.
+
+  
+  
+    **Phase 4 — Final technical and deployment checks**
+
+Check production behavior, authentication, database permissions, error handling, and the deployed application.
+
+  
+  
+    **Phase 5 — Submission preparation**
+
+Prepare `HOW_I_WORKED.md`, the complete unedited AI session export, public GitHub repository, reviewer login and live platform.
+
+  
+  
+    **Phase 6 — Loom demonstration**
+
+Record a walkthrough of no more than 10 minutes, presenting the platform as if the reviewer were part of Ledgerwise's sales team.
+
+  
+
+
+The submission requirements explicitly include the live platform (available for two weeks after submission), public GitHub repository, full AI session export, HOW_I_WORKED.md, and Loom video. 
+
+My verdict
+Correct overall direction
+We have built the foundation of the product Unscale requested. We have not drifted into building an unrelated application.
+But I would not spend time adding more features right now. The highest-value next step is to make the existing research and qualification trustworthy, then prove the complete sales workflow works.
+Let's finish Phase 1 and Phase 2 before moving on. The goal is not to make the dashboard display 41 companies with scores; it is to demonstrate that Ledgerwise can identify and justify at least 30 genuinely suitable prospects.
+
+If you want, I can:
+
+Verify more companies to increase scores
+Check detailed Amberjack evidence supporting 100/100 score
+List companies flagged as outside ideal customer profile
+
+
+
+ChatGPT:
+2. Where we stand today
+Based on the work completed and the latest company table:
+
+
+
+Area
+Current assessment
+
+
+
+Platform and dashboard
+Implemented
+
+
+Research and company import
+Implemented
+
+
+Minimum 30 companies
+41 imported
+
+
+Source collection
+246 sources collected
+
+
+Evidence verification
+Still in progress
+
+
+Qualification scoring
+Implemented, needs validation
+
+
+Email generation and approval
+Implemented
+
+
+Reply handling and human takeover
+Implemented
+
+
+Calendar booking
+Implemented, needs end-to-end validation
+
+
+Submission documentation
+Pending
+
+
+AI session exports
+Pending
+
+
+Loom demonstration
+Pending
+
+
+These statuses distinguish implementation from successful demonstration. We still need to run the complete workflow and confirm the deployed version behaves correctly.
+3. One important issue with your company list
+The case study gives a fairly specific ideal customer profile:
+
+US-based e-commerce brands selling through Shopify, Amazon or their own websites.
+Approximately $1M–$10M annual revenue.
+Approximately 5–50 employees.
+A founder, COO or finance decision-maker to contact.
+Ideally, a timely growth signal such as hiring, funding or expansion. 
+
+Your 41 companies satisfy the quantity requirement, but we cannot yet say that all 41 satisfy the qualification requirement.
+For example:
+
+Fields Good is described as a fast-casual restaurant.
+Jetset Pilates is described as a boutique Pilates studio and franchise.
+Some other entries may be e-commerce brands but still need evidence of revenue, employee size and decision-maker information.
+
+We should not automatically count every imported company as a qualified prospect.
+My recommendation: introduce a clear distinction between:
+
+Researched companies — companies we have collected information about.
+Qualified companies — companies whose fit is supported by verified evidence.
+Disqualified companies — companies that demonstrably fall outside the ICP.
+Pending review — companies for which the evidence is insufficient.
+
+This is important because Unscale asks for at least 30 real companies that fit the customer profile, not simply 30 company records. 
+4. What does Amberjack's 100/100 mean?
+Your table now shows:
+
+Amberjack: 100/100.
+The other 40 companies: 0/100 Provisional.
+
+That is consistent with the scoring implementation: Amberjack appears to have evidence satisfying all five scoring criteria, whereas the remaining companies have not yet received verified evidence.
+However, we should independently inspect Amberjack's evidence before treating that score as trustworthy. A 100/100 should mean the evidence supports every criterion, not merely that the records were marked verified.
+Also, the 0/100 provisional scores should not be interpreted as 40 failed prospects. They are unassessed scores, not negative qualification decisions.
+5. What remains before submission?
+I would organize the remaining work into these phases:
+
+  
+    **Phase 1 — Complete research verification**
+
+Review the 246 sources, verify supported claims, reject unsupported claims, and identify companies outside the ICP.
+
+  
+  
+    **Phase 2 — Validate qualification**
+
+Regenerate scores, inspect score breakdowns, verify disqualifications, and establish that at least 30 companies genuinely fit the target profile.
+
+  
+  
+    **Phase 3 — End-to-end sales workflow testing**
+
+Test research → qualification → email generation → human approval → reply handling → opt-out → human takeover → calendar booking.
+
+  
+  
+    **Phase 4 — Final technical and deployment checks**
+
+Check production behavior, authentication, database permissions, error handling, and the deployed application.
+
+  
+  
+    **Phase 5 — Submission preparation**
+
+Prepare `HOW_I_WORKED.md`, the complete unedited AI session export, public GitHub repository, reviewer login and live platform.
+
+  
+  
+    **Phase 6 — Loom demonstration**
+
+Record a walkthrough of no more than 10 minutes, presenting the platform as if the reviewer were part of Ledgerwise's sales team.
+
+  
+
+
+The submission requirements explicitly include the live platform (available for two weeks after submission), public GitHub repository, full AI session export, HOW_I_WORKED.md, and Loom video. 
+
+My verdict
+Correct overall direction
+We have built the foundation of the product Unscale requested. We have not drifted into building an unrelated application.
+But I would not spend time adding more features right now. The highest-value next step is to make the existing research and qualification trustworthy, then prove the complete sales workflow works.
+Let's finish Phase 1 and Phase 2 before moving on. The goal is not to make the dashboard display 41 companies with scores; it is to demonstrate that Ledgerwise can identify and justify at least 30 genuinely suitable prospects.

@@ -1,0 +1,2294 @@
+Calendar RPC Implementation (9)
+===============================
+
+ChatGPT:
+Excellent. The review workflow is in source-actions.ts. Now let's inspect the exact approval and rejection behavior, plus the importer that creates company records.
+Run:
+sed -n '1,240p' 'app/(dashboard)/prospects/source-actions.ts'
+
+sed -n '1,190p' 'app/(dashboard)/prospects/import/actions.ts'
+
+I specifically want to ensure that approving a source updates the corresponding company fields correctly. If it doesn't, we'll fix that alongside discovery rather than allowing pending evidence to populate trusted company data.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,240p' 'app/(dashboard)/prospects/source-actions.ts'
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { isUuid, trimText } from "@/lib/validation";
+import {
+  canReject,
+  canReset,
+  canVerify,
+  isStructurallyValidSource,
+  rejectFields,
+  resetFields,
+  verifyFields,
+} from "@/lib/sources/verification";
+export type SourceActionResult = {
+  ok: boolean;
+  error?: string;
+};
+type LoadedSource = {
+  id: string;
+  company_id: string;
+  claim: string;
+  claim_type: string;
+  source_url: string;
+  evidence: string;
+  verification_status: string;
+};
+async function loadSource(
+  sourceId: string
+): Promise<{ source?: LoadedSource; error?: string }> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("company_sources")
+    .select("id,company_id,claim,claim_type,source_url,evidence,verification_status")
+    .eq("id", sourceId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Source not found." };
+  return { source: data as LoadedSource };
+}
+function revalidateSourcePages(companyId: string) {
+  revalidatePath(/prospects/${companyId});
+  revalidatePath("/prospects");
+  revalidatePath("/prospects/review");
+  revalidatePath("/emails");
+}
+export async function verifySource(sourceId: string): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
+  const loaded = await loadSource(sourceId);
+  if (!loaded.source) return { ok: false, error: loaded.error };
+  const { source } = loaded;
+  if (!canVerify(source.verification_status)) {
+    return { ok: false, error: "This source has an unknown verification state." };
+  }
+  if (!isStructurallyValidSource(source)) {
+    return {
+      ok: false,
+      error:
+        "This source is not structurally usable. It needs a real HTTP(S) URL and quoted evidence before it can be verified.",
+    };
+  }
+  const { data: updated, error } = await supabase
+    .from("company_sources")
+    .update(verifyFields(user.id, new Date().toISOString()))
+    .eq("id", sourceId)
+    .eq("verification_status", source.verification_status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return { ok: false, error: "The source changed while you were reviewing it. Refresh and try again." };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_verified",
+    entityType: "company_sources",
+    entityId: sourceId,
+    detail: {
+      company_id: source.company_id,
+      previous_status: source.verification_status,
+    },
+  });
+  revalidateSourcePages(source.company_id);
+  return { ok: true };
+}
+export async function rejectSource(
+  sourceId: string,
+  note: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
+  const cleanNote = trimText(note, 1000);
+  if (!cleanNote) {
+    return { ok: false, error: "A rejection note is required (maximum 1000 characters)." };
+  }
+  const loaded = await loadSource(sourceId);
+  if (!loaded.source) return { ok: false, error: loaded.error };
+  const { source } = loaded;
+  if (!canReject(source.verification_status)) {
+    return { ok: false, error: "This source has an unknown verification state." };
+  }
+  const { data: updated, error } = await supabase
+    .from("company_sources")
+    .update(rejectFields(user.id, new Date().toISOString(), cleanNote))
+    .eq("id", sourceId)
+    .eq("verification_status", source.verification_status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return { ok: false, error: "The source changed while you were reviewing it. Refresh and try again." };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_rejected",
+    entityType: "company_sources",
+    entityId: sourceId,
+    detail: {
+      company_id: source.company_id,
+      previous_status: source.verification_status,
+      note: cleanNote,
+    },
+  });
+  revalidateSourcePages(source.company_id);
+  return { ok: true };
+}
+export async function resetSourceToPending(
+  sourceId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
+  const cleanReason = trimText(reason, 1000);
+  if (!cleanReason) {
+    return { ok: false, error: "A reason is required (maximum 1000 characters)." };
+  }
+  const loaded = await loadSource(sourceId);
+  if (!loaded.source) return { ok: false, error: loaded.error };
+  const { source } = loaded;
+  if (!canReset(source.verification_status)) {
+    return {
+      ok: false,
+      error: "Only a verified or rejected source can be reset to pending review.",
+    };
+  }
+  const { data: updated, error } = await supabase
+    .from("company_sources")
+    .update(resetFields())
+    .eq("id", sourceId)
+    .eq("verification_status", source.verification_status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return { ok: false, error: "The source changed while you were reviewing it. Refresh and try again." };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_reset_to_pending",
+    entityType: "company_sources",
+    entityId: sourceId,
+    detail: {
+      company_id: source.company_id,
+      previous_status: source.verification_status,
+      reason: cleanReason,
+    },
+  });
+  revalidateSourcePages(source.company_id);
+  return { ok: true };
+}
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,190p' 'app/(dashboard)/prospects/import/actions.ts'
+"use server";
+import { createClient } from "@/lib/supabase/server";
+import { newImportFields } from "@/lib/sources/verification";
+import { validateRow, type RawRow, type ValidRow } from "@/lib/import-schema";
+export type ImportResult = {
+  error?: string;
+  rejected: { line: number; errors: string[] }[];
+  companiesCreated: number;
+  sourcesAdded: number;
+  duplicatesSkipped: number;
+};
+const empty: ImportResult = {
+  rejected: [],
+  companiesCreated: 0,
+  sourcesAdded: 0,
+  duplicatesSkipped: 0,
+};
+export async function importRows(
+  rows: RawRow[],
+  source: "csv" | "autonomous_discovery" = "csv",
+): Promise {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ...empty, error: "Not signed in." };
+  if (rows.length === 0) return { ...empty, error: "The file has no rows." };
+  if (rows.length > 2000) return { ...empty, error: "Max 2000 rows per import." };
+  // Authoritative validation happens here, on the server.
+  const result: ImportResult = { ...empty, rejected: [] };
+  const valid: ValidRow[] = [];
+  rows.forEach((raw, i) => {
+    const r = validateRow(raw);
+    if (r.ok) valid.push(r.row);
+    else result.rejected.push({ line: i + 2, errors: r.errors }); // +2: header is line 1
+  });
+  const groups = new Map<string, ValidRow[]>();
+  for (const row of valid) {
+    groups.set(row.host, [...(groups.get(row.host) ?? []), row]);
+  }
+  for (const [host, groupRows] of groups) {
+    const website = https://${host};
+let { data: company } = await supabase
+  .from("companies")
+  .select("id, category, growth_signal, contact_name, contact_role, contact_email")
+  .eq("website", website)
+  .maybeSingle();
+
+if (!company) {
+  const { data: created, error } = await supabase
+    .from("companies")
+    .insert({ name: groupRows[0].company_name, website })
+    .select("id, category, growth_signal, contact_name, contact_role, contact_email")
+    .single();
+  if (error || !created) {
+    result.rejected.push({
+      line: 0,
+      errors: [`Could not create ${host}: ${error?.message ?? "unknown error"}`],
+    });
+    continue;
+  }
+  company = created;
+  result.companiesCreated++;
+}
+
+const { data: existing } = await supabase
+  .from("company_sources")
+  .select("claim, source_url")
+  .eq("company_id", company.id);
+const seen = new Set((existing ?? []).map((s) => `${s.source_url}||${s.claim}`));
+
+const toInsert = groupRows
+  .filter((r) => {
+    const key = `${r.source_url}||${r.claim}`;
+    if (seen.has(key)) {
+      result.duplicatesSkipped++;
+      return false;
+    }
+    seen.add(key);
+    return true;
+  })
+  .map((r) => ({
+    company_id: company!.id,
+    claim: r.claim,
+    claim_type: r.claim_type,
+    source_url: r.source_url,
+    source_title: r.source_title,
+    retrieved_at: r.retrieved_at,
+    evidence: r.evidence,
+    ...newImportFields(user.id),
+  }));
+
+if (toInsert.length > 0) {
+  const { error } = await supabase.from("company_sources").insert(toInsert);
+  if (error) {
+    result.rejected.push({ line: 0, errors: [`Sources for ${host}: ${error.message}`] });
+    continue;
+  }
+  result.sourcesAdded += toInsert.length;
+}
+
+// Fill summary fields from sourced rows. Only overwrite values still "unknown".
+const update: Record<string, string> = {};
+const cat = groupRows.find((r) => r.claim_type === "category");
+if (cat && company.category === "unknown") update.category = cat.claim;
+const growth = groupRows.find((r) => r.claim_type === "growth_signal");
+if (growth && company.growth_signal === "unknown") update.growth_signal = growth.claim;
+const contact = groupRows.find((r) => r.claim_type === "contact");
+if (contact && company.contact_name === "unknown") {
+  const [name, role, email] = contact.claim.split("|").map((p) => p.trim());
+  update.contact_name = name;
+  update.contact_role = role;
+  if (email && !company.contact_email) update.contact_email = email;
+}
+if (Object.keys(update).length > 0) {
+  await supabase.from("companies").update(update).eq("id", company.id);
+}
+
+  }
+  await supabase.from("audit_logs").insert({
+    actor_id: user.id,
+    action: source === "autonomous_discovery" ? "company_discovery_completed" : "csv_import",
+    entity_type: "company_sources",
+    detail: {
+      import_source: source,
+      rows_received: rows.length,
+      companies_created: result.companiesCreated,
+      sources_added: result.sourcesAdded,
+      sources_pending_review: result.sourcesAdded,
+      duplicates_skipped: result.duplicatesSkipped,
+      rows_rejected: result.rejected.length,
+    },
+  });
+  return result;
+}
+
+
+ChatGPT:
+I found the data-integrity bug.
+Source approval currently does not update company summary fields. But importRows() updates those fields immediately—even though every imported source is marked pending_review.
+That means an unverified discovery claim can appear as trusted company information. We need to reverse that:
+
+Importing a source creates or finds the company and stores the evidence as pending.
+Approving a source updates the corresponding company summary fields.
+Rejecting a source never updates company summaries.
+AI-generated discovery evidence remains pending until a human approves it.
+
+The current verifySource() already validates the evidence and records the reviewer. We'll use that approval point to update summaries.
+
+
+ChatGPT:
+I found the data-integrity bug.
+Source approval currently does not update company summary fields. But importRows() updates those fields immediately—even though every imported source is marked pending_review.
+That means an unverified discovery claim can appear as trusted company information. We need to reverse that:
+
+Importing a source creates or finds the company and stores the evidence as pending.
+Approving a source updates the corresponding company summary fields.
+Rejecting a source never updates company summaries.
+AI-generated discovery evidence remains pending until a human approves it.
+
+The current verifySource() already validates the evidence and records the reviewer. We'll use that approval point to update summaries.
+Apply the correction
+Run this from your project root. It removes the premature summary updates from imports and moves them into the human approval action.
+python3 <<'PY'
+from pathlib import Path
+
+# 1. Imports must not promote pending evidence into company summaries.
+p = Path("app/(dashboard)/prospects/import/actions.ts")
+s = p.read_text()
+
+start = s.find("    // Fill summary fields from sourced rows.")
+end = s.find("\n  }\n\n  await supabase.from(\"audit_logs\")", start)
+
+if start == -1 or end == -1:
+    raise SystemExit("Could not locate importer summary-update block; no changes made.")
+
+s = s[:start] + s[end:]
+p.write_text(s)
+
+# 2. Only human approval may populate previously unknown summary fields.
+p = Path("app/(dashboard)/prospects/source-actions.ts")
+s = p.read_text()
+
+marker = '''  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_verified",'''
+
+insert = '''  // Only approved evidence may populate company summary fields.
+  let summarySyncError: string | null = null;
+
+  const { data: company, error: companyReadError } = await supabase
+    .from("companies")
+    .select("id,category,growth_signal,contact_name,contact_role,contact_email")
+    .eq("id", source.company_id)
+    .maybeSingle();
+
+  if (companyReadError || !company) {
+    summarySyncError = companyReadError?.message ?? "Company not found.";
+  } else {
+    const summaryUpdate: Record<string, string> = {};
+
+    if (source.claim_type === "category" && company.category === "unknown") {
+      summaryUpdate.category = source.claim;
+    }
+
+    if (source.claim_type === "growth_signal" && company.growth_signal === "unknown") {
+      summaryUpdate.growth_signal = source.claim;
+    }
+
+    if (source.claim_type === "contact" && company.contact_name === "unknown") {
+      const [name, role, email] = source.claim.split("|").map((part) => part.trim());
+
+      if (name) summaryUpdate.contact_name = name;
+      if (role) summaryUpdate.contact_role = role;
+      if (email && !company.contact_email) summaryUpdate.contact_email = email;
+    }
+
+    if (Object.keys(summaryUpdate).length > 0) {
+      const { error: summaryUpdateError } = await supabase
+        .from("companies")
+        .update(summaryUpdate)
+        .eq("id", source.company_id);
+
+      if (summaryUpdateError) summarySyncError = summaryUpdateError.message;
+    }
+  }
+
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_verified",'''
+
+if marker not in s:
+    raise SystemExit("Could not locate verification audit block; importer edit was made, approval edit was not.")
+
+s = s.replace(marker, insert, 1)
+
+detail_marker = '''      previous_status: source.verification_status,
+    },
+  });
+
+  revalidateSourcePages(source.company_id);'''
+
+detail_replacement = '''      previous_status: source.verification_status,
+      summary_sync_error: summarySyncError,
+    },
+  });
+
+  revalidateSourcePages(source.company_id);'''
+
+if detail_marker not in s:
+    raise SystemExit("Could not locate verification audit detail; approval edit was not completed.")
+
+s = s.replace(detail_marker, detail_replacement, 1)
+p.write_text(s)
+
+print("Updated importer and source approval workflow.")
+PY
+
+Then validate the changes:
+npx tsc --noEmit && npm run lint && npm test
+
+One important remaining issue
+This fixes the promotion of pending evidence. It does not yet recalculate company summaries if an already-approved source is later rejected or reset to pending. We'll address that separately rather than silently leaving stale information.
+After validation, we'll tackle the AI concurrency bottleneck in lib/ai.ts and the discovery runner. The target remains 30 genuinely researched companies—not merely 30 search results.
+
+
+ChatGPT:
+Apply the correction
+Run this from your project root. It removes the premature summary updates from imports and moves them into the human approval action.
+python3 <<'PY'
+from pathlib import Path
+
+# 1. Imports must not promote pending evidence into company summaries.
+p = Path("app/(dashboard)/prospects/import/actions.ts")
+s = p.read_text()
+
+start = s.find("    // Fill summary fields from sourced rows.")
+end = s.find("\n  }\n\n  await supabase.from(\"audit_logs\")", start)
+
+if start == -1 or end == -1:
+    raise SystemExit("Could not locate importer summary-update block; no changes made.")
+
+s = s[:start] + s[end:]
+p.write_text(s)
+
+# 2. Only human approval may populate previously unknown summary fields.
+p = Path("app/(dashboard)/prospects/source-actions.ts")
+s = p.read_text()
+
+marker = '''  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_verified",'''
+
+insert = '''  // Only approved evidence may populate company summary fields.
+  let summarySyncError: string | null = null;
+
+  const { data: company, error: companyReadError } = await supabase
+    .from("companies")
+    .select("id,category,growth_signal,contact_name,contact_role,contact_email")
+    .eq("id", source.company_id)
+    .maybeSingle();
+
+  if (companyReadError || !company) {
+    summarySyncError = companyReadError?.message ?? "Company not found.";
+  } else {
+    const summaryUpdate: Record<string, string> = {};
+
+    if (source.claim_type === "category" && company.category === "unknown") {
+      summaryUpdate.category = source.claim;
+    }
+
+    if (source.claim_type === "growth_signal" && company.growth_signal === "unknown") {
+      summaryUpdate.growth_signal = source.claim;
+    }
+
+    if (source.claim_type === "contact" && company.contact_name === "unknown") {
+      const [name, role, email] = source.claim.split("|").map((part) => part.trim());
+
+      if (name) summaryUpdate.contact_name = name;
+      if (role) summaryUpdate.contact_role = role;
+      if (email && !company.contact_email) summaryUpdate.contact_email = email;
+    }
+
+    if (Object.keys(summaryUpdate).length > 0) {
+      const { error: summaryUpdateError } = await supabase
+        .from("companies")
+        .update(summaryUpdate)
+        .eq("id", source.company_id);
+
+      if (summaryUpdateError) summarySyncError = summaryUpdateError.message;
+    }
+  }
+
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "source_verified",'''
+
+if marker not in s:
+    raise SystemExit("Could not locate verification audit block; importer edit was made, approval edit was not.")
+
+s = s.replace(marker, insert, 1)
+
+detail_marker = '''      previous_status: source.verification_status,
+    },
+  });
+
+  revalidateSourcePages(source.company_id);'''
+
+detail_replacement = '''      previous_status: source.verification_status,
+      summary_sync_error: summarySyncError,
+    },
+  });
+
+  revalidateSourcePages(source.company_id);'''
+
+if detail_marker not in s:
+    raise SystemExit("Could not locate verification audit detail; approval edit was not completed.")
+
+s = s.replace(detail_marker, detail_replacement, 1)
+p.write_text(s)
+
+print("Updated importer and source approval workflow.")
+PY
+
+Then validate the changes:
+npx tsc --noEmit && npm run lint && npm test
+
+One important remaining issue
+This fixes the promotion of pending evidence. It does not yet recalculate company summaries if an already-approved source is later rejected or reset to pending. We'll address that separately rather than silently leaving stale information.
+After validation, we'll tackle the AI concurrency bottleneck in lib/ai.ts and the discovery runner. The target remains 30 genuinely researched companies—not merely 30 search results.
+
+
+You:
+└─$ npx tsc --noEmit && npm run lint && npm test
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (70.714293ms)
+✔ falls through to the next provider on a 429 (1.938302ms)
+✔ a rate-limited model is skipped on the next call (1.485005ms)
+✔ a model is retried after its cooldown expires (2.208052ms)
+✔ a Retry-After header sets the cooldown (3.326176ms)
+✔ repeated 429s escalate the cooldown (1.653316ms)
+✔ a success resets the escalation (1.621319ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.58131ms)
+✔ truncated output tries the next model without cooling the first (1.354853ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (1.038535ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.489178ms)
+✔ oversized input is never sent to Groq (0.621024ms)
+✔ when every model is cooling down it throws without any network call (0.721344ms)
+✔ nothing configured throws and makes no network call (0.29619ms)
+✔ consecutive calls to one provider are spaced out (0.582729ms)
+✔ extractJson strips code fences (2.214389ms)
+✔ extractJson throws on garbage (0.380169ms)
+✔ a valid 30-minute business-hours slot passes (41.468775ms)
+✔ slot durations are limited to 15–120 minutes (63.450062ms)
+✔ slots must fit inside 9:00–17:00 local time (49.43432ms)
+✔ slots must be in the future and use a valid timezone (16.687348ms)
+✔ zoned conversion handles standard and daylight time (15.730136ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.491855ms)
+✔ booking input requires a name, a valid email, and a timezone (0.767646ms)
+✔ slot range formatting includes the timezone (0.839984ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (16.090383ms)
+✔ zoned conversion rejects malformed and impossible local dates (0.997777ms)
+✔ default slot advances by calendar day in New York timezone (2.550852ms)
+✔ opt-out requests suppress and stop all replies (6.796888ms)
+✔ opt-out wins over a pricing question in the same message (0.280474ms)
+✔ bot questions require honest disclosure and allow a safe reply (4.878727ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.818707ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (1.107774ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (4.582196ms)
+✔ bot disclosure is explicit and safe (3.035708ms)
+✔ general fallback is safe and contains no invented facts (2.6191ms)
+✔ reply validation blocks pricing and human claims (0.842825ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.644036ms)
+✔ parseReply accepts JSON and rejects empty output (3.310356ms)
+✔ selectEmailSources keeps only human-verified, usable sources (6.772988ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.54363ms)
+✔ the fallback draft uses verified claims and passes guardrails (1.848651ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (2.113515ms)
+✔ draft validation rejects placeholders and unsafe content (0.487578ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.116161ms)
+✔ the prompt carries only supplied facts and the revision note (0.668003ms)
+✔ contact first name handles unknown contacts (0.187632ms)
+✔ Google status never claims operational without explicit verification (3.204557ms)
+✔ sync is a no-op unless explicitly enabled (0.609978ms)
+✔ access token exchange sends a refresh-token grant (68.392414ms)
+✔ sync creates a Google event and returns its id (3.472883ms)
+✔ Google HTTP failures are reported without claiming success (1.105001ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.205459ms)
+✔ events can be updated with PATCH using the new slot details (1.540811ms)
+✔ deletion treats an already-removed event as success (1.055361ms)
+✔ update and delete are no-ops unless sync is enabled (0.50254ms)
+✔ claim types are exactly the closed set of seven (4.31748ms)
+✔ accepts us_ecommerce (1.142812ms)
+✔ accepts category (0.475025ms)
+✔ accepts size_fit (0.170606ms)
+✔ accepts growth_signal (0.166636ms)
+✔ accepts pain_signal (0.163705ms)
+✔ accepts disqualifier (0.29274ms)
+✔ accepts contact (0.226584ms)
+✔ rejects claim_type "size" (0.565808ms)
+✔ rejects claim_type "other" (0.722099ms)
+✔ rejects claim_type "pain_sigal" (0.202492ms)
+✔ rejects claim_type "" (0.132185ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.195877ms)
+✔ disqualifier rows still need a source (0.169564ms)
+✔ retrieved_at must be a real calendar date (0.219969ms)
+✔ contact must be Name | Role (0.174926ms)
+✔ extracts claims and attaches the actual fetched page URL (2.626756ms)
+✔ ignores any source URL supplied by the AI (0.48499ms)
+✔ returns an empty array when the AI finds no supported claims (2.060919ms)
+✔ rejects malformed JSON (0.594995ms)
+✔ rejects a response without a claims array (0.838341ms)
+✔ rejects malformed claim objects (0.330813ms)
+✔ splits long pages into overlapping chunks (2.291627ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.58143ms)
+✔ CSV output uses the exact importer columns and preserves values (8.311433ms)
+✔ CSV output includes headers when no claims were accepted (0.575755ms)
+✔ report includes totals, sources, rejected claims, and errors (0.89344ms)
+✔ parses a Jina Reader response and preserves the original source URL (17.14224ms)
+✔ uses a fallback title when Reader provides no title (5.045503ms)
+✔ rejects an empty Reader response (0.865992ms)
+✔ discovers same-site links and prioritizes useful pages (6.142678ms)
+✔ ignores duplicate links and removes tracking query strings (0.512974ms)
+✔ rejects non-HTTP and private/local URLs (0.3642ms)
+✔ fetches through Jina Reader and returns the original page URL (75.030616ms)
+✔ reports Reader HTTP errors clearly (0.710551ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.722845ms)
+✔ rejects local hostnames with a trailing dot (0.798504ms)
+✔ parses company names, homepages, and optional same-site pages (9.183388ms)
+✔ rejects invalid URLs and extra pages from another website (0.70932ms)
+✔ rejects empty research input (0.189921ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (1.990375ms)
+✔ continues to the next company when one homepage cannot be fetched (1.291149ms)
+✔ records an extraction failure without losing the company report (0.35488ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.330254ms)
+✔ runResearch rejects extra pages from another hostname (0.630957ms)
+✔ accepts a claim when its evidence appears on the fetched page (2.975447ms)
+✔ matches evidence despite case and whitespace differences (0.38948ms)
+✔ rejects evidence that does not appear on the page (0.746744ms)
+✔ rejects unsupported claim types (0.245502ms)
+✔ rejects a source URL that was not fetched (0.26433ms)
+✔ rejects evidence outside the permitted length (0.236527ms)
+✔ accepts a contact only when name and role appear in the evidence (0.736042ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.322006ms)
+✔ rejects a contact email that is not on the page (0.709788ms)
+✔ rejects duplicate claims (0.847743ms)
+✔ accepts no more than three claims of the same type (0.483393ms)
+✔ qualification weights match the approved 100-point rubric (3.537815ms)
+✔ all verified evidence earns the full 100 points (0.732128ms)
+✔ pending evidence remains unknown and earns no points (0.567666ms)
+✔ rejected evidence cannot earn points (0.176336ms)
+✔ partial verified evidence produces a provisional partial score (0.272306ms)
+✔ only human-verified sources are attached to criterion results (0.182058ms)
+✔ only verified disqualifiers are surfaced and they earn no points (0.273389ms)
+✔ newly imported sources are pending review and are not human-verified (1.1402ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.239516ms)
+✔ rejection requires a non-empty note (0.464657ms)
+✔ status transition guards (0.17656ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.404598ms)
+✔ structural validation does not imply human verification (0.141295ms)
+✔ a recipient email needs a verified contact source containing it (0.509991ms)
+✔ status labels are explicit (0.140286ms)
+✔ email normalization trims and lowercases (0.96509ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.252256ms)
+✔ trimText enforces required text and maximum length (0.133877ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1501.525281
+
+
+ChatGPT:
+130/130 tests passing TypeScript and ESLint also pass. The importer/approval changes are syntactically valid, and the existing test suite remains green.
+One important distinction: these tests do not yet cover the new database behavior in verifySource(). We should add tests for approval, rejection, and reset before calling that workflow fully validated.
+
+
+ChatGPT:
+130/130 tests passing TypeScript and ESLint also pass. The importer/approval changes are syntactically valid, and the existing test suite remains green.
+One important distinction: these tests do not yet cover the new database behavior in verifySource(). We should add tests for approval, rejection, and reset before calling that workflow fully validated.
+Next, let's inspect the actual patch before moving to concurrency. Run:
+git diff --check
+git diff -- 'app/(dashboard)/prospects/import/actions.ts' 'app/(dashboard)/prospects/source-actions.ts'
+
+I want to verify that only the intended summary-update logic moved, and that approval failures cannot silently leave company data inconsistent. Then we'll implement the AI rate-limit fix and bounded discovery processing.
+
+
+ChatGPT:
+Next, let's inspect the actual patch before moving to concurrency. Run:
+git diff --check
+git diff -- 'app/(dashboard)/prospects/import/actions.ts' 'app/(dashboard)/prospects/source-actions.ts'
+
+I want to verify that only the intended summary-update logic moved, and that approval failures cannot silently leave company data inconsistent. Then we'll implement the AI rate-limit fix and bounded discovery processing.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ git diff --check
+git diff -- 'app/(dashboard)/prospects/import/actions.ts' 'app/(dashboard)/prospects/source-actions.ts'
+diff --git a/app/(dashboard)/prospects/import/actions.ts b/app/(dashboard)/prospects/import/actions.ts
+index e518c49..f238b41 100644
+--- a/app/(dashboard)/prospects/import/actions.ts
++++ b/app/(dashboard)/prospects/import/actions.ts
+@@ -19,7 +19,10 @@ const empty: ImportResult = {
+   duplicatesSkipped: 0,
+ };
+-export async function importRows(rows: RawRow[]): Promise {
++export async function importRows(
+
+rows: RawRow[],
+source: "csv" | "autonomous_discovery" = "csv",
++): Promise {
+const supabase = await createClient();
+const {
+  data: { user },
+@@ -104,30 +107,15 @@ export async function importRows(rows: RawRow[]): Promise {
+result.sourcesAdded += toInsert.length;
+  }
+
+
+// Fill summary fields from sourced rows. Only overwrite values still "unknown".
+const update: Record<string, string> = {};
+if (groupRows.some((r) => r.claim_type === "us_ecommerce")) update.us_ecommerce = "verified";
+const cat = groupRows.find((r) => r.claim_type === "category");
+if (cat && company.category === "unknown") update.category = cat.claim;
+const growth = groupRows.find((r) => r.claim_type === "growth_signal");
+if (growth && company.growth_signal === "unknown") update.growth_signal = growth.claim;
+const contact = groupRows.find((r) => r.claim_type === "contact");
+if (contact && company.contact_name === "unknown") {
+ const [name, role, email] = contact.claim.split("|").map((p) => p.trim());
+
+
+ update.contact_name = name;
+
+
+ update.contact_role = role;
+
+
+ if (email && !company.contact_email) update.contact_email = email;
+
+
+}
+if (Object.keys(update).length > 0) {
+ await supabase.from("companies").update(update).eq("id", company.id);
+
+
+}
+
+
+ }
+ await supabase.from("audit_logs").insert({
+   actor_id: user.id,
+
+
+
+action: "csv_import",
+
+
+action: source === "autonomous_discovery" ? "company_discovery_completed" : "csv_import",
+entity_type: "company_sources",
+detail: {
+ import_source: source,
+ rows_received: rows.length,
+ companies_created: result.companiesCreated,
+ sources_added: result.sourcesAdded,
+
+
+
+diff --git a/app/(dashboard)/prospects/source-actions.ts b/app/(dashboard)/prospects/source-actions.ts
+index 14f336e..0faeacf 100644
+--- a/app/(dashboard)/prospects/source-actions.ts
++++ b/app/(dashboard)/prospects/source-actions.ts
+@@ -86,6 +86,46 @@ export async function verifySource(sourceId: string): Promise<SourceActionResult
+     return { ok: false, error: "The source changed while you were reviewing it. Refresh and try again." };
+   }
+
+// Only approved evidence may populate company summary fields.
+let summarySyncError: string | null = null;
+
+const { data: company, error: companyReadError } = await supabase
+.from("companies")
+.select("id,category,growth_signal,contact_name,contact_role,contact_email")
+.eq("id", source.company_id)
+.maybeSingle();
+
+if (companyReadError || !company) {
+summarySyncError = companyReadError?.message ?? "Company not found.";
+} else {
+const summaryUpdate: Record<string, string> = {};
+
+if (source.claim_type === "category" && company.category === "unknown") {
+ summaryUpdate.category = source.claim;
+
+
+}
+
+if (source.claim_type === "growth_signal" && company.growth_signal === "unknown") {
+ summaryUpdate.growth_signal = source.claim;
+
+
+}
+
+if (source.claim_type === "contact" && company.contact_name === "unknown") {
+ const [name, role, email] = source.claim.split("|").map((part) => part.trim());
+
+
+
+ if (name) summaryUpdate.contact_name = name;
+
+
+ if (role) summaryUpdate.contact_role = role;
+
+
+ if (email && !company.contact_email) summaryUpdate.contact_email = email;
+
+
+}
+
+if (Object.keys(summaryUpdate).length > 0) {
+ const { error: summaryUpdateError } = await supabase
+
+
+   .from("companies")
+
+
+   .update(summaryUpdate)
+
+
+   .eq("id", source.company_id);
+
+
+
+ if (summaryUpdateError) summarySyncError = summaryUpdateError.message;
+
+
+}
+}
+ await writeAudit(supabase, {
+   actorId: user.id,
+   action: "source_verified",
+
+@@ -94,6 +134,7 @@ export async function verifySource(sourceId: string): Promise<SourceActionResult
+     detail: {
+       company_id: source.company_id,
+       previous_status: source.verification_status,
+
+ summary_sync_error: summarySyncError,
+
+   },
+ });
+
+(END)
+
+
+ChatGPT:
+git diff --check is clean. The diff confirms the intended change: pending imports no longer populate company summaries, and human approval is now the point where summary fields may be populated.
+Two caveats:
+
+verifySource() currently returns success even if the summary update fails; the failure is recorded in the audit log. The verified source itself remains the authoritative evidence.
+Rejecting or resetting a previously approved source does not currently reverse an already-populated summary field. We'll need to address that if summaries are to remain fully synchronized.
+
+Let's keep the main priority moving: autonomous discovery of 30 companies.
+Next: make research concurrent without breaking AI rate limits
+The safe approach is to fetch and research several companies concurrently, while serializing calls to each AI provider so the existing rate-limit protections remain effective.
+Show me the full runner and its tests:
+sed -n '1,260p' lib/research/runner.ts
+
+grep -R -n "runResearch" tests
+
+I'll use the existing test structure to implement and test bounded concurrency rather than making an unverified change to the AI client.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,260p' lib/research/runner.ts
+import { discoverSameSiteLinks, fetchResearchPage, validateResearchUrl } from "./pages";
+import { extractClaims } from "./extract";
+import { verifyClaims, type ProposedClaim, type ResearchPage } from "./verify";
+export type ResearchInputEntry = {
+  companyName: string;
+  website: string;
+  extraUrls: string[];
+};
+export type ResearchOutputRow = {
+  company_name: string;
+  website: string;
+  claim_type: string;
+  claim: string;
+  source_url: string;
+  source_title: string;
+  retrieved_at: string;
+  evidence: string;
+};
+export type CompanyResearchReport = {
+  companyName: string;
+  website: string;
+  pagesRead: string[];
+  proposed: number;
+  accepted: number;
+  rejected: number;
+  errors: string[];
+  rejectedClaims: {
+    claim_type: string;
+    reason: string;
+  }[];
+};
+export type ResearchRunResult = {
+  rows: ResearchOutputRow[];
+  companies: CompanyResearchReport[];
+};
+type RunnerDeps = {
+  fetchPage?: (url: string) => Promise;
+  extract?: (
+    companyName: string,
+    pages: ResearchPage[],
+  ) => Promise<ProposedClaim[]>;
+  discoverLinks?: (text: string, baseUrl: string, maxLinks?: number) => string[];
+  now?: () => Date;
+};
+function validateHttpUrl(value: string, lineNumber: number): URL {
+  try {
+    return validateResearchUrl(value);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid URL";
+throw new Error(`Line ${lineNumber}: ${message}`);
+
+  }
+}
+export function parseResearchInput(input: string): ResearchInputEntry[] {
+  const entries: ResearchInputEntry[] = [];
+  const errors: string[] = [];
+  input.split(/\r?\n/).forEach((rawLine, index) => {
+    const lineNumber = index + 1;
+    const line = rawLine.trim();
+if (!line || line.startsWith("#")) return;
+
+const fields = line.split("|").map((field) => field.trim());
+const [companyName, rawWebsite, ...rawExtraUrls] = fields;
+
+if (!companyName || !rawWebsite) {
+  errors.push(`Line ${lineNumber}: expected Company | Website | optional extra URLs`);
+  return;
+}
+
+try {
+  const website = validateHttpUrl(rawWebsite, lineNumber);
+  const extraUrls = rawExtraUrls
+    .filter(Boolean)
+    .map((value) => validateHttpUrl(value, lineNumber));
+
+  for (const extraUrl of extraUrls) {
+    if (extraUrl.hostname !== website.hostname) {
+      throw new Error(
+        `Line ${lineNumber}: extra page must belong to the same website as the homepage`,
+      );
+    }
+  }
+
+  entries.push({
+    companyName,
+    website: website.toString(),
+    extraUrls: [...new Set(extraUrls.map((url) => url.toString()))],
+  });
+} catch (error) {
+  errors.push(
+    error instanceof Error
+      ? error.message
+      : `Line ${lineNumber}: invalid entry`,
+  );
+}
+
+  });
+  if (errors.length) {
+    throw new Error(Research input contains errors:\n${errors.join("\n")});
+  }
+  if (!entries.length) {
+    throw new Error("Research input contains no companies");
+  }
+  return entries;
+}
+export async function runResearch(
+  entries: ResearchInputEntry[],
+  deps: RunnerDeps = {},
+): Promise {
+  const fetchPage = deps.fetchPage ?? fetchResearchPage;
+  const extract = deps.extract ?? extractClaims;
+  const discoverLinks = deps.discoverLinks ?? discoverSameSiteLinks;
+  const now = deps.now ?? (() => new Date());
+  const rows: ResearchOutputRow[] = [];
+  const companies: CompanyResearchReport[] = [];
+  for (const entry of entries) {
+    const report: CompanyResearchReport = {
+      companyName: entry.companyName,
+      website: entry.website,
+      pagesRead: [],
+      proposed: 0,
+      accepted: 0,
+      rejected: 0,
+      errors: [],
+      rejectedClaims: [],
+    };
+const pages: ResearchPage[] = [];
+const visited = new Set<string>();
+
+const readPage = async (url: string) => {
+  let safeUrl: URL;
+
+  try {
+    safeUrl = validateResearchUrl(url);
+
+    const homepageHost = validateResearchUrl(entry.website).hostname;
+    if (safeUrl.hostname !== homepageHost) {
+      throw new Error("Page must belong to the same website as the homepage");
+    }
+  } catch (error) {
+    report.errors.push(
+      `Could not read ${url}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+
+  const normalizedUrl = safeUrl.toString();
+  if (visited.has(normalizedUrl)) return;
+  visited.add(normalizedUrl);
+
+  try {
+    const page = await fetchPage(normalizedUrl);
+    pages.push(page);
+    report.pagesRead.push(page.url);
+  } catch (error) {
+    report.errors.push(
+      `Could not read ${url}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+};
+
+// Read the homepage first so we can discover relevant same-site pages.
+await readPage(entry.website);
+
+const discovered = pages.length
+  ? discoverLinks(pages[0].text, entry.website, 3)
+  : [];
+
+const additionalUrls = [...entry.extraUrls, ...discovered];
+
+for (const url of additionalUrls) {
+  await readPage(url);
+}
+
+if (!pages.length) {
+  report.errors.push("No pages could be read; extraction was skipped");
+  companies.push(report);
+  continue;
+}
+
+let proposals: ProposedClaim[];
+
+try {
+  proposals = await extract(entry.companyName, pages);
+  report.proposed = proposals.length;
+} catch (error) {
+  report.errors.push(
+    `AI extraction failed: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  );
+  companies.push(report);
+  continue;
+}
+
+const verification = verifyClaims(proposals, pages);
+const retrievedAt = now().toISOString().slice(0, 10);
+
+report.accepted = verification.accepted.length;
+report.rejected = verification.rejected.length;
+report.rejectedClaims = verification.rejected.map((item) => ({
+  claim_type: item.claim_type,
+  reason: item.reason,
+}));
+
+for (const claim of verification.accepted) {
+  rows.push({
+    company_name: entry.companyName,
+    website: entry.website,
+    claim_type: claim.claim_type,
+    claim: claim.claim,
+    source_url: claim.source_url,
+    source_title: claim.source_title,
+    retrieved_at: retrievedAt,
+    evidence: claim.evidence,
+  });
+}
+
+companies.push(report);
+
+  }
+  return { rows, companies };
+}
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ grep -R -n "runResearch" tests
+tests/research-runner.test.ts:5:  runResearch,
+tests/research-runner.test.ts:68:  const result = await runResearch(entries, {
+tests/research-runner.test.ts:122:  const result = await runResearch(entries, {
+tests/research-runner.test.ts:153:  const result = await runResearch(entries, {
+tests/research-runner.test.ts:170:test("runResearch rejects unsafe URLs even when input parsing is bypassed", async () => {
+tests/research-runner.test.ts:173:  const result = await runResearch(
+tests/research-runner.test.ts:198:test("runResearch rejects extra pages from another hostname", async () => {
+tests/research-runner.test.ts:201:  const result = await runResearch(
+
+
+ChatGPT:
+The bottleneck is confirmed: runResearch() processes companies one at a time, and it also fetches each company's additional pages sequentially.
+I'll change this to a bounded worker pool. That lets several company websites be researched at once while preserving each company's internal order: homepage → relevant pages → AI extraction → evidence verification. Results will remain in the same order as the input, even if workers finish at different times.
+
+
+ChatGPT:
+The bottleneck is confirmed: runResearch() processes companies one at a time, and it also fetches each company's additional pages sequentially.
+I'll change this to a bounded worker pool. That lets several company websites be researched at once while preserving each company's internal order: homepage → relevant pages → AI extraction → evidence verification. Results will remain in the same order as the input, even if workers finish at different times.
+Please paste the test file so I can preserve its existing conventions and add a concurrency test:
+sed -n '1,280p' tests/research-runner.test.ts
+
+Then I'll give you one focused patch for runner.ts and its tests. I'll default concurrency to 4 companies, with an explicit limit so we don't overload the research service or AI provider.
+
+
+ChatGPT:
+Please paste the test file so I can preserve its existing conventions and add a concurrency test:
+sed -n '1,280p' tests/research-runner.test.ts
+
+Then I'll give you one focused patch for runner.ts and its tests. I'll default concurrency to 4 companies, with an explicit limit so we don't overload the research service or AI provider.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,280p' tests/research-runner.test.ts
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  parseResearchInput,
+  runResearch,
+  type ResearchInputEntry,
+} from "../lib/research/runner";
+import type { ResearchPage } from "../lib/research/verify";
+test("parses company names, homepages, and optional same-site pages", () => {
+  const entries = parseResearchInput(`
+Example research input
+Acme Goods | https://example.com | https://example.com/about
+`);
+  assert.deepEqual(entries, [
+    {
+      companyName: "Acme Goods",
+      website: "https://example.com/",
+      extraUrls: ["https://example.com/about"],
+    },
+  ]);
+});
+test("rejects invalid URLs and extra pages from another website", () => {
+  assert.throws(
+    () => parseResearchInput("Acme | not-a-url"),
+    /invalid URL/,
+  );
+  assert.throws(
+    () =>
+      parseResearchInput(
+        "Acme | https://example.com | https://other.com/about",
+      ),
+    /same website/,
+  );
+});
+test("rejects empty research input", () => {
+  assert.throws(
+    () => parseResearchInput("# Only a comment\n\n"),
+    /no companies/,
+  );
+});
+test("fetches pages, extracts claims, and accepts only verified evidence", async () => {
+  const entries: ResearchInputEntry[] = [
+    {
+      companyName: "Acme Goods",
+      website: "https://example.com/",
+      extraUrls: [],
+    },
+  ];
+  const homepage: ResearchPage = {
+    url: "https://example.com/",
+    title: "Acme Goods",
+    text: "Acme Goods sells home goods through its online store.",
+  };
+  const aboutPage: ResearchPage = {
+    url: "https://example.com/about",
+    title: "About Acme",
+    text: "Acme Goods was founded in 2018 by Jane Doe.",
+  };
+  const result = await runResearch(entries, {
+    fetchPage: async (url) => {
+      if (url === "https://example.com/") return homepage;
+      if (url === "https://example.com/about") return aboutPage;
+      throw new Error(Unexpected URL: ${url});
+    },
+    discoverLinks: () => ["https://example.com/about"],
+    extract: async () => [
+      {
+        claim_type: "category",
+        claim: "Sells home goods",
+        source_url: "https://example.com/",
+        evidence: "Acme Goods sells home goods through its online store.",
+      },
+      {
+        claim_type: "growth_signal",
+        claim: "Recently raised funding",
+        source_url: "https://example.com/",
+        evidence: "This quotation does not appear on the page.",
+      },
+    ],
+    now: () => new Date("2026-11-13T12:00:00.000Z"),
+  });
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].company_name, "Acme Goods");
+  assert.equal(result.rows[0].claim_type, "category");
+  assert.equal(result.rows[0].retrieved_at, "2026-11-13");
+  assert.equal(result.companies.length, 1);
+  assert.equal(result.companies[0].pagesRead.length, 2);
+  assert.equal(result.companies[0].proposed, 2);
+  assert.equal(result.companies[0].accepted, 1);
+  assert.equal(result.companies[0].rejected, 1);
+  assert.match(
+    result.companies[0].rejectedClaims[0].reason,
+    /does not appear/,
+  );
+});
+test("continues to the next company when one homepage cannot be fetched", async () => {
+  const entries: ResearchInputEntry[] = [
+    {
+      companyName: "Unavailable Co",
+      website: "https://unavailable.example/",
+      extraUrls: [],
+    },
+    {
+      companyName: "Available Co",
+      website: "https://available.example/",
+      extraUrls: [],
+    },
+  ];
+  const result = await runResearch(entries, {
+    fetchPage: async (url) => {
+      if (url.includes("unavailable")) {
+        throw new Error("Network unavailable");
+      }
+  return {
+    url,
+    title: "Available Co",
+    text: "Available Co sells products through its online store.",
+  };
+},
+discoverLinks: () => [],
+extract: async () => [],
+
+  });
+  assert.equal(result.companies.length, 2);
+  assert.match(result.companies[0].errors.join(" "), /Network unavailable/);
+  assert.equal(result.companies[0].pagesRead.length, 0);
+  assert.equal(result.companies[1].pagesRead.length, 1);
+});
+test("records an extraction failure without losing the company report", async () => {
+  const entries: ResearchInputEntry[] = [
+    {
+      companyName: "Acme",
+      website: "https://example.com/",
+      extraUrls: [],
+    },
+  ];
+  const result = await runResearch(entries, {
+    fetchPage: async (url) => ({
+      url,
+      title: "Acme",
+      text: "Acme sells home goods through its online store.",
+    }),
+    discoverLinks: () => [],
+    extract: async () => {
+      throw new Error("AI provider unavailable");
+    },
+  });
+  assert.equal(result.companies.length, 1);
+  assert.match(result.companies[0].errors.join(" "), /AI provider unavailable/);
+  assert.equal(result.rows.length, 0);
+});
+test("runResearch rejects unsafe URLs even when input parsing is bypassed", async () => {
+  let fetchCalls = 0;
+  const result = await runResearch(
+    [{
+      companyName: "Unsafe Example",
+      website: "http://127.0.0.1/",
+      extraUrls: [],
+    }],
+    {
+      fetchPage: async (url) => {
+        fetchCalls++;
+        return {
+          url,
+          title: "Unexpected",
+          text: "This should never be fetched.",
+        };
+      },
+      discoverLinks: () => [],
+      extract: async () => [],
+    },
+  );
+  assert.equal(fetchCalls, 0);
+  assert.equal(result.companies[0].pagesRead.length, 0);
+  assert.match(result.companies[0].errors.join(" "), /IP-address URLs/);
+});
+test("runResearch rejects extra pages from another hostname", async () => {
+  let fetchCalls = 0;
+  const result = await runResearch(
+    [{
+      companyName: "Example",
+      website: "https://example.com/",
+      extraUrls: ["https://other.example/about"],
+    }],
+    {
+      fetchPage: async (url) => {
+        fetchCalls++;
+        return {
+          url,
+          title: "Example",
+          text: "Example sells home goods through its online store.",
+        };
+      },
+      discoverLinks: () => [],
+      extract: async () => [],
+    },
+  );
+  assert.equal(fetchCalls, 1);
+  assert.equal(result.companies[0].pagesRead.length, 1);
+  assert.match(result.companies[0].errors.join(" "), /same website/);
+});
+
+
+ChatGPT:
+Your tests use Node's built-in test runner, so we can add coverage without introducing dependencies.
+The patch will:
+
+Default to 4 concurrent companies, configurable through deps.concurrency.
+Cap concurrency at 8.
+Fetch each company's discovered pages concurrently after its homepage.
+Keep company reports and output rows in input order.
+Preserve per-company error handling, URL validation and evidence verification.
+
+
+
+ChatGPT:
+Your tests use Node's built-in test runner, so we can add coverage without introducing dependencies.
+The patch will:
+
+Default to 4 concurrent companies, configurable through deps.concurrency.
+Cap concurrency at 8.
+Fetch each company's discovered pages concurrently after its homepage.
+Keep company reports and output rows in input order.
+Preserve per-company error handling, URL validation and evidence verification.
+
+Run this patch from the project root. It replaces only runResearch() and adds one concurrency test.
+python3 <<'PY'
+from pathlib import Path
+
+path = Path("lib/research/runner.ts")
+source = path.read_text()
+
+source = source.replace(
+    "  now?: () => Date;\n};",
+    "  now?: () => Date;\n  concurrency?: number;\n};"
+)
+
+start = source.index("export async function runResearch(")
+
+replacement = r'''export async function runResearch(
+  entries: ResearchInputEntry[],
+  deps: RunnerDeps = {},
+): Promise<ResearchRunResult> {
+  const fetchPage = deps.fetchPage ?? fetchResearchPage;
+  const extract = deps.extract ?? extractClaims;
+  const discoverLinks = deps.discoverLinks ?? discoverSameSiteLinks;
+  const now = deps.now ?? (() => new Date());
+
+  const requestedConcurrency = Number.isFinite(deps.concurrency)
+    ? Math.floor(deps.concurrency!)
+    : 4;
+  const concurrency = Math.max(1, Math.min(8, requestedConcurrency));
+
+  const researchCompany = async (
+    entry: ResearchInputEntry,
+  ): Promise<{ rows: ResearchOutputRow[]; report: CompanyResearchReport }> => {
+    const report: CompanyResearchReport = {
+      companyName: entry.companyName,
+      website: entry.website,
+      pagesRead: [],
+      proposed: 0,
+      accepted: 0,
+      rejected: 0,
+      errors: [],
+      rejectedClaims: [],
+    };
+
+    const pages: ResearchPage[] = [];
+    const visited = new Set<string>();
+
+    const readPage = async (url: string) => {
+      let safeUrl: URL;
+
+      try {
+        safeUrl = validateResearchUrl(url);
+
+        const homepageHost = validateResearchUrl(entry.website).hostname;
+        if (safeUrl.hostname !== homepageHost) {
+          throw new Error("Page must belong to the same website as the homepage");
+        }
+      } catch (error) {
+        report.errors.push(
+          `Could not read ${url}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return;
+      }
+
+      const normalizedUrl = safeUrl.toString();
+      if (visited.has(normalizedUrl)) return;
+      visited.add(normalizedUrl);
+
+      try {
+        const page = await fetchPage(normalizedUrl);
+        pages.push(page);
+        report.pagesRead.push(page.url);
+      } catch (error) {
+        report.errors.push(
+          `Could not read ${url}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    };
+
+    // Read the homepage first so we can discover relevant same-site pages.
+    await readPage(entry.website);
+
+    const discovered = pages.length
+      ? discoverLinks(pages[0].text, entry.website, 3)
+      : [];
+
+    // Fetch additional pages concurrently, after the homepage is available.
+    const additionalUrls = [...new Set([...entry.extraUrls, ...discovered])];
+    await Promise.all(additionalUrls.map(readPage));
+
+    if (!pages.length) {
+      report.errors.push("No pages could be read; extraction was skipped");
+      return { rows: [], report };
+    }
+
+    let proposals: ProposedClaim[];
+
+    try {
+      proposals = await extract(entry.companyName, pages);
+      report.proposed = proposals.length;
+    } catch (error) {
+      report.errors.push(
+        `AI extraction failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { rows: [], report };
+    }
+
+    const verification = verifyClaims(proposals, pages);
+    const retrievedAt = now().toISOString().slice(0, 10);
+
+    report.accepted = verification.accepted.length;
+    report.rejected = verification.rejected.length;
+    report.rejectedClaims = verification.rejected.map((item) => ({
+      claim_type: item.claim_type,
+      reason: item.reason,
+    }));
+
+    const rows = verification.accepted.map((claim) => ({
+      company_name: entry.companyName,
+      website: entry.website,
+      claim_type: claim.claim_type,
+      claim: claim.claim,
+      source_url: claim.source_url,
+      source_title: claim.source_title,
+      retrieved_at: retrievedAt,
+      evidence: claim.evidence,
+    }));
+
+    return { rows, report };
+  };
+
+  // A bounded worker pool prevents one slow company from blocking all others.
+  // Store by input index so returned reports and rows remain deterministic.
+  const results: Array<{
+    rows: ResearchOutputRow[];
+    report: CompanyResearchReport;
+  } | undefined> = new Array(entries.length);
+
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= entries.length) return;
+      results[index] = await researchCompany(entries[index]);
+    }
+  };
+
+  const workerCount = Math.min(concurrency, entries.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return {
+    rows: results.flatMap((result) => result?.rows ?? []),
+    companies: results.flatMap((result) => result ? [result.report] : []),
+  };
+}
+'''
+
+path.write_text(source[:start] + replacement)
+print("Updated bounded research concurrency in runner.ts")
+
+test_path = Path("tests/research-runner.test.ts")
+tests = test_path.read_text()
+
+tests += r'''
+
+test("runResearch limits concurrent companies and preserves input order", async () => {
+  const entries: ResearchInputEntry[] = [
+    { companyName: "First", website: "https://first.example/", extraUrls: [] },
+    { companyName: "Second", website: "https://second.example/", extraUrls: [] },
+    { companyName: "Third", website: "https://third.example/", extraUrls: [] },
+    { companyName: "Fourth", website: "https://fourth.example/", extraUrls: [] },
+  ];
+
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+
+  const result = await runResearch(entries, {
+    concurrency: 2,
+    fetchPage: async (url) => {
+      activeFetches++;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+
+      try {
+        // Different completion times ensure results cannot rely on finish order.
+        const delay = url.includes("first") ? 30 : url.includes("second") ? 5 : 1;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        return {
+          url,
+          title: "Example",
+          text: "Example company website.",
+        };
+      } finally {
+        activeFetches--;
+      }
+    },
+    discoverLinks: () => [],
+    extract: async () => [],
+  });
+
+  assert.equal(maxActiveFetches, 2);
+  assert.deepEqual(
+    result.companies.map((company) => company.companyName),
+    ["First", "Second", "Third", "Fourth"],
+  );
+  assert.equal(result.companies.length, 4);
+});
+'''
+
+test_path.write_text(tests)
+print("Added bounded-concurrency regression test")
+PY
+
+Then validate:
+npx tsc --noEmit && npm run lint && npm test
+
+Send me the output. If it passes, we'll move directly to the AI provider concurrency protection and then the discovery route's candidate-pool/30-company target.
+
+
+ChatGPT:
+Run this patch from the project root. It replaces only runResearch() and adds one concurrency test.
+python3 <<'PY'
+from pathlib import Path
+
+path = Path("lib/research/runner.ts")
+source = path.read_text()
+
+source = source.replace(
+    "  now?: () => Date;\n};",
+    "  now?: () => Date;\n  concurrency?: number;\n};"
+)
+
+start = source.index("export async function runResearch(")
+
+replacement = r'''export async function runResearch(
+  entries: ResearchInputEntry[],
+  deps: RunnerDeps = {},
+): Promise<ResearchRunResult> {
+  const fetchPage = deps.fetchPage ?? fetchResearchPage;
+  const extract = deps.extract ?? extractClaims;
+  const discoverLinks = deps.discoverLinks ?? discoverSameSiteLinks;
+  const now = deps.now ?? (() => new Date());
+
+  const requestedConcurrency = Number.isFinite(deps.concurrency)
+    ? Math.floor(deps.concurrency!)
+    : 4;
+  const concurrency = Math.max(1, Math.min(8, requestedConcurrency));
+
+  const researchCompany = async (
+    entry: ResearchInputEntry,
+  ): Promise<{ rows: ResearchOutputRow[]; report: CompanyResearchReport }> => {
+    const report: CompanyResearchReport = {
+      companyName: entry.companyName,
+      website: entry.website,
+      pagesRead: [],
+      proposed: 0,
+      accepted: 0,
+      rejected: 0,
+      errors: [],
+      rejectedClaims: [],
+    };
+
+    const pages: ResearchPage[] = [];
+    const visited = new Set<string>();
+
+    const readPage = async (url: string) => {
+      let safeUrl: URL;
+
+      try {
+        safeUrl = validateResearchUrl(url);
+
+        const homepageHost = validateResearchUrl(entry.website).hostname;
+        if (safeUrl.hostname !== homepageHost) {
+          throw new Error("Page must belong to the same website as the homepage");
+        }
+      } catch (error) {
+        report.errors.push(
+          `Could not read ${url}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return;
+      }
+
+      const normalizedUrl = safeUrl.toString();
+      if (visited.has(normalizedUrl)) return;
+      visited.add(normalizedUrl);
+
+      try {
+        const page = await fetchPage(normalizedUrl);
+        pages.push(page);
+        report.pagesRead.push(page.url);
+      } catch (error) {
+        report.errors.push(
+          `Could not read ${url}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    };
+
+    // Read the homepage first so we can discover relevant same-site pages.
+    await readPage(entry.website);
+
+    const discovered = pages.length
+      ? discoverLinks(pages[0].text, entry.website, 3)
+      : [];
+
+    // Fetch additional pages concurrently, after the homepage is available.
+    const additionalUrls = [...new Set([...entry.extraUrls, ...discovered])];
+    await Promise.all(additionalUrls.map(readPage));
+
+    if (!pages.length) {
+      report.errors.push("No pages could be read; extraction was skipped");
+      return { rows: [], report };
+    }
+
+    let proposals: ProposedClaim[];
+
+    try {
+      proposals = await extract(entry.companyName, pages);
+      report.proposed = proposals.length;
+    } catch (error) {
+      report.errors.push(
+        `AI extraction failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return { rows: [], report };
+    }
+
+    const verification = verifyClaims(proposals, pages);
+    const retrievedAt = now().toISOString().slice(0, 10);
+
+    report.accepted = verification.accepted.length;
+    report.rejected = verification.rejected.length;
+    report.rejectedClaims = verification.rejected.map((item) => ({
+      claim_type: item.claim_type,
+      reason: item.reason,
+    }));
+
+    const rows = verification.accepted.map((claim) => ({
+      company_name: entry.companyName,
+      website: entry.website,
+      claim_type: claim.claim_type,
+      claim: claim.claim,
+      source_url: claim.source_url,
+      source_title: claim.source_title,
+      retrieved_at: retrievedAt,
+      evidence: claim.evidence,
+    }));
+
+    return { rows, report };
+  };
+
+  // A bounded worker pool prevents one slow company from blocking all others.
+  // Store by input index so returned reports and rows remain deterministic.
+  const results: Array<{
+    rows: ResearchOutputRow[];
+    report: CompanyResearchReport;
+  } | undefined> = new Array(entries.length);
+
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= entries.length) return;
+      results[index] = await researchCompany(entries[index]);
+    }
+  };
+
+  const workerCount = Math.min(concurrency, entries.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return {
+    rows: results.flatMap((result) => result?.rows ?? []),
+    companies: results.flatMap((result) => result ? [result.report] : []),
+  };
+}
+'''
+
+path.write_text(source[:start] + replacement)
+print("Updated bounded research concurrency in runner.ts")
+
+test_path = Path("tests/research-runner.test.ts")
+tests = test_path.read_text()
+
+tests += r'''
+
+test("runResearch limits concurrent companies and preserves input order", async () => {
+  const entries: ResearchInputEntry[] = [
+    { companyName: "First", website: "https://first.example/", extraUrls: [] },
+    { companyName: "Second", website: "https://second.example/", extraUrls: [] },
+    { companyName: "Third", website: "https://third.example/", extraUrls: [] },
+    { companyName: "Fourth", website: "https://fourth.example/", extraUrls: [] },
+  ];
+
+  let activeFetches = 0;
+  let maxActiveFetches = 0;
+
+  const result = await runResearch(entries, {
+    concurrency: 2,
+    fetchPage: async (url) => {
+      activeFetches++;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+
+      try {
+        // Different completion times ensure results cannot rely on finish order.
+        const delay = url.includes("first") ? 30 : url.includes("second") ? 5 : 1;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+
+        return {
+          url,
+          title: "Example",
+          text: "Example company website.",
+        };
+      } finally {
+        activeFetches--;
+      }
+    },
+    discoverLinks: () => [],
+    extract: async () => [],
+  });
+
+  assert.equal(maxActiveFetches, 2);
+  assert.deepEqual(
+    result.companies.map((company) => company.companyName),
+    ["First", "Second", "Third", "Fourth"],
+  );
+  assert.equal(result.companies.length, 4);
+});
+'''
+
+test_path.write_text(tests)
+print("Added bounded-concurrency regression test")
+PY
+
+Then validate:
+npx tsc --noEmit && npm run lint && npm test
+
+Send me the output. If it passes, we'll move directly to the AI provider concurrency protection and then the discovery route's candidate-pool/30-company target.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npx tsc --noEmit && npm run lint && npm test
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (83.952314ms)
+✔ falls through to the next provider on a 429 (1.82838ms)
+✔ a rate-limited model is skipped on the next call (1.483467ms)
+✔ a model is retried after its cooldown expires (6.321498ms)
+✔ a Retry-After header sets the cooldown (3.66432ms)
+✔ repeated 429s escalate the cooldown (1.832792ms)
+✔ a success resets the escalation (1.709821ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.663319ms)
+✔ truncated output tries the next model without cooling the first (1.660749ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (2.971945ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.788462ms)
+✔ oversized input is never sent to Groq (1.032184ms)
+✔ when every model is cooling down it throws without any network call (1.058783ms)
+✔ nothing configured throws and makes no network call (0.411539ms)
+✔ consecutive calls to one provider are spaced out (1.023876ms)
+✔ extractJson strips code fences (2.500568ms)
+✔ extractJson throws on garbage (0.436563ms)
+✔ a valid 30-minute business-hours slot passes (50.257561ms)
+✔ slot durations are limited to 15–120 minutes (59.904418ms)
+✔ slots must fit inside 9:00–17:00 local time (48.63688ms)
+✔ slots must be in the future and use a valid timezone (15.462327ms)
+✔ zoned conversion handles standard and daylight time (14.281644ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.49825ms)
+✔ booking input requires a name, a valid email, and a timezone (0.596051ms)
+✔ slot range formatting includes the timezone (0.851309ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (17.487164ms)
+✔ zoned conversion rejects malformed and impossible local dates (0.988167ms)
+✔ default slot advances by calendar day in New York timezone (2.561821ms)
+✔ opt-out requests suppress and stop all replies (3.474609ms)
+✔ opt-out wins over a pricing question in the same message (0.264512ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.61552ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.64581ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.685382ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.511095ms)
+✔ bot disclosure is explicit and safe (2.821012ms)
+✔ general fallback is safe and contains no invented facts (2.940748ms)
+✔ reply validation blocks pricing and human claims (1.217927ms)
+✔ reply prompt includes only recent thread messages and verified facts (2.302614ms)
+✔ parseReply accepts JSON and rejects empty output (3.328792ms)
+✔ selectEmailSources keeps only human-verified, usable sources (5.492026ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.536388ms)
+✔ the fallback draft uses verified claims and passes guardrails (3.896092ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (0.925147ms)
+✔ draft validation rejects placeholders and unsafe content (0.693512ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.402938ms)
+✔ the prompt carries only supplied facts and the revision note (0.831313ms)
+✔ contact first name handles unknown contacts (0.242969ms)
+✔ Google status never claims operational without explicit verification (2.460418ms)
+✔ sync is a no-op unless explicitly enabled (0.353634ms)
+✔ access token exchange sends a refresh-token grant (86.071355ms)
+✔ sync creates a Google event and returns its id (3.184751ms)
+✔ Google HTTP failures are reported without claiming success (1.011478ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.199865ms)
+✔ events can be updated with PATCH using the new slot details (1.999365ms)
+✔ deletion treats an already-removed event as success (1.398641ms)
+✔ update and delete are no-ops unless sync is enabled (1.004171ms)
+✔ claim types are exactly the closed set of seven (5.724632ms)
+✔ accepts us_ecommerce (1.332432ms)
+✔ accepts category (0.554736ms)
+✔ accepts size_fit (0.188581ms)
+✔ accepts growth_signal (0.178402ms)
+✔ accepts pain_signal (0.162368ms)
+✔ accepts disqualifier (0.303256ms)
+✔ accepts contact (0.242059ms)
+✔ rejects claim_type "size" (0.574021ms)
+✔ rejects claim_type "other" (0.720145ms)
+✔ rejects claim_type "pain_sigal" (0.201178ms)
+✔ rejects claim_type "" (0.12626ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.270107ms)
+✔ disqualifier rows still need a source (0.194956ms)
+✔ retrieved_at must be a real calendar date (0.21985ms)
+✔ contact must be Name | Role (0.174706ms)
+✔ extracts claims and attaches the actual fetched page URL (2.767972ms)
+✔ ignores any source URL supplied by the AI (0.483815ms)
+✔ returns an empty array when the AI finds no supported claims (3.919936ms)
+✔ rejects malformed JSON (0.701065ms)
+✔ rejects a response without a claims array (0.818366ms)
+✔ rejects malformed claim objects (0.389369ms)
+✔ splits long pages into overlapping chunks (0.429516ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (4.963126ms)
+✔ CSV output uses the exact importer columns and preserves values (9.226474ms)
+✔ CSV output includes headers when no claims were accepted (1.589172ms)
+✔ report includes totals, sources, rejected claims, and errors (0.824803ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.539032ms)
+✔ uses a fallback title when Reader provides no title (2.212086ms)
+✔ rejects an empty Reader response (0.810666ms)
+✔ discovers same-site links and prioritizes useful pages (3.65793ms)
+✔ ignores duplicate links and removes tracking query strings (0.370912ms)
+✔ rejects non-HTTP and private/local URLs (0.359761ms)
+✔ fetches through Jina Reader and returns the original page URL (72.131622ms)
+✔ reports Reader HTTP errors clearly (0.731163ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.794384ms)
+✔ rejects local hostnames with a trailing dot (0.744055ms)
+✔ parses company names, homepages, and optional same-site pages (11.054581ms)
+✔ rejects invalid URLs and extra pages from another website (0.974938ms)
+✔ rejects empty research input (0.38316ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (2.732927ms)
+✔ continues to the next company when one homepage cannot be fetched (1.123139ms)
+✔ records an extraction failure without losing the company report (0.606035ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.382165ms)
+✔ runResearch rejects extra pages from another hostname (0.542674ms)
+✔ runResearch limits concurrent companies and preserves input order (31.358011ms)
+✔ accepts a claim when its evidence appears on the fetched page (2.999653ms)
+✔ matches evidence despite case and whitespace differences (0.400153ms)
+✔ rejects evidence that does not appear on the page (0.589134ms)
+✔ rejects unsupported claim types (0.235311ms)
+✔ rejects a source URL that was not fetched (0.265136ms)
+✔ rejects evidence outside the permitted length (0.241912ms)
+✔ accepts a contact only when name and role appear in the evidence (0.807864ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.286792ms)
+✔ rejects a contact email that is not on the page (0.670771ms)
+✔ rejects duplicate claims (0.821632ms)
+✔ accepts no more than three claims of the same type (0.519695ms)
+✔ qualification weights match the approved 100-point rubric (3.501737ms)
+✔ all verified evidence earns the full 100 points (0.660382ms)
+✔ pending evidence remains unknown and earns no points (0.473294ms)
+✔ rejected evidence cannot earn points (0.256351ms)
+✔ partial verified evidence produces a provisional partial score (0.288804ms)
+✔ only human-verified sources are attached to criterion results (0.177833ms)
+✔ only verified disqualifiers are surfaced and they earn no points (0.320884ms)
+✔ newly imported sources are pending review and are not human-verified (1.298391ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.285653ms)
+✔ rejection requires a non-empty note (0.527444ms)
+✔ status transition guards (0.211783ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.459198ms)
+✔ structural validation does not imply human verification (0.145637ms)
+✔ a recipient email needs a verified contact source containing it (0.497387ms)
+✔ status labels are explicit (0.143038ms)
+✔ email normalization trims and lowercases (1.207661ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.29404ms)
+✔ trimText enforces required text and maximum length (0.175806ms)
+ℹ tests 131
+ℹ suites 0
+ℹ pass 131
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1615.825891
+I want to test the feature asap
+
+
+ChatGPT:
+131/131 tests passing TypeScript, ESLint and the full test suite all pass. The concurrency change is ready for a first live test.
+Let's test the actual discovery flow now, locally, without deploying.
+1. Start Ledgerwise
+From the project root:
+npm run dev
+
+Open http://localhost:3000, sign in, and navigate to Prospects.
+2. Run autonomous discovery
+Click Discover Companies and let the request finish.
+The current route searches Tavily, filters candidate websites, researches up to 30 candidates, verifies evidence against fetched pages, and imports accepted sources as pending review.
+Important: It may produce fewer than 30 companies with accepted evidence. We need to measure the actual result rather than assume the target was reached.
+3. Send me the result
+Please paste:
+
+The discovery result shown in the UI.
+Any terminal errors from the Next.js server.
+Whether companies and pending evidence appear in Prospects / Review.
+
+Don't paste your .env.local or API key.
+I'll use the first run to identify exactly where the pipeline is falling short and fix that before we spend time on the submission demo.
+
+
+You:
+When discovering companies was pressed
+He came up with this one:
+https://ecomcfo.co/
+Is it an e-commerce company/store though ?
+
+
+ChatGPT:
+No. Ecom CFO is not an e-commerce store. It is an accounting and financial advisory firm that serves e-commerce businesses.
+
+  
+🖼️
+Generated image
+Ecom CFO ecomcfo.co company logo
+  
+    ****
+
+<text color="secondary" size="xs">Austin, Texas · United States</text>
+<span class="ce-badge ce-badge-error">Not an ICP prospect</span>
+<text size="sm"><a href="https://ecomcfo.co/">Official website</a></text>
+
+  
+
+
+Its website explicitly describes its business as providing CFO, accounting, bookkeeping and financial operations services to e-commerce brands. It even says it works exclusively with e-commerce brands. 
+Why this matters for Ledgerwise
+Our ICP is the e-commerce brands themselves, not the service providers supporting them.
+
+
+
+Qualification
+Ecom CFO
+
+
+
+Sells physical products online
+No evidence
+
+
+E-commerce brand/store
+No
+
+
+Provides services to e-commerce brands
+Yes
+
+
+Suitable Ledgerwise prospect
+No
+
+
+We found an important discovery bug
+Our current discovery pipeline can mistake companies containing terms like "ecommerce" in their website or search title for actual online retailers.
+We need a business-model exclusion rule.
+Exclude companies whose primary business is:
+
+Accounting, bookkeeping or CFO services.
+Marketing and advertising agencies.
+E-commerce consultants and development agencies.
+SaaS platforms and software vendors.
+Other B2B service providers.
+
+A company mentioning Shopify or e-commerce is not enough. We need evidence that it actually sells products to consumers.
+For this test, do not approve Ecom CFO as a prospect. We should fix the qualification filter before trusting the 30-company discovery results.
+
+
+You:
+You know the criterias that qualify a store/company as a target, right ?
+
+
+ChatGPT:
+Yes. Ledgerwise's target is US-based e-commerce businesses that could realistically need outsourced bookkeeping and financial management.
+Here are the qualification criteria we've established for the project.
+1. Mandatory ICP criteria
+
+
+
+Criterion
+Requirement
+
+
+
+Business model
+Actual e-commerce retailer selling physical consumer products
+
+
+Geography
+United States
+
+
+Revenue
+Approximately $1M–$10M annually
+
+
+Employees
+Approximately 5–50
+
+
+Sales channels
+Shopify, Amazon, or their own online store
+
+
+Business type
+Operating consumer brand, not a service provider
+
+
+2. Relevant decision-makers
+We want to identify people who can make purchasing decisions:
+
+Founder / Co-founder
+CEO
+COO
+CFO
+Head of Finance
+Finance or Accounting Manager
+
+3. Positive qualification signals
+These improve a company's attractiveness as a prospect:
+
+Hiring finance, accounting or operations personnel.
+Expanding product lines or entering new markets.
+Growing e-commerce operations.
+Raising funding or announcing significant expansion.
+Increasing operational complexity.
+Selling across multiple channels, such as Shopify and Amazon.
+
+4. Automatic exclusions
+The discovery engine must reject:
+
+Accounting, bookkeeping and CFO firms.
+Marketing agencies and e-commerce consultants.
+SaaS companies and software vendors.
+Marketplaces and directories.
+Manufacturers without evidence of direct-to-consumer sales.
+Companies outside the United States.
+Businesses with no evidence of an actual online store.
+
+5. Evidence requirements
+This is particularly important:
+
+Never infer revenue or employee count from appearance or website traffic.
+Every qualification claim needs a source URL and supporting quotation.
+Unconfirmed information stays unknown or provisional.
+Newly discovered sources remain pending human review.
+Only human-verified evidence can contribute to qualification scores and personalized emails.
+
+The central distinction: We are looking for businesses that SELL through e-commerce, not businesses that SELL SERVICES to e-commerce companies.
+And yes, Ecom CFO should have been excluded. We need to enforce these criteria in the discovery pipeline itself, not just rely on the AI to find relevant websites.
+
+
+You:
+so why did the agent get Ecom CFO ?
+
+
+ChatGPT:
+Because our current discovery pipeline has a candidate qualification gap. It finds websites that appear relevant to e-commerce, but it does not properly establish that they are actual online retailers before researching them.
+Here's what happened:
+1. The search queries are too broad
+Our Tavily queries include phrases such as:
+
+"US direct to consumer ecommerce brands Shopify official online store"
+"American ecommerce consumer brands Shopify founded in the United States"
+"US DTC ecommerce brands growing hiring operations finance accounting"
+
+These queries can return service providers that discuss e-commerce, not just stores selling products.
+Ecom CFO is particularly likely to appear because its business revolves around e-commerce accounting.
+2. Our candidate filter is insufficient
+The current route mainly checks:
+
+Is the result URL HTTPS?
+Does it point to a homepage?
+Is the domain not on our exclusion list?
+Is its Tavily relevance score at least 0.3?
+
+It does not check whether the company actually sells consumer products.
+3. Research does not perform ICP qualification
+Our research engine extracts claims from the website and verifies quotations against the fetched pages.
+That verifies whether information appears on a website. It does not establish that the business satisfies our entire ICP.
+
+  **The required correction**
+
+  
+    
+      **Discover candidates**
+
+  Search for actual US online retailers.
+</list-item>
+<list-item>
+  **Classify business model**
+
+  Retailer, service provider, SaaS, agency, marketplace, etc. Reject non-retailers.
+</list-item>
+<list-item>
+  **Verify ICP**
+
+  Establish US presence, product sales, revenue and employee evidence where available.
+</list-item>
+<list-item>
+  **Extract supporting evidence**
+
+  Collect verified claims, quotations and source URLs.
+</list-item>
+<list-item>
+  **Import qualified prospects**
+
+  Only then add them to Ledgerwise for human review and scoring.
+</list-item>
+
+  
+
+
+My recommendation: We should fix this before another 30-company run. The discovery agent should have a strict retailer-classification gate, with uncertain companies rejected rather than imported.
+I don't want us to end up with 30 companies in the database if 10 of them are agencies, consultants or software vendors.
+
+
+You:
+Alright then, let's fix it quickly
+
+
+ChatGPT:
+Let's fix the actual cause, not just add ecomcfo.co to a blacklist.
+We'll put a retailer qualification gate between Tavily discovery and company research. A candidate must show evidence that it sells its own physical products online. Accounting firms, agencies, consultants, SaaS providers and other B2B services must be rejected before they reach the research/import stage.
+We'll also make the classifier fail closed: if it cannot establish that the candidate is a retailer, it won't be imported.
+
+
+ChatGPT:
+Let's fix the actual cause, not just add ecomcfo.co to a blacklist.
+We'll put a retailer qualification gate between Tavily discovery and company research. A candidate must show evidence that it sells its own physical products online. Accounting firms, agencies, consultants, SaaS providers and other B2B services must be rejected before they reach the research/import stage.
+We'll also make the classifier fail closed: if it cannot establish that the candidate is a retailer, it won't be imported.
+First, show me the exact current discovery route so I can patch it without disturbing the working import and reporting logic:
+sed -n '1,300p' app/api/prospects/discover/route.ts
+
+I'll add three safeguards:
+
+Search refinement: focus on US product brands and online stores, rather than generic e-commerce businesses. Tavily supports a US country boost and domain exclusions. 
+Business-model classification: reject service providers, agencies, consultants and SaaS companies.
+Retail evidence gate: require positive evidence of consumer product sales before a company can enter research/import.
+
+We won't solve this by blacklisting Ecom CFO alone. We want to prevent the next 100 Ecom CFOs, too.
+
+If you want, I can:
+
+Show current discovery route source code
+Add retailer qualification gate to discovery flow
+Refine Tavily search queries and filter by US product brands
+
+
+
+ChatGPT:
+First, show me the exact current discovery route so I can patch it without disturbing the working import and reporting logic:
+sed -n '1,300p' app/api/prospects/discover/route.ts
+
+I'll add three safeguards:
+
+Search refinement: focus on US product brands and online stores, rather than generic e-commerce businesses. Tavily supports a US country boost and domain exclusions. 
+Business-model classification: reject service providers, agencies, consultants and SaaS companies.
+Retail evidence gate: require positive evidence of consumer product sales before a company can enter research/import.
+
+We won't solve this by blacklisting Ecom CFO alone. We want to prevent the next 100 Ecom CFOs, too.

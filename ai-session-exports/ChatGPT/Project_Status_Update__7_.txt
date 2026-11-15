@@ -1,0 +1,5567 @@
+Project Status Update (7)
+=========================
+
+ChatGPT:
+Thanks. I've reviewed all three migration files. This gives us a much clearer picture of what is implemented versus what the database actually guarantees.
+My conclusion: the migrations are a useful starting point, but we should not apply them yet. There are several important gaps between the approved architecture and the current SQL.
+1. Migration 01 — Source verification and security
+Mostly aligned
+This migration implements several things correctly:
+
+Adds explicit source verification statuses: pending_review, verified, and rejected.
+Preserves old verified_by values as import attribution during the initial backfill.
+Adds indexes for source verification and common queries.
+Replaces existing policies with authenticated-only policies.
+Makes suppression records and audit logs append-only.
+Adds database functions for checking and recording suppressed contacts.
+
+However, there are things to review:
+A. Single-team security is not user isolation.
+The policies allow every authenticated user to read and modify shared business records. This is consistent with the documented single-team assumption, but it is not suitable for multiple independent customers.
+B. Direct database permissions remain important.
+The migration creates authenticated insert/update policies for bookings and other tables. If we introduce transactional booking RPCs, we must ensure users cannot bypass them through direct table writes.
+C. Suppression uniqueness needs a preflight check.
+The unique index on lower(email) can fail if duplicate suppressed contacts already exist. The migration instructions mention this, which is good. We must actually run that check before applying it.
+D. Backfill deserves a small correction.
+The backfill assumes that existing verified_by values are importer attribution. That matches our known previous implementation, but we should ensure the migration does not overwrite existing imported_by values if that column already exists independently.
+2. Migration 02 — Internal calendar and booking
+Critical gap
+This is the most important finding.
+The migration currently adds:
+
+booking_request to conversations.
+The internal calendar source.
+A unique partial index preventing multiple active bookings against the same slot ID.
+Supporting indexes.
+
+But it does not implement the transactional booking architecture we approved.
+Specifically, it has no:
+
+book_slot RPC.
+cancel_booking RPC.
+reschedule_booking RPC.
+Database-side overlapping-slot protection.
+Atomic booking and audit operations.
+Transactional slot deletion guard.
+Database-side validation of slot availability and booking state.
+
+The unique index is useful, but it only prevents two active bookings from referencing the exact same slot_id.
+For example:
+
+  **Example: overlapping slots**
+
+  Same day, same calendar
+  
+    
+      Slot A
+      10:00–10:30
+    
+    
+    
+      Slot B
+      10:15–10:45
+    
+    
+  
+  Overlapping bookings possible
+  Both slots have different IDs. The unique index permits one booking on each, even though their times overlap.
+
+The application currently checks for overlapping bookings before inserting. But two concurrent requests can both pass that check before either inserts.
+We need to move that protection into the database transaction.
+My proposed correction is to implement the three RPCs, add the necessary locking and validation, and ensure direct writes cannot bypass the transactional path.
+3. Migration 03 — Google Calendar metadata
+Incomplete for approved OAuth design
+This migration adds:
+
+google_event_id
+calendar_sync_status
+calendar_synced_at
+google_calendar_id
+
+Those fields are useful for tracking event synchronization.
+However, they do not implement OAuth.
+Our approved design additionally requires secure storage for Google account connections, including:
+
+Google account identification.
+Encrypted refresh tokens.
+Connection and disconnection state.
+Selected calendar information.
+Access restrictions so credentials cannot be read by other users.
+Token refresh and revocation handling.
+
+I recommend a separate additive migration for this connection infrastructure rather than trying to squeeze everything into migration 03.
+Also, the current sync status constraint does not include every state in our original design. We should define the final states consistently across the database and application.
+
+4. What I propose changing
+We should preserve the useful work rather than discard the migrations.
+
+
+
+Migration
+Proposed treatment
+
+
+
+01 — Source verification
+Keep, with small corrections and security review
+
+
+02 — Calendar and booking
+Expand substantially with transactional RPCs and database protections
+
+
+03 — Google metadata
+Keep useful fields, align status definitions
+
+
+04 — Google OAuth infrastructure
+Add encrypted connection storage and access restrictions
+
+
+The application code must then be updated to call the database RPCs instead of performing booking operations through separate client-side database calls.
+5. Implementation sequence
+I recommend this order:
+
+  
+    **Finalize migration 01**
+
+Correct and verify the source verification backfill, suppression uniqueness, and RLS assumptions.
+
+  
+  
+    **Design the transactional calendar migration**
+
+Implement booking, cancellation, rescheduling, overlap protection, slot deletion protection, and atomic auditing.
+
+  
+  
+    **Update calendar server actions**
+
+Replace direct booking mutations with RPC calls and handle database errors correctly.
+
+  
+  
+    **Harden timezone handling**
+
+Reject ambiguous and nonexistent DST times and correct the default-slot timezone behavior.
+
+  
+  
+    **Build proper Google OAuth**
+
+Implement authorization, encrypted token storage, calendar selection, availability checks, and event synchronization.
+
+  
+  
+    **Regression and integration testing**
+
+Verify concurrency, authorization, real Google account connections, and actual event lifecycle operations.
+
+  
+
+
+We will preserve all existing research-agent changes and avoid destructive Git operations.
+Ledgerwise status board
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated only
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar UI/actions
+Implemented; database safety incomplete
+
+
+Google OAuth
+Approved design; not implemented
+
+
+Migrations
+Reviewed; not approved for application
+
+
+Automated tests
+127 passed
+
+
+TypeScript / lint / build
+All previously clean
+
+
+Git / deployment
+No commit, push or deployment
+
+
+Next, I recommend correcting the database architecture before touching Google OAuth. The internal booking system is the foundation: Google synchronization should never be able to create an inconsistent booking or compromise an otherwise valid reservation.
+
+
+You:
+Alright, proceed, and let's be quick, we don't have much time
+
+
+ChatGPT:
+Let's move straight into implementation. We'll prioritize the parts that protect bookings first, then build OAuth. We won't spend time polishing the UI or revisiting completed phases.
+One important decision: we will not apply the existing migrations as they stand. Migration 02 needs the transactional booking functions, and migration 03 needs to align with the proper OAuth architecture.
+Immediate work plan
+Approved direction
+
+
+
+Priority
+Task
+Deliverable
+
+
+
+1
+Database booking protection
+Atomic booking, cancellation and rescheduling RPCs
+
+
+2
+Slot concurrency
+Prevent overlapping bookings and deletion races
+
+
+3
+Application integration
+Server actions call RPCs instead of separate mutations
+
+
+4
+Timezone corrections
+DST validation and consistent New York defaults
+
+
+5
+Google OAuth
+Authorization, callback and encrypted token storage
+
+
+6
+Synchronization
+Free/busy, event lifecycle, retries and reconciliation
+
+
+7
+Final verification
+Tests, build and deployment preparation
+
+
+Step 1 — One quick schema check
+Before writing the replacement SQL, I want to verify the exact current table definitions and constraints. This avoids generating a migration that assumes columns or constraints that aren't actually present.
+In the Supabase SQL Editor, run this read-only query:
+select
+  table_name,
+  column_name,
+  data_type,
+  is_nullable,
+  column_default
+from information_schema.columns
+where table_schema = 'public'
+  and table_name in (
+    'calendar_slots',
+    'bookings',
+    'conversations',
+    'audit_logs'
+  )
+order by table_name, ordinal_position;
+
+Then run:
+select
+  conrelid::regclass as table_name,
+  conname,
+  pg_get_constraintdef(oid) as definition
+from pg_constraint
+where conrelid in (
+  'public.calendar_slots'::regclass,
+  'public.bookings'::regclass,
+  'public.conversations'::regclass,
+  'public.audit_logs'::regclass
+)
+order by table_name, conname;
+
+These queries only inspect the database. They do not change anything.
+Paste both results here. I'll use them to prepare the corrected migration and matching application changes.
+Project status
+
+Phases 1–3: implemented.
+Phase 4 research: postponed.
+Phase 5: implemented; simulated email only.
+Phase 6: implemented.
+Phase 7: booking transactions need correction.
+Google Calendar: proper OAuth approved, not yet implemented.
+Tests: 127 passed in the last verification.
+Migrations: unapplied.
+Git changes: preserved; no commits, pushes or deployments.
+
+Our immediate target is a reliable internal booking engine. Then we build Google OAuth on top of it.
+
+
+You:
+Step 1 Results:
+[
+  {
+    "table_name": "audit_logs",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "actor_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "action",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "entity_type",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "entity_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "detail",
+    "data_type": "jsonb",
+    "is_nullable": "NO",
+    "column_default": "'{}'::jsonb"
+  },
+  {
+    "table_name": "audit_logs",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "conversation_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "slot_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "prospect_name",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "prospect_email",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "timezone",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'UTC'::text"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'pending'::text"
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "calcom_booking_uid",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "bookings",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "start_time",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "end_time",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "timezone",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'UTC'::text"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "source",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'calcom'::text"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "external_id",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "is_available",
+    "data_type": "boolean",
+    "is_nullable": "NO",
+    "column_default": "true"
+  },
+  {
+    "table_name": "calendar_slots",
+    "column_name": "fetched_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "gen_random_uuid()"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "company_id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "contact_email",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "status",
+    "data_type": "text",
+    "is_nullable": "NO",
+    "column_default": "'ai_handling'::text"
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "assigned_to",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "table_name": "conversations",
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "NO",
+    "column_default": "now()"
+  }
+]
+Seond query:
+[
+  {
+    "table_name": "conversations",
+    "conname": "conversations_assigned_to_fkey",
+    "definition": "FOREIGN KEY (assigned_to) REFERENCES users(id)"
+  },
+  {
+    "table_name": "conversations",
+    "conname": "conversations_company_id_fkey",
+    "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE"
+  },
+  {
+    "table_name": "conversations",
+    "conname": "conversations_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "conversations",
+    "conname": "conversations_status_check",
+    "definition": "CHECK ((status = ANY (ARRAY['ai_handling'::text, 'needs_human'::text, 'human_takeover'::text, 'closed'::text, 'suppressed'::text])))"
+  },
+  {
+    "table_name": "calendar_slots",
+    "conname": "calendar_slots_check",
+    "definition": "CHECK ((end_time > start_time))"
+  },
+  {
+    "table_name": "calendar_slots",
+    "conname": "calendar_slots_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "calendar_slots",
+    "conname": "calendar_slots_source_check",
+    "definition": "CHECK ((source = ANY (ARRAY['calcom'::text, 'demo'::text])))"
+  },
+  {
+    "table_name": "bookings",
+    "conname": "bookings_company_id_fkey",
+    "definition": "FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "bookings",
+    "conname": "bookings_conversation_id_fkey",
+    "definition": "FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "bookings",
+    "conname": "bookings_pkey",
+    "definition": "PRIMARY KEY (id)"
+  },
+  {
+    "table_name": "bookings",
+    "conname": "bookings_slot_id_fkey",
+    "definition": "FOREIGN KEY (slot_id) REFERENCES calendar_slots(id) ON DELETE SET NULL"
+  },
+  {
+    "table_name": "bookings",
+    "conname": "bookings_status_check",
+    "definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'confirmed'::text, 'needs_human'::text, 'rescheduled'::text, 'cancelled'::text])))"
+  },
+  {
+    "table_name": "audit_logs",
+    "conname": "audit_logs_actor_id_fkey",
+    "definition": "FOREIGN KEY (actor_id) REFERENCES users(id)"
+  },
+  {
+    "table_name": "audit_logs",
+    "conname": "audit_logs_pkey",
+    "definition": "PRIMARY KEY (id)"
+  }
+]
+
+
+ChatGPT:
+Excellent. These results confirm the actual database structure, and they expose one important issue we can now address precisely.
+The existing database is still on the original schema. None of the three new migrations has been applied. That's good: we can correct the migration files without having to undo a partially applied database change.
+1. What the database confirms
+
+
+
+Finding
+Implication
+
+
+
+calendar_slots.source only allows calcom and demo
+Migration 02 must safely replace this constraint to allow internal.
+
+
+Bookings have five allowed statuses
+We can preserve the existing status model.
+
+
+slot_id can be null
+Historical bookings can remain after slot deletion, but deletion must not silently detach active bookings.
+
+
+No booking overlap constraint exists
+Database-level overlap protection is missing.
+
+
+No booking RPCs exist
+We must create the transactional functions.
+
+
+audit_logs supports nullable actor IDs and JSON details
+Booking operations can record their audit entries inside the same transaction.
+
+
+Conversations have no booking_request column yet
+Migration 02 must add it.
+
+
+2. The database design I'm going to use
+For the booking operations, I recommend a transaction-level advisory lock for calendar mutations, combined with row locks and database validation.
+Why? PostgreSQL's ordinary unique index protects identical slot IDs, but it cannot protect overlapping time ranges stored in a separate table.
+The transaction will:
+
+Acquire a calendar mutation lock.
+Lock the relevant slot and booking rows.
+Verify that the slot exists, is available and is in the future.
+Check for conflicting active bookings across overlapping time ranges.
+Change the booking and conversation state.
+Write the audit record.
+Commit everything together.
+
+If any step fails, the entire transaction rolls back.
+This prioritizes correctness over maximum booking throughput. For our single-team prototype, that's a sensible trade-off.
+We'll also prevent ordinary authenticated users from bypassing the booking RPCs with direct booking mutations.
+3. One final inspection before generating the replacement migration
+I need the exact existing application action signatures and current database grants so that the SQL and TypeScript changes match.
+Run this combined command in Kali:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+printf '\n===== BOOKING ACTION SIGNATURES =====\n'
+grep -nE 'export async function (bookSlot|cancelBooking|rescheduleBooking|confirmBooking|createSlot|deleteSlot)|function (bookSlot|cancelBooking|rescheduleBooking|confirmBooking|createSlot|deleteSlot)' \
+  'app/(dashboard)/calendar/actions.ts'
+
+printf '\n===== BOOKING ACTION IMPLEMENTATION =====\n'
+sed -n '1,420p' 'app/(dashboard)/calendar/actions.ts'
+
+printf '\n===== CALENDAR TIME HELPERS =====\n'
+cat lib/calendar/time.ts
+
+printf '\n===== GOOGLE CALENDAR IMPLEMENTATION =====\n'
+cat lib/calendar/google.ts
+
+And run this read-only query in Supabase:
+select
+  grantee,
+  table_name,
+  privilege_type
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name in (
+    'calendar_slots',
+    'bookings',
+    'audit_logs',
+    'conversations'
+  )
+order by table_name, grantee, privilege_type;
+
+This is the last inspection I need before preparing the corrected database and application changes.
+Please don't apply any migrations yet.
+Ledgerwise status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated only
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar
+Transactional correction required
+
+
+Google OAuth
+Approved; implementation pending
+
+
+Migrations
+Reviewed; unapplied
+
+
+Previous automated tests
+127 passed
+
+
+Git changes
+Preserved; no commit or push
+
+
+Our priority is to get booking correctness finished first. Then we'll move directly into OAuth without reopening the earlier product decisions.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ printf '\n===== BOOKING ACTION SIGNATURES =====\n'
+grep -nE 'export async function (bookSlot|cancelBooking|rescheduleBooking|confirmBooking|createSlot|deleteSlot)|function (bookSlot|cancelBooking|rescheduleBooking|confirmBooking|createSlot|deleteSlot)' 
+  'app/(dashboard)/calendar/actions.ts'
+printf '\n===== BOOKING ACTION IMPLEMENTATION =====\n'
+sed -n '1,420p' 'app/(dashboard)/calendar/actions.ts'
+printf '\n===== CALENDAR TIME HELPERS =====\n'
+cat lib/calendar/time.ts
+printf '\n===== GOOGLE CALENDAR IMPLEMENTATION =====\n'
+cat lib/calendar/google.ts
+===== BOOKING ACTION SIGNATURES =====
+188:export async function createSlot(input: {
+239:export async function deleteSlot(slotId: string): Promise {
+283:export async function bookSlot(input: {
+438:export async function confirmBooking(
+510:export async function cancelBooking(
+588:export async function rescheduleBooking(
+===== BOOKING ACTION IMPLEMENTATION =====
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { isSuppressed } from "@/lib/suppression";
+import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+import {
+  OCCUPYING_BOOKING_STATUSES,
+  validateBookingInput,
+  validateSlotInput,
+} from "@/lib/calendar/time";
+import {
+  deleteGoogleEvent,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+  type GoogleEventInput,
+} from "@/lib/calendar/google";
+export type CalendarActionResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  slotId?: string;
+  bookingId?: string;
+};
+type SlotRow = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  source: string;
+  is_available: boolean;
+};
+type BookingRow = {
+  id: string;
+  company_id: string | null;
+  conversation_id: string | null;
+  slot_id: string | null;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  status: string;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+};
+function revalidateCalendar() {
+  revalidatePath("/calendar");
+  revalidatePath("/conversations");
+}
+async function loadSlot(
+  supabase: ServerSupabase,
+  slotId: string
+): Promise<{ slot?: SlotRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .select("id,start_time,end_time,timezone,source,is_available")
+    .eq("id", slotId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Slot not found." };
+  return { slot: data as SlotRow };
+}
+async function loadBooking(
+  supabase: ServerSupabase,
+  bookingId: string
+): Promise<{ booking?: BookingRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Booking not found." };
+  return { booking: data as BookingRow };
+}
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: Ledgerwise call: ${booking.prospect_name || booking.prospect_email},
+    description: [
+      Prospect: ${booking.prospect_name || "unknown"},
+      Email: ${booking.prospect_email},
+      Company: ${booking.company_id ?? "unknown"},
+      "Managed from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+async function recordGoogleSync(
+  supabase: ServerSupabase,
+  bookingId: string,
+  result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
+  deleted = false
+): Promise {
+  if (result.status === "not_configured") return;
+  if (result.status === "synced") {
+    await supabase
+      .from("bookings")
+      .update(
+        deleted
+          ? {
+              google_event_id: null,
+              calendar_sync_status: "deleted",
+              calendar_synced_at: new Date().toISOString(),
+            }
+          : {
+              ...(result.eventId ? { google_event_id: result.eventId } : {}),
+              calendar_sync_status: "synced",
+              calendar_synced_at: new Date().toISOString(),
+            }
+      )
+      .eq("id", bookingId);
+    return;
+  }
+  await supabase
+    .from("bookings")
+    .update({ calendar_sync_status: "failed" })
+    .eq("id", bookingId);
+}
+async function checkSuppressed(
+  supabase: ServerSupabase,
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (await isSuppressed(supabase, email)) {
+      return {
+        ok: false,
+        error: "This contact is on the permanent suppression list. A booking cannot be created or confirmed.",
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The suppression check failed. Apply the database migrations first.",
+    };
+  }
+}
+async function checkSlotFree(
+  supabase: ServerSupabase,
+  slot: SlotRow,
+  ignoreBookingId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: overlappingSlots, error: slotError } = await supabase
+    .from("calendar_slots")
+    .select("id")
+    .lt("start_time", slot.end_time)
+    .gt("end_time", slot.start_time);
+  if (slotError) return { ok: false, error: slotError.message };
+  const slotIds = Array.from(
+    new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
+  );
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .in("slot_id", slotIds)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES]);
+  if (error) return { ok: false, error: error.message };
+  const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+  if (conflict) {
+    return { ok: false, error: "That time is already held by another booking." };
+  }
+  return { ok: true };
+}
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const validation = validateSlotInput(input);
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .insert({
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+      external_id: null,
+      is_available: true,
+      fetched_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      error:
+        error?.message ??
+        "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+    };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_created",
+    entityType: "calendar_slots",
+    entityId: data.id,
+    detail: {
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId: data.id, message: "Internal slot created." };
+}
+export async function deleteSlot(slotId: string): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+  const loaded = await loadSlot(supabase, slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { data: active, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("slot_id", slotId)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES])
+    .limit(1);
+  if (error) return { ok: false, error: error.message };
+  if ((active ?? []).length > 0) {
+    return {
+      ok: false,
+      error: "Cancel or reschedule the active booking before deleting this slot.",
+    };
+  }
+  const { error: deleteError } = await supabase
+    .from("calendar_slots")
+    .delete()
+    .eq("id", slotId);
+  if (deleteError) return { ok: false, error: deleteError.message };
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_deleted",
+    entityType: "calendar_slots",
+    entityId: slotId,
+    detail: {
+      start_time: loaded.slot.start_time,
+      end_time: loaded.slot.end_time,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId, message: "Slot deleted." };
+}
+export async function bookSlot(input: {
+  slotId: string;
+  companyId?: string | null;
+  conversationId?: string | null;
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+  let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
+  const conversationId =
+    input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+  let prospectName = input.prospectName;
+  let prospectEmail = normalizeEmail(input.prospectEmail);
+  if (conversationId) {
+    const { data: conversation } = await supabase
+      .from("conversations")
+      .select("id,company_id,contact_email,status")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (!conversation) return { ok: false, error: "Conversation not found." };
+    if (conversation.status === "suppressed") {
+      return {
+        ok: false,
+        error: "This contact is suppressed. A booking cannot be created.",
+      };
+    }
+    companyId = companyId ?? conversation.company_id;
+    if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
+  }
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name,contact_name,contact_email")
+      .eq("id", companyId)
+      .maybeSingle();
+    if (company) {
+      if (!prospectName.trim() && company.contact_name !== "unknown") {
+        prospectName = company.contact_name;
+      }
+      if (!prospectEmail && company.contact_email) {
+        prospectEmail = normalizeEmail(company.contact_email);
+      }
+    }
+  }
+  if (!isValidEmail(prospectEmail)) {
+    return { ok: false, error: "A valid prospect email is required." };
+  }
+  const suppression = await checkSuppressed(supabase, prospectEmail);
+  if (!suppression.ok) return { ok: false, error: suppression.error };
+  const cleanProspectName = trimText(prospectName, 200);
+  if (!cleanProspectName) {
+    return { ok: false, error: "A prospect name is required." };
+  }
+  const validation = validateBookingInput({
+    prospectName: cleanProspectName,
+    prospectEmail,
+    timezone: input.timezone,
+  });
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const loaded = await loadSlot(supabase, input.slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { slot } = loaded;
+  if (!slot.is_available) {
+    return { ok: false, error: "That slot is marked unavailable." };
+  }
+  if (Date.parse(slot.end_time) <= Date.now()) {
+    return { ok: false, error: "That slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, slot);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: inserted, error } = await supabase
+    .from("bookings")
+    .insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      slot_id: input.slotId,
+      prospect_name: cleanProspectName,
+      prospect_email: prospectEmail,
+      timezone: input.timezone,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    if (error?.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error?.message ?? "The booking could not be created." };
+  }
+  if (conversationId) {
+    await supabase
+      .from("conversations")
+      .update({ status: "human_takeover", booking_request: false })
+      .eq("id", conversationId);
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_created",
+    entityType: "bookings",
+    entityId: inserted.id,
+    detail: {
+      slot_id: input.slotId,
+      company_id: companyId,
+      conversation_id: conversationId,
+      prospect_email: prospectEmail,
+      status: "pending",
+    },
+  });
+  const google = await syncBookingToGoogle({
+    summary: Ledgerwise call: ${cleanProspectName},
+    description: [
+      Prospect: ${cleanProspectName},
+      Email: ${prospectEmail},
+      Company: ${companyId ?? "unknown"},
+      "Created from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone: slot.timezone,
+  });
+===== CALENDAR TIME HELPERS =====
+export const DEFAULT_TIMEZONE = "America/New_York";
+export const MIN_SLOT_MINUTES = 15;
+export const MAX_SLOT_MINUTES = 120;
+export const DEFAULT_SLOT_MINUTES = 30;
+export const WORK_START_HOUR = 9;
+export const WORK_END_HOUR = 17;
+export const TIMEZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "UTC",
+  "Europe/London",
+] as const;
+export const OCCUPYING_BOOKING_STATUSES = [
+  "pending",
+  "confirmed",
+  "needs_human",
+] as const;
+export type OccupyingBookingStatus = (typeof OCCUPYING_BOOKING_STATUSES)[number];
+export function isOccupyingBooking(status: string): status is OccupyingBookingStatus {
+  return (OCCUPYING_BOOKING_STATUSES as readonly string[]).includes(status);
+}
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+type LocalParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+function localParts(date: Date, timeZone: string): LocalParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+  };
+}
+export function localDateKey(date: Date, timeZone: string): string {
+  const p = localParts(date, timeZone);
+  return ${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")};
+}
+export function localMinutes(date: Date, timeZone: string): number {
+  const p = localParts(date, timeZone);
+  return p.hour * 60 + p.minute;
+}
+export function formatSlotRange(
+  startIso: string,
+  endIso: string,
+  timeZone: string
+): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return ${startIso} – ${endIso};
+  }
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(start);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return ${date}, ${time.format(start)} – ${time.format(end)} (${timeZone});
+}
+export function slotDurationMinutes(startIso: string, endIso: string): number | null {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return Math.round((end - start) / 60_000);
+}
+export type SlotInput = {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+function offsetMs(date: Date, timeZone: string): number {
+  const p = localParts(date, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  return asUtc - date.getTime();
+}
+// Converts a datetime-local value such as 2026-11-15T09:00 into a UTC instant
+// interpreted in the chosen IANA timezone.
+export function zonedDateTimeToIso(
+  localDateTime: string,
+  timeZone: string
+): string | null {
+  if (!isValidTimeZone(timeZone)) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(localDateTime);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = new Date(desired);
+  for (let i = 0; i < 3; i++) {
+    guess = new Date(desired - offsetMs(guess, timeZone));
+  }
+  return Number.isNaN(guess.getTime()) ? null : guess.toISOString();
+}
+export function defaultLocalSlot(date: Date = new Date()): {
+  start: string;
+  end: string;
+} {
+  const next = new Date(date.getTime() + 24 * 60 * 60 * 1_000);
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, "0");
+  const d = String(next.getDate()).padStart(2, "0");
+  return { start: ${y}-${m}-${d}T09:00, end: ${y}-${m}-${d}T09:30 };
+}
+export type ValidationResult = { ok: boolean; errors: string[] };
+export function validateSlotInput(
+  input: SlotInput,
+  now: Date = new Date()
+): ValidationResult {
+  const errors: string[] = [];
+  const start = Date.parse(input.startTime);
+  const end = Date.parse(input.endTime);
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return { ok: false, errors: ["Start and end must be valid date-times."] };
+  }
+  if (!isValidTimeZone(input.timezone)) {
+    errors.push("Choose a valid IANA timezone.");
+    return { ok: false, errors };
+  }
+  if (end <= start) errors.push("The end time must be after the start time.");
+  const duration = Math.round((end - start) / 60_000);
+  if (duration < MIN_SLOT_MINUTES || duration > MAX_SLOT_MINUTES) {
+    errors.push(
+      Slot length must be between ${MIN_SLOT_MINUTES} and ${MAX_SLOT_MINUTES} minutes.
+    );
+  }
+  if (start <= now.getTime()) errors.push("The slot must start in the future.");
+  const startDate = localDateKey(new Date(start), input.timezone);
+  const endDate = localDateKey(new Date(end), input.timezone);
+  if (startDate !== endDate) {
+    errors.push("A slot must start and end on the same local day.");
+  }
+  const startMinutes = localMinutes(new Date(start), input.timezone);
+  const endMinutes = localMinutes(new Date(end), input.timezone);
+  if (startMinutes < WORK_START_HOUR * 60 || endMinutes > WORK_END_HOUR * 60) {
+    errors.push(
+      Slots must fit between ${WORK_START_HOUR}:00 and ${WORK_END_HOUR}:00 local time.
+    );
+  }
+  return { ok: errors.length === 0, errors };
+}
+export function validateBookingInput(input: {
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): ValidationResult {
+  const errors: string[] = [];
+  if (!input.prospectName.trim()) errors.push("A prospect name is required.");
+  if (!/^\S+@\S+.\S+$/.test(input.prospectEmail.trim())) {
+    errors.push("A valid prospect email is required.");
+  }
+  if (!isValidTimeZone(input.timezone)) errors.push("Choose a valid IANA timezone.");
+  return { ok: errors.length === 0, errors };
+}
+export function activeBookingForSlot<T extends { slot_id: string | null; status: string }>(
+  bookings: T[],
+  slotId: string
+): T | null {
+  return (
+    bookings.find(
+      (booking) =>
+        booking.slot_id === slotId && isOccupyingBooking(booking.status)
+    ) ?? null
+  );
+}
+export function canDeleteSlot(
+  bookings: { slot_id: string | null; status: string }[],
+  slotId: string
+): boolean {
+  return activeBookingForSlot(bookings, slotId) === null;
+}
+===== GOOGLE CALENDAR IMPLEMENTATION =====
+type Env = Record<string, string | undefined>;
+type FetchLike = (input: string, init?: RequestInit) => Promise;
+export type GoogleCalendarStatus = {
+  configured: boolean;
+  verified: boolean;
+  syncEnabled: boolean;
+  operational: boolean;
+  reason: string;
+};
+export type GoogleEventInput = {
+  summary: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+export type GoogleSyncResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced"; eventId: string }
+  | { status: "failed"; error: string };
+export type GoogleMutationResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced" }
+  | { status: "failed"; error: string };
+const REQUIRED = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+] as const;
+export function googleCalendarStatus(env: Env = process.env): GoogleCalendarStatus {
+  const missing = REQUIRED.filter((key) => !env[key]);
+  const configured = missing.length === 0;
+  const verified = env.GOOGLE_CALENDAR_VERIFIED === "1";
+  const syncEnabled = env.GOOGLE_CALENDAR_SYNC === "1";
+  const operational = configured && verified && syncEnabled;
+  let reason: string;
+  if (!configured) {
+    reason = Not configured (missing ${missing.join(", ")}). The internal calendar is the source of truth.;
+  } else if (!verified) {
+    reason =
+      "Credentials are present, but Google Calendar has not been verified end-to-end. The internal calendar is the source of truth.";
+  } else if (!syncEnabled) {
+    reason =
+      "Google Calendar is verified but sync is disabled. Set GOOGLE_CALENDAR_SYNC=1 to enable it.";
+  } else {
+    reason = "Google Calendar sync is explicitly enabled and reported as verified.";
+  }
+  return { configured, verified, syncEnabled, operational, reason };
+}
+export function buildGoogleEvent(input: GoogleEventInput) {
+  return {
+    summary: input.summary,
+    description: input.description,
+    start: { dateTime: input.startTime, timeZone: input.timezone },
+    end: { dateTime: input.endTime, timeZone: input.timezone },
+  };
+}
+export async function getGoogleAccessToken(
+  env: Env = process.env,
+  fetchImpl: FetchLike = fetch
+): Promise {
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID ?? "",
+    client_secret: env.GOOGLE_CLIENT_SECRET ?? "",
+    refresh_token: env.GOOGLE_REFRESH_TOKEN ?? "",
+    grant_type: "refresh_token",
+  });
+  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    throw new Error(Google token request failed with HTTP ${response.status}.);
+  }
+  const data = (await response.json()) as { access_token?: string };
+  if (!data.access_token) throw new Error("Google did not return an access token.");
+  return data.access_token;
+}
+export async function syncBookingToGoogle(
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID!);
+    const response = await fetchImpl(
+      https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events,
+      {
+        method: "POST",
+        headers: {
+          Authorization: Bearer ${token},
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildGoogleEvent(input)),
+        signal: AbortSignal.timeout(20_000),
+      }
+    );
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event creation failed with HTTP ${response.status}.,
+      };
+    }
+    const data = (await response.json()) as { id?: string };
+    if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    return { status: "synced", eventId: data.id };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
+}
+function googleEventsUrl(env: Env, eventId?: string): string {
+  const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID ?? "");
+  const base = https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events;
+  return eventId ? ${base}/${encodeURIComponent(eventId)} : base;
+}
+async function googleMutation(
+  input: GoogleEventInput | null,
+  eventId: string,
+  method: "PATCH" | "DELETE",
+  env: Env,
+  deps: { fetch?: FetchLike }
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const response = await fetchImpl(googleEventsUrl(env, eventId), {
+      method,
+      headers: {
+        Authorization: Bearer ${token},
+        ...(method === "PATCH" ? { "Content-Type": "application/json" } : {}),
+      },
+      body:
+        method === "PATCH" && input
+          ? JSON.stringify(buildGoogleEvent(input))
+          : undefined,
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (method === "DELETE" && (response.status === 404 || response.status === 410)) {
+      return { status: "synced" };
+    }
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event ${method === "PATCH" ? "update" : "deletion"} failed with HTTP ${response.status}.,
+      };
+    }
+    if (method === "PATCH") {
+      const data = (await response.json()) as { id?: string };
+      if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    }
+    return { status: "synced" };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
+}
+export async function updateGoogleEvent(
+  eventId: string,
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  return googleMutation(input, eventId, "PATCH", env, deps);
+}
+export async function deleteGoogleEvent(
+  eventId: string,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  return googleMutation(null, eventId, "DELETE", env, deps);
+}
+Supabase Query:
+[
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "audit_logs",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "audit_logs",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "audit_logs",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "audit_logs",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "bookings",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "bookings",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "bookings",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "bookings",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "calendar_slots",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "calendar_slots",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "calendar_slots",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "service_role",
+    "table_name": "calendar_slots",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "anon",
+    "table_name": "conversations",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "INSERT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "REFERENCES"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "SELECT"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "TRIGGER"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "TRUNCATE"
+  },
+  {
+    "grantee": "authenticated",
+    "table_name": "conversations",
+    "privilege_type": "UPDATE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "conversations",
+    "privilege_type": "DELETE"
+  },
+  {
+    "grantee": "postgres",
+    "table_name": "conversations",
+    "privilege_type": "INSERT"
+  }
+]
+
+
+ChatGPT:
+I've found one additional security issue, and it makes the next database change especially important.
+Security finding The current database grants anon and authenticated broad table-level privileges on bookings, calendar slots, conversations and audit logs—including INSERT, UPDATE, and DELETE in the grants you returned.
+That does not automatically mean anonymous users can access the data: row-level security still applies, and the current migration intends to restrict policies to authenticated users. But the grants are broader than we need. We'll explicitly tighten them.
+For the booking system, the target will be:
+
+Authenticated users can read the calendar and bookings.
+Booking creation, confirmation, cancellation and rescheduling go through narrowly granted RPC functions.
+Direct authenticated booking mutations are revoked.
+Slot creation/deletion use controlled server-side operations with database protections.
+Audit entries are written atomically with the corresponding database operation.
+Anonymous access is explicitly revoked from these application tables.
+
+One important implementation detail: I'll use a consistent transaction-level lock for calendar mutations, so two requests cannot both book overlapping slots.
+
+
+ChatGPT:
+I've found one additional security issue, and it makes the next database change especially important.
+Security finding The current database grants anon and authenticated broad table-level privileges on bookings, calendar slots, conversations and audit logs—including INSERT, UPDATE, and DELETE in the grants you returned.
+That does not automatically mean anonymous users can access the data: row-level security still applies, and the current migration intends to restrict policies to authenticated users. But the grants are broader than we need. We'll explicitly tighten them.
+For the booking system, the target will be:
+
+Authenticated users can read the calendar and bookings.
+Booking creation, confirmation, cancellation and rescheduling go through narrowly granted RPC functions.
+Direct authenticated booking mutations are revoked.
+Slot creation/deletion use controlled server-side operations with database protections.
+Audit entries are written atomically with the corresponding database operation.
+Anonymous access is explicitly revoked from these application tables.
+
+One important implementation detail: I'll use a consistent transaction-level lock for calendar mutations, so two requests cannot both book overlapping slots.
+Next: one final code extract
+The output stopped at line 420, so I still need the rest of the booking actions before preparing a matching replacement. Run:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+sed -n '420,760p' 'app/(dashboard)/calendar/actions.ts'
+
+printf '\n===== SERVER AUTH HELPER =====\n'
+cat lib/server/auth.ts
+
+printf '\n===== AUDIT HELPER =====\n'
+cat lib/server/audit.ts
+
+No more Supabase queries are needed right now.
+What I'll prepare next: corrected SQL migrations, matching TypeScript server actions, DST fixes, and tests. I'll keep the existing files and research work intact; no migrations will be applied remotely, and nothing will be committed or deployed.
+Ledgerwise status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated only
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 booking
+Transactional rewrite underway
+
+
+Google OAuth
+Approved design; pending
+
+
+Database migrations
+Unapplied; corrections underway
+
+
+Last verification
+127 tests passed; build, lint and TypeScript clean
+
+
+Git changes
+Preserved; no commit, push or deployment
+
+
+
+
+ChatGPT:
+Next: one final code extract
+The output stopped at line 420, so I still need the rest of the booking actions before preparing a matching replacement. Run:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+sed -n '420,760p' 'app/(dashboard)/calendar/actions.ts'
+
+printf '\n===== SERVER AUTH HELPER =====\n'
+cat lib/server/auth.ts
+
+printf '\n===== AUDIT HELPER =====\n'
+cat lib/server/audit.ts
+
+No more Supabase queries are needed right now.
+What I'll prepare next: corrected SQL migrations, matching TypeScript server actions, DST fixes, and tests. I'll keep the existing files and research work intact; no migrations will be applied remotely, and nothing will be committed or deployed.
+Ledgerwise status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated only
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 booking
+Transactional rewrite underway
+
+
+Google OAuth
+Approved design; pending
+
+
+Database migrations
+Unapplied; corrections underway
+
+
+Last verification
+127 tests passed; build, lint and TypeScript clean
+
+
+Git changes
+Preserved; no commit, push or deployment
+
+
+
+
+You:
+──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ sed -n '420,760p' 'app/(dashboard)/calendar/actions.ts'
+printf '\n===== SERVER AUTH HELPER =====\n'
+cat lib/server/auth.ts
+printf '\n===== AUDIT HELPER =====\n'
+cat lib/server/audit.ts
+  await recordGoogleSync(supabase, inserted.id, google);
+  revalidateCalendar();
+  revalidatePath(/conversations/${conversationId ?? ""});
+  return {
+    ok: true,
+    bookingId: inserted.id,
+    slotId: input.slotId,
+    message:
+      google.status === "synced"
+        ? "Booking created and synced to Google Calendar."
+        : google.status === "failed"
+          ? "Booking created on the internal calendar. Google Calendar sync failed."
+          : "Booking created on the internal calendar.",
+  };
+}
+export async function confirmBooking(
+  bookingId: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (booking.status !== "pending" && booking.status !== "needs_human") {
+    return { ok: false, error: "Only a pending or needs-human booking can be confirmed." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "confirmed" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were confirming it. Refresh and try again.",
+    };
+  }
+  let syncNote = "";
+  let syncStatus = "not_attempted";
+  if (!booking.google_event_id && booking.slot_id) {
+    const loadedSlot = await loadSlot(supabase, booking.slot_id);
+    if (loadedSlot.slot) {
+      const google = await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+      syncStatus = google.status;
+      await recordGoogleSync(supabase, bookingId, google);
+      syncNote =
+        google.status === "synced"
+          ? " Google Calendar event created."
+          : google.status === "failed"
+            ? " Google Calendar sync failed; the internal booking is still confirmed."
+            : "";
+    }
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_confirmed",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      previous_status: booking.status,
+      slot_id: booking.slot_id,
+      google_sync_status: booking.google_event_id ? "already_linked" : syncStatus,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, bookingId, message: Booking confirmed.${syncNote} };
+}
+export async function cancelBooking(
+  bookingId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) return { ok: false, error: "A cancellation reason is required." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return { ok: false, error: "This booking is already cancelled or rescheduled." };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "cancelled" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were cancelling it. Refresh and try again.",
+    };
+  }
+  let syncNote = "";
+  if (booking.google_event_id) {
+    const google = await deleteGoogleEvent(booking.google_event_id);
+    if (google.status === "not_configured") {
+      await supabase
+        .from("bookings")
+        .update({ calendar_sync_status: "failed" })
+        .eq("id", bookingId);
+      syncNote =
+        " The internal booking is cancelled, but the Google event could not be removed because sync is not operational.";
+    } else {
+      await recordGoogleSync(supabase, bookingId, google, true);
+      syncNote =
+        google.status === "synced"
+          ? " The Google Calendar event was removed."
+          : " The internal booking is cancelled, but Google Calendar deletion failed.";
+    }
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_cancelled",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      previous_status: booking.status,
+      slot_id: booking.slot_id,
+      reason: cleanReason,
+      google_event_id: booking.google_event_id,
+    },
+  });
+  revalidateCalendar();
+  return {
+    ok: true,
+    bookingId,
+    message: Booking cancelled. The slot is free.${syncNote},
+  };
+}
+export async function rescheduleBooking(
+  bookingId: string,
+  newSlotId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId) || !isUuid(newSlotId)) {
+    return { ok: false, error: "Invalid booking or slot ID." };
+  }
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) return { ok: false, error: "A reschedule reason is required." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return { ok: false, error: "Only an active booking can be rescheduled." };
+  }
+  if (booking.slot_id === newSlotId) {
+    return { ok: false, error: "Choose a different slot." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const loadedSlot = await loadSlot(supabase, newSlotId);
+  if (!loadedSlot.slot) return { ok: false, error: loadedSlot.error };
+  if (!loadedSlot.slot.is_available) {
+    return { ok: false, error: "The new slot is marked unavailable." };
+  }
+  if (Date.parse(loadedSlot.slot.end_time) <= Date.now()) {
+    return { ok: false, error: "The new slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, loadedSlot.slot, bookingId);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ slot_id: newSlotId, status: "pending" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error.message };
+  }
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were rescheduling it. Refresh and try again.",
+    };
+  }
+  const google = booking.google_event_id
+    ? await updateGoogleEvent(
+        booking.google_event_id,
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      )
+    : await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+  if (google.status === "not_configured" && booking.google_event_id) {
+    await supabase
+      .from("bookings")
+      .update({ calendar_sync_status: "failed" })
+      .eq("id", bookingId);
+  } else {
+    await recordGoogleSync(supabase, bookingId, google);
+  }
+  const syncNote =
+    google.status === "synced"
+      ? " Google Calendar was updated."
+      : google.status === "failed"
+        ? " Google Calendar sync failed; the internal booking is authoritative."
+        : booking.google_event_id
+          ? " The Google event was not updated because sync is not operational."
+          : "";
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_rescheduled",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      old_slot_id: booking.slot_id,
+      new_slot_id: newSlotId,
+      previous_status: booking.status,
+      reason: cleanReason,
+      google_sync: google.status,
+    },
+  });
+  revalidateCalendar();
+  return {
+    ok: true,
+    bookingId,
+    slotId: newSlotId,
+    message: Booking rescheduled. The old slot is free and the new slot is held.${syncNote},
+  };
+}
+===== SERVER AUTH HELPER =====
+import type { createClient } from "@/lib/supabase/server";
+export type ServerSupabase = Awaited<ReturnType>;
+export type SessionUser = {
+  id: string;
+  email: string | null;
+};
+export async function getSessionUser(
+  supabase: ServerSupabase
+): Promise<SessionUser | null> {
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
+  if (error || !user) return null;
+  return { id: user.id, email: user.email ?? null };
+}
+===== AUDIT HELPER =====
+import type { ServerSupabase } from "./auth";
+export type AuditRecord = {
+  actorId?: string | null;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  detail?: Record<string, unknown>;
+};
+export type AuditResult = { ok: true } | { ok: false; error: string };
+export async function writeAudit(
+  supabase: ServerSupabase,
+  record: AuditRecord
+): Promise {
+  const { error } = await supabase.from("audit_logs").insert({
+    actor_id: record.actorId ?? null,
+    action: record.action,
+    entity_type: record.entityType,
+    entity_id: record.entityId ?? null,
+    detail: record.detail ?? {},
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+
+ChatGPT:
+Thanks. This fills in the missing booking actions and confirms an important issue: the calendar mutations are not yet transaction-safe. The remaining functions use direct Supabase updates followed by separate audit writes and Google API calls. That creates failure windows where the booking changes but its audit or calendar sync does not.
+What the code review confirms
+
+
+
+Area
+Finding
+
+
+
+Authentication
+getSessionUser() checks the authenticated Supabase user. Good baseline.
+
+
+Audit helper
+writeAudit() reports errors, but callers often ignore its result.
+
+
+Confirm booking
+Direct status update, then Google sync, then separate audit.
+
+
+Cancel booking
+Direct cancellation, then Google deletion, then separate audit.
+
+
+Reschedule
+Direct slot change, then Google update/create, then separate audit.
+
+
+Google sync metadata
+recordGoogleSync() can silently fail to save its result.
+
+
+Concurrency
+Preflight availability checks cannot prevent two simultaneous requests from competing for the same slot.
+
+
+The right fix is to move booking state transitions and their audit records into database transactions. Google synchronization should be handled separately through a durable queue/outbox, so an external API failure cannot undo or corrupt the internal booking.
+One additional point: we should not revoke authenticated audit-log inserts indiscriminately. Other parts of the application may still depend on writeAudit(). We need to identify those callers before tightening permissions.
+One more repository inspection
+Please run this command and paste the output:
+printf '\n===== AUDIT HELPER CALLS =====\n'
+rg -n -C 2 'writeAudit\(' app lib
+
+printf '\n===== DIRECT CALENDAR / BOOKING / CONVERSATION MUTATIONS =====\n'
+rg -n -C 2 'from\("(bookings|calendar_slots|conversations|audit_logs)"\)' app lib
+
+printf '\n===== CALENDAR TESTS =====\n'
+sed -n '1,280p' tests/calendar-time.test.ts
+
+This is the last targeted inspection I need before preparing the database and application changes. It will tell us which existing actions must remain compatible with the security migration and which tests need updating.
+Ledgerwise status board
+
+
+
+Phase / component
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 — research
+Paused
+
+
+Phase 5 — email
+Implemented; simulated sending only
+
+
+Phase 6 — conversations
+Implemented
+
+
+Phase 7 — internal calendar
+Implemented; transactional hardening underway
+
+
+Google Calendar OAuth
+Approved architecture; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Latest recorded verification
+127 tests passed; TypeScript, lint, build and diff checks clean
+
+
+Git / deployment
+Changes preserved; no commit, push or deployment
+
+
+We are not starting another research phase or replacing the existing architecture. The immediate priority is to finish calendar integrity and security without breaking the working email and conversation features.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ printf '\n===== AUDIT HELPER CALLS =====\n'
+rg -n -C 2 'writeAudit(' app lib
+printf '\n===== DIRECT CALENDAR / BOOKING / CONVERSATION MUTATIONS =====\n'
+rg -n -C 2 'from("(bookings|calendar_slots|conversations|audit_logs)")' app lib
+printf '\n===== CALENDAR TESTS =====\n'
+sed -n '1,280p' tests/calendar-time.test.ts
+===== AUDIT HELPER CALLS =====
+app/(dashboard)/calendar/actions.ts
+220-  }
+221-
+222:  await writeAudit(supabase, {
+223-    actorId: user.id,
+224-    action: "calendar_slot_created",
+266-  if (deleteError) return { ok: false, error: deleteError.message };
+267-
+268:  await writeAudit(supabase, {
+269-    actorId: user.id,
+270-    action: "calendar_slot_deleted",
+392-  }
+393-
+394:  await writeAudit(supabase, {
+395-    actorId: user.id,
+396-    action: "booking_created",
+492-  }
+493-
+494:  await writeAudit(supabase, {
+495-    actorId: user.id,
+496-    action: "booking_confirmed",
+565-  }
+566-
+567:  await writeAudit(supabase, {
+568-    actorId: user.id,
+569-    action: "booking_cancelled",
+679-          : "";
+680-
+681:  await writeAudit(supabase, {
+682-    actorId: user.id,
+683-    action: "booking_rescheduled",
+app/(dashboard)/emails/actions.ts
+244-  });
+245-
+246:  await writeAudit(supabase, {
+247-    actorId: user.id,
+248-    action: "email_draft_generated",
+331-  });
+332-
+333:  await writeAudit(supabase, {
+334-    actorId: user.id,
+335-    action: "email_draft_edited",
+392-  });
+393-
+394:  await writeAudit(supabase, {
+395-    actorId: user.id,
+396-    action: "email_draft_approved",
+452-  });
+453-
+454:  await writeAudit(supabase, {
+455-    actorId: user.id,
+456-    action: "email_draft_rejected",
+574-  });
+575-
+576:  await writeAudit(supabase, {
+577-    actorId: user.id,
+578-    action: "email_draft_revision_requested",
+714-  });
+715-
+716:  await writeAudit(supabase, {
+717-    actorId: user.id,
+718-    action: "email_draft_sent_simulated",
+762-  if (!result.ok) return { ok: false, error: result.error };
+763-
+764:  await writeAudit(supabase, {
+765-    actorId: user.id,
+766-    action: "email_draft_contact_suppressed",
+lib/server/audit.ts
+11-export type AuditResult = { ok: true } | { ok: false; error: string };
+12-
+13:export async function writeAudit(
+14-  supabase: ServerSupabase,
+15-  record: AuditRecord
+app/(dashboard)/conversations/actions.ts
+211-  }
+212-
+213:  await writeAudit(supabase, {
+214-    actorId: user.id,
+215-    action: "prospect_message_recorded",
+234-        .update({ status: "needs_human", booking_request: false })
+235-        .eq("id", conversationId);
+236:      await writeAudit(supabase, {
+237-        actorId: user.id,
+238-        action: "suppression_check_failed",
+258-        .update({ status: "suppressed", booking_request: false })
+259-        .eq("id", conversationId);
+260:      await writeAudit(supabase, {
+261-        actorId: user.id,
+262-        action: "conversation_suppressed_from_existing_opt_out",
+266-      });
+267-    }
+268:    await writeAudit(supabase, {
+269-      actorId: user.id,
+270-      action: "message_after_suppression",
+305-      .eq("id", conversationId);
+306-
+307:    await writeAudit(supabase, {
+308-      actorId: user.id,
+309-      action: "conversation_suppressed_by_opt_out",
+330-      .update({ status: "needs_human", booking_request: true })
+331-      .eq("id", conversationId);
+332:    await writeAudit(supabase, {
+333-      actorId: user.id,
+334-      action: "booking_request_flagged",
+351-      .update({ status: "needs_human" })
+352-      .eq("id", conversationId);
+353:    await writeAudit(supabase, {
+354-      actorId: user.id,
+355-      action: "conversation_escalated",
+375-    conversation.status === "needs_human"
+376-  ) {
+377:    await writeAudit(supabase, {
+378-      actorId: user.id,
+379-      action: "message_waiting_for_human",
+441-  }
+442-
+443:  await writeAudit(supabase, {
+444-    actorId: user.id,
+445-    action: "ai_reply_drafted",
+507-      .update({ status: "suppressed", booking_request: false })
+508-      .eq("id", message.conversation_id);
+509:    await writeAudit(supabase, {
+510-      actorId: user.id,
+511-      action: "ai_reply_blocked_suppressed",
+538-  }
+539-
+540:  await writeAudit(supabase, {
+541-    actorId: user.id,
+542-    action: "ai_reply_approved",
+592-  }
+593-
+594:  await writeAudit(supabase, {
+595-    actorId: user.id,
+596-    action: "ai_reply_discarded",
+630-  if (error) return { ok: false, error: error.message };
+631-
+632:  await writeAudit(supabase, {
+633-    actorId: user.id,
+634-    action: "conversation_taken_over",
+673-      .update({ status: "suppressed", booking_request: false })
+674-      .eq("id", conversationId);
+675:    await writeAudit(supabase, {
+676-      actorId: user.id,
+677-      action: "human_reply_blocked_suppressed",
+706-    .eq("id", conversationId);
+707-
+708:  await writeAudit(supabase, {
+709-    actorId: user.id,
+710-    action: "human_reply_recorded",
+746-  if (error) return { ok: false, error: error.message };
+747-
+748:  await writeAudit(supabase, {
+749-    actorId: user.id,
+750-    action: "conversation_closed",
+795-    .eq("id", conversationId);
+796-
+797:  await writeAudit(supabase, {
+798-    actorId: user.id,
+799-    action: "conversation_suppressed",
+831-  if (error) return { ok: false, error: error.message };
+832-
+833:  await writeAudit(supabase, {
+834-    actorId: user.id,
+835-    action: "booking_request_resolved",
+app/(dashboard)/prospects/source-actions.ts
+87-  }
+88-
+89:  await writeAudit(supabase, {
+90-    actorId: user.id,
+91-    action: "source_verified",
+137-  }
+138-
+139:  await writeAudit(supabase, {
+140-    actorId: user.id,
+141-    action: "source_rejected",
+191-  }
+192-
+193:  await writeAudit(supabase, {
+194-    actorId: user.id,
+195-    action: "source_reset_to_pending",
+===== DIRECT CALENDAR / BOOKING / CONVERSATION MUTATIONS =====
+app/(dashboard)/calendar/actions.ts
+59-): Promise<{ slot?: SlotRow; error?: string }> {
+60-  const { data, error } = await supabase
+61:    .from("calendar_slots")
+62-    .select("id,start_time,end_time,timezone,source,is_available")
+63-    .eq("id", slotId)
+73-): Promise<{ booking?: BookingRow; error?: string }> {
+74-  const { data, error } = await supabase
+75:    .from("bookings")
+76-    .select(
+77-      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+112-  if (result.status === "synced") {
+113-    await supabase
+114:      .from("bookings")
+115-      .update(
+116-        deleted
+130-  }
+131-  await supabase
+132:    .from("bookings")
+133-    .update({ calendar_sync_status: "failed" })
+134-    .eq("id", bookingId);
+164-): Promise<{ ok: boolean; error?: string }> {
+165-  const { data: overlappingSlots, error: slotError } = await supabase
+166:    .from("calendar_slots")
+167-    .select("id")
+168-    .lt("start_time", slot.end_time)
+174-  );
+175-  const { data, error } = await supabase
+176:    .from("bookings")
+177-    .select("id")
+178-    .in("slot_id", slotIds)
+199-
+200-  const { data, error } = await supabase
+201:    .from("calendar_slots")
+202-    .insert({
+203-      start_time: input.startTime,
+247-
+248-  const { data: active, error } = await supabase
+249:    .from("bookings")
+250-    .select("id")
+251-    .eq("slot_id", slotId)
+261-
+262-  const { error: deleteError } = await supabase
+263:    .from("calendar_slots")
+264-    .delete()
+265-    .eq("id", slotId);
+302-  if (conversationId) {
+303-    const { data: conversation } = await supabase
+304:      .from("conversations")
+305-      .select("id,company_id,contact_email,status")
+306-      .eq("id", conversationId)
+365-
+366-  const { data: inserted, error } = await supabase
+367:    .from("bookings")
+368-    .insert({
+369-      company_id: companyId,
+387-  if (conversationId) {
+388-    await supabase
+389:      .from("conversations")
+390-      .update({ status: "human_takeover", booking_request: false })
+391-      .eq("id", conversationId);
+459-
+460-  const { data: updated, error } = await supabase
+461:    .from("bookings")
+462-    .update({ status: "confirmed" })
+463-    .eq("id", bookingId)
+532-
+533-  const { data: updated, error } = await supabase
+534:    .from("bookings")
+535-    .update({ status: "cancelled" })
+536-    .eq("id", bookingId)
+551-    if (google.status === "not_configured") {
+552-      await supabase
+553:        .from("bookings")
+554-        .update({ calendar_sync_status: "failed" })
+555-        .eq("id", bookingId);
+635-
+636-  const { data: updated, error } = await supabase
+637:    .from("bookings")
+638-    .update({ slot_id: newSlotId, status: "pending" })
+639-    .eq("id", bookingId)
+664-  if (google.status === "not_configured" && booking.google_event_id) {
+665-    await supabase
+666:      .from("bookings")
+667-      .update({ calendar_sync_status: "failed" })
+668-      .eq("id", bookingId);
+lib/server/audit.ts
+15-  record: AuditRecord
+16-): Promise {
+17:  const { error } = await supabase.from("audit_logs").insert({
+18-    actor_id: record.actorId ?? null,
+19-    action: record.action,
+app/(dashboard)/calendar/page.tsx
+77-  ] = await Promise.all([
+78-    supabase
+79:      .from("calendar_slots")
+80-      .select("id,start_time,end_time,timezone,source,is_available")
+81-      .gte("end_time", now)
+83-      .limit(200),
+84-    supabase
+85:      .from("bookings")
+86-      .select(
+87-        "id,slot_id,status,prospect_name,prospect_email,timezone,created_at,company_id,conversation_id,google_event_id,calendar_sync_status,companies(name)"
+95-      .limit(200),
+96-    supabase
+97:      .from("conversations")
+98-      .select("id,contact_email,company_id,status,companies(name)")
+99-      .order("created_at", { ascending: false })
+app/(dashboard)/emails/actions.ts
+640-
+641-  const { data: existingConversation } = await supabase
+642:    .from("conversations")
+643-    .select("id")
+644-    .eq("company_id", draft.company_id)
+651-  if (!conversationId) {
+652-    const { data: conversation, error } = await supabase
+653:      .from("conversations")
+654-      .insert({
+655-        company_id: draft.company_id,
+app/(dashboard)/prospects/import/actions.ts
+124-  }
+125-
+126:  await supabase.from("audit_logs").insert({
+127-    actor_id: user.id,
+128-    action: "csv_import",
+app/(dashboard)/conversations/actions.ts
+59-): Promise<{ conversation?: ConversationRow; error?: string }> {
+60-  const { data, error } = await supabase
+61:    .from("conversations")
+62-    .select(CONVERSATION_FIELDS)
+63-    .eq("id", conversationId)
+231-    if (!suppression.ok) {
+232-      await supabase
+233:        .from("conversations")
+234-        .update({ status: "needs_human", booking_request: false })
+235-        .eq("id", conversationId);
+255-    if (conversation.status !== "suppressed") {
+256-      await supabase
+257:        .from("conversations")
+258-        .update({ status: "suppressed", booking_request: false })
+259-        .eq("id", conversationId);
+290-    if (!suppression.ok) {
+291-      await supabase
+292:        .from("conversations")
+293-        .update({ status: "needs_human" })
+294-        .eq("id", conversationId);
+301-
+302-    await supabase
+303:      .from("conversations")
+304-      .update({ status: "suppressed", booking_request: false })
+305-      .eq("id", conversationId);
+327-  if (classification.bookingRequest) {
+328-    await supabase
+329:      .from("conversations")
+330-      .update({ status: "needs_human", booking_request: true })
+331-      .eq("id", conversationId);
+348-  if (classification.needsHuman) {
+349-    await supabase
+350:      .from("conversations")
+351-      .update({ status: "needs_human" })
+352-      .eq("id", conversationId);
+411-  } catch (error) {
+412-    await supabase
+413:      .from("conversations")
+414-      .update({ status: "needs_human" })
+415-      .eq("id", conversationId);
+504-  if (suppression.suppressed) {
+505-    await supabase
+506:      .from("conversations")
+507-      .update({ status: "suppressed", booking_request: false })
+508-      .eq("id", message.conversation_id);
+625-
+626-  const { error } = await supabase
+627:    .from("conversations")
+628-    .update({ status: "human_takeover", assigned_to: user.id })
+629-    .eq("id", conversationId);
+670-  if (suppression.suppressed) {
+671-    await supabase
+672:      .from("conversations")
+673-      .update({ status: "suppressed", booking_request: false })
+674-      .eq("id", conversationId);
+702-
+703-  await supabase
+704:    .from("conversations")
+705-    .update({ status: "human_takeover", assigned_to: user.id })
+706-    .eq("id", conversationId);
+741-
+742-  const { error } = await supabase
+743:    .from("conversations")
+744-    .update({ status: "closed", booking_request: false })
+745-    .eq("id", conversationId);
+791-
+792-  await supabase
+793:    .from("conversations")
+794-    .update({ status: "suppressed", booking_request: false })
+795-    .eq("id", conversationId);
+826-
+827-  const { error } = await supabase
+828:    .from("conversations")
+829-    .update({ booking_request: false })
+830-    .eq("id", conversationId);
+app/(dashboard)/conversations/[id]/page.tsx
+77-  const supabase = await createClient();
+78-  const { data: conversationData } = await supabase
+79:    .from("conversations")
+80-    .select(
+81-      "id,company_id,contact_email,status,booking_request,assigned_to,created_at,companies(id,name,website,contact_name)"
+app/(dashboard)/conversations/page.tsx
+40-  const supabase = await createClient();
+41-  const { data, error } = await supabase
+42:    .from("conversations")
+43-    .select(
+44-      "id,status,contact_email,booking_request,created_at,companies(name),messages(body,created_at,sender,needs_review)"
+===== CALENDAR TESTS =====
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  activeBookingForSlot,
+  canDeleteSlot,
+  formatSlotRange,
+  isOccupyingBooking,
+  validateBookingInput,
+  validateSlotInput,
+  zonedDateTimeToIso,
+} from "../lib/calendar/time";
+const now = new Date("2026-11-14T12:00:00.000Z");
+function slot(startLocal: string, endLocal: string, startOffsetDays = 1) {
+  const base = new Date(now.getTime() + startOffsetDays * 24 * 60 * 60 * 1_000)
+    .toISOString()
+    .slice(0, 10);
+  const startIso = zonedDateTimeToIso(${base}T${startLocal}, "America/New_York")!;
+  const endIso = zonedDateTimeToIso(${base}T${endLocal}, "America/New_York")!;
+  return { startTime: startIso, endTime: endIso, timezone: "America/New_York" };
+}
+test("a valid 30-minute business-hours slot passes", () => {
+  const result = validateSlotInput(slot("09:00", "09:30"), now);
+  assert.equal(result.ok, true);
+});
+test("slot durations are limited to 15–120 minutes", () => {
+  assert.equal(validateSlotInput(slot("09:00", "09:10"), now).ok, false);
+  assert.equal(validateSlotInput(slot("09:00", "09:15"), now).ok, true);
+  assert.equal(validateSlotInput(slot("09:00", "11:00"), now).ok, true);
+  assert.equal(validateSlotInput(slot("09:00", "11:01"), now).ok, false);
+});
+test("slots must fit inside 9:00–17:00 local time", () => {
+  assert.equal(validateSlotInput(slot("08:45", "09:15"), now).ok, false);
+  assert.equal(validateSlotInput(slot("16:45", "17:15"), now).ok, false);
+  assert.equal(validateSlotInput(slot("16:30", "17:00"), now).ok, true);
+});
+test("slots must be in the future and use a valid timezone", () => {
+  const past = validateSlotInput(
+    {
+      startTime: "2020-01-01T09:00:00.000Z",
+      endTime: "2020-01-01T09:30:00.000Z",
+      timezone: "America/New_York",
+    },
+    now
+  );
+  assert.equal(past.ok, false);
+  assert.ok(past.errors.some((error) => /future/.test(error)));
+  const badZone = validateSlotInput(
+    { ...slot("09:00", "09:30"), timezone: "Mars/Olympus" },
+    now
+  );
+  assert.equal(badZone.ok, false);
+});
+test("zoned conversion handles standard and daylight time", () => {
+  assert.equal(
+    zonedDateTimeToIso("2026-11-15T09:00", "America/New_York"),
+    "2026-11-15T14:00:00.000Z"
+  );
+  assert.equal(
+    zonedDateTimeToIso("2026-07-15T09:00", "America/New_York"),
+    "2026-07-15T13:00:00.000Z"
+  );
+  assert.equal(zonedDateTimeToIso("not-a-date", "America/New_York"), null);
+  assert.equal(zonedDateTimeToIso("2026-07-15T09:00", "Mars/Olympus"), null);
+});
+test("only pending, confirmed, and needs-human bookings occupy a slot", () => {
+  assert.equal(isOccupyingBooking("pending"), true);
+  assert.equal(isOccupyingBooking("confirmed"), true);
+  assert.equal(isOccupyingBooking("needs_human"), true);
+  assert.equal(isOccupyingBooking("cancelled"), false);
+  assert.equal(isOccupyingBooking("rescheduled"), false);
+  const bookings = [
+    { slot_id: "slot-1", status: "cancelled" },
+    { slot_id: "slot-2", status: "confirmed" },
+  ];
+  assert.equal(activeBookingForSlot(bookings, "slot-1"), null);
+  assert.equal(activeBookingForSlot(bookings, "slot-2")?.status, "confirmed");
+  assert.equal(canDeleteSlot(bookings, "slot-1"), true);
+  assert.equal(canDeleteSlot(bookings, "slot-2"), false);
+});
+test("booking input requires a name, a valid email, and a timezone", () => {
+  assert.equal(
+    validateBookingInput({
+      prospectName: "Jane Doe",
+      prospectEmail: "jane@acme.test",
+      timezone: "America/New_York",
+    }).ok,
+    true
+  );
+  assert.equal(
+    validateBookingInput({
+      prospectName: "",
+      prospectEmail: "nope",
+      timezone: "Mars/Olympus",
+    }).ok,
+    false
+  );
+});
+test("slot range formatting includes the timezone", () => {
+  const label = formatSlotRange(
+    "2026-11-15T14:00:00.000Z",
+    "2026-11-15T14:30:00.000Z",
+    "America/New_York"
+  );
+  assert.match(label, /9:00 AM/);
+  assert.match(label, /America/New_York/);
+});
+
+
+ChatGPT:
+Excellent. This is the missing compatibility check. We now have enough information to design the calendar hardening without accidentally breaking the other application features.
+1. Security decisions based on actual usage
+The search results establish that we cannot apply a blanket permissions lockdown.
+
+
+
+Table
+What the application currently needs
+Hardening decision
+
+
+
+audit_logs
+Authenticated inserts throughout email, conversations, imports, and calendar
+Keep authenticated INSERT, enforce actor identity through RLS, revoke UPDATE/DELETE/TRUNCATE
+
+
+conversations
+SELECT, INSERT, and UPDATE across email and conversation workflows
+Preserve those operations with authenticated RLS
+
+
+calendar_slots
+SELECT and INSERT; currently direct DELETE
+Move deletion to a guarded database function
+
+
+bookings
+SELECT plus direct INSERT/UPDATE today
+Move all booking mutations to transactional RPCs
+
+
+This is important: we will not break conversation handling or email auditing just to tighten calendar security.
+2. Calendar changes to implement
+The database will become authoritative for booking state transitions.
+
+create_slot: create a slot and its audit entry together.
+delete_slot: lock the slot, reject deletion if an active booking exists, and audit the deletion.
+book_slot: lock and validate the slot, create the booking, update the conversation when applicable, and write the audit entry in one transaction.
+confirm_booking: validate the transition and audit it atomically.
+cancel_booking: cancel the booking, release its slot, and audit atomically.
+reschedule_booking: lock both slots in a consistent order, validate availability, move the booking, and audit atomically.
+
+All functions will verify authentication and use a safe search_path. The application will no longer perform booking mutations directly.
+Google Calendar will be decoupled from those transactions. A failed Google request must not leave the internal booking half-completed.
+3. Timezone issue confirmed
+The current tests cover standard and daylight time, but they do not test the two difficult DST cases:
+
+A nonexistent local time when clocks jump forward.
+An ambiguous local time when clocks move backward.
+
+We also need to correct defaultLocalSlot() so its date is calculated in America/New_York, rather than whichever timezone happens to be configured on the server.
+I'll add explicit regression tests for both DST cases and the default-date calculation.
+4. Implementation order
+
+Prepare a new migration for transactional calendar functions, constraints, and permissions.
+Update the calendar server actions to call those functions.
+Add the durable Google sync/outbox architecture, preserving the approved OAuth design.
+Fix timezone conversion and add regression tests.
+Run the full test suite, TypeScript, lint, build, and diff checks.
+Review the final SQL before you apply anything remotely.
+
+I will keep the changes staged and reviewable. No remote migration, commit, push, or deployment without your approval.
+Ledgerwise status board
+
+
+
+Component
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 email
+Implemented; simulated sending
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 internal calendar
+Hardening in progress
+
+
+Google Calendar
+Proper OAuth architecture approved; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Last recorded verification
+127 tests passed; TypeScript, lint, build and diff checks clean
+
+
+Git changes
+Preserved; no commit or push
+
+
+Next deliverable: the reviewed migration and corresponding application changes—not another planning document.
+
+
+You:
+OK then, let's proceed
+
+
+ChatGPT:
+Let's proceed. We'll tackle the internal calendar first, then the Google OAuth/outbox work. The internal database must remain authoritative throughout.
+One practical limitation: I can review your repository output and prepare exact patches and SQL, but I cannot directly edit files on your Kali machine. We'll apply and verify each change in small steps rather than risk a large, untested replacement.
+Step 1 — Capture the exact implementation baseline
+Before changing anything, run this single command from the project root:
+printf '\n===== GIT STATUS =====\n'
+git status --short
+
+printf '\n===== MIGRATION 01 =====\n'
+cat supabase/migrations/20261114_01_source_verification_and_security.sql
+
+printf '\n===== MIGRATION 02 =====\n'
+cat supabase/migrations/20261114_02_calendar_source_and_booking.sql
+
+printf '\n===== MIGRATION 03 =====\n'
+cat supabase/migrations/20261114_03_google_calendar.sql
+
+printf '\n===== CALENDAR ACTIONS (1–420) =====\n'
+sed -n '1,420p' 'app/(dashboard)/calendar/actions.ts'
+
+printf '\n===== CALENDAR TIME HELPERS =====\n'
+cat lib/calendar/time.ts
+
+This is a read-only inspection. It does not modify your files or database.
+I need the exact current SQL and source before writing migration 04 and its matching TypeScript changes. In particular, I want to avoid duplicating constraints, assuming the wrong column types, or overwriting any uncommitted work.
+Implementation status
+
+
+
+Component
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 email
+Implemented; simulated sending
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 internal calendar
+Transactional hardening underway
+
+
+Google Calendar OAuth
+Approved; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Last recorded tests
+127 passed
+
+
+Commit / push / deployment
+None
+
+
+Our next concrete milestone: a migration that makes slot and booking operations transactional, with matching server actions and regression tests.
+
+
+You:
+create index if not exists company_sources_company_id_idx
+  on public.company_sources (company_id);
+create index if not exists company_sources_verification_status_idx
+  on public.company_sources (verification_status);
+create index if not exists company_sources_company_verification_idx
+  on public.company_sources (company_id, verification_status);
+create index if not exists qualification_scores_company_id_idx
+  on public.qualification_scores (company_id);
+create index if not exists email_drafts_company_status_idx
+  on public.email_drafts (company_id, status);
+create index if not exists email_events_draft_created_idx
+  on public.email_events (draft_id, created_at);
+create index if not exists conversations_company_status_idx
+  on public.conversations (company_id, status);
+create index if not exists messages_conversation_created_idx
+  on public.messages (conversation_id, created_at);
+create index if not exists audit_logs_entity_idx
+  on public.audit_logs (entity_type, entity_id);
+
+-- 2. Suppression unique index
+
+-- A duplicate index on the same expression is harmless and keeps ON CONFLICT
+-- (lower(email)) reliable even if an earlier index had a different name.
+create unique index if not exists suppressed_contacts_email_lower_idx
+  on public.suppressed_contacts (lower(email));
+
+-- 3. RLS replacement — authenticated-only single-team policies
+
+alter table public.companies enable row level security;
+alter table public.company_sources enable row level security;
+alter table public.qualification_scores enable row level security;
+alter table public.email_drafts enable row level security;
+alter table public.email_events enable row level security;
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+alter table public.calendar_slots enable row level security;
+alter table public.bookings enable row level security;
+alter table public.suppressed_contacts enable row level security;
+alter table public.audit_logs enable row level security;
+do $$
+declare
+  r record;
+begin
+  for r in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = any (array[
+        'companies',
+        'company_sources',
+        'qualification_scores',
+        'email_drafts',
+        'email_events',
+        'conversations',
+        'messages',
+        'calendar_slots',
+        'bookings',
+        'suppressed_contacts',
+        'audit_logs'
+      ])
+  loop
+    execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
+  end loop;
+end $$;
+-- Companies
+create policy auth_select_companies on public.companies
+  for select to authenticated using (true);
+create policy auth_insert_companies on public.companies
+  for insert to authenticated with check (true);
+create policy auth_update_companies on public.companies
+  for update to authenticated using (true) with check (true);
+-- Company sources
+create policy auth_select_company_sources on public.company_sources
+  for select to authenticated using (true);
+create policy auth_insert_company_sources on public.company_sources
+  for insert to authenticated with check (true);
+create policy auth_update_company_sources on public.company_sources
+  for update to authenticated using (true) with check (true);
+-- Qualification scores
+create policy auth_select_qualification_scores on public.qualification_scores
+  for select to authenticated using (true);
+create policy auth_insert_qualification_scores on public.qualification_scores
+  for insert to authenticated with check (true);
+create policy auth_update_qualification_scores on public.qualification_scores
+  for update to authenticated using (true) with check (true);
+-- Email drafts
+create policy auth_select_email_drafts on public.email_drafts
+  for select to authenticated using (true);
+create policy auth_insert_email_drafts on public.email_drafts
+  for insert to authenticated with check (true);
+create policy auth_update_email_drafts on public.email_drafts
+  for update to authenticated using (true) with check (true);
+-- Email events: append-only in normal operation
+create policy auth_select_email_events on public.email_events
+  for select to authenticated using (true);
+create policy auth_insert_email_events on public.email_events
+  for insert to authenticated with check (true);
+-- Conversations
+create policy auth_select_conversations on public.conversations
+  for select to authenticated using (true);
+create policy auth_insert_conversations on public.conversations
+  for insert to authenticated with check (true);
+create policy auth_update_conversations on public.conversations
+  for update to authenticated using (true) with check (true);
+-- Messages
+create policy auth_select_messages on public.messages
+  for select to authenticated using (true);
+create policy auth_insert_messages on public.messages
+  for insert to authenticated with check (true);
+create policy auth_update_messages on public.messages
+  for update to authenticated using (true) with check (true);
+-- Calendar slots
+create policy auth_select_calendar_slots on public.calendar_slots
+  for select to authenticated using (true);
+create policy auth_insert_calendar_slots on public.calendar_slots
+  for insert to authenticated with check (true);
+create policy auth_update_calendar_slots on public.calendar_slots
+  for update to authenticated using (true) with check (true);
+create policy auth_delete_calendar_slots on public.calendar_slots
+  for delete to authenticated using (true);
+-- Bookings: no direct delete; cancellation is the supported path
+create policy auth_select_bookings on public.bookings
+  for select to authenticated using (true);
+create policy auth_insert_bookings on public.bookings
+  for insert to authenticated with check (true);
+create policy auth_update_bookings on public.bookings
+  for update to authenticated using (true) with check (true);
+-- Suppression: read and insert only
+create policy auth_select_suppressed_contacts on public.suppressed_contacts
+  for select to authenticated using (true);
+create policy auth_insert_suppressed_contacts on public.suppressed_contacts
+  for insert to authenticated with check (true);
+-- Audit: read and insert only
+create policy auth_select_audit_logs on public.audit_logs
+  for select to authenticated using (true);
+create policy auth_insert_audit_logs on public.audit_logs
+  for insert to authenticated with check (true);
+
+-- 4. Append-only triggers for suppression and audit
+
+create or replace function public.reject_append_only_mutation()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'This table is append-only; % is not allowed on %', tg_op, tg_table_name;
+end;
+$$;
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'suppressed_contacts_append_only'
+      and tgrelid = 'public.suppressed_contacts'::regclass
+  ) then
+    create trigger suppressed_contacts_append_only
+      before update or delete on public.suppressed_contacts
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'audit_logs_append_only'
+      and tgrelid = 'public.audit_logs'::regclass
+  ) then
+    create trigger audit_logs_append_only
+      before update or delete on public.audit_logs
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+end $$;
+
+-- 5. Suppression RPCs
+
+create or replace function public.is_suppressed(p_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.suppressed_contacts
+    where lower(email) = lower(trim(coalesce(p_email, '')))
+  );
+$$;
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+  if v_email = '' or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+.[^@[:space:]]+$' then
+    raise exception 'invalid_email';
+  end if;
+  insert into public.suppressed_contacts (email, reason, source_message_id)
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+  if v_row.id is null then
+    select * into v_row
+    from public.suppressed_contacts
+    where lower(email) = v_email;
+    return v_row;
+  end if;
+  insert into public.audit_logs (actor_id, action, entity_type, entity_id, detail)
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+  return v_row;
+end;
+$$;
+revoke all on function public.is_suppressed(text) from public;
+revoke all on function public.suppress_contact(text, text, uuid) from public;
+grant execute on function public.is_suppressed(text) to authenticated;
+grant execute on function public.suppress_contact(text, text, uuid) to authenticated;
+notify pgrst, 'reload schema';
+===== MIGRATION 02 =====
+-- Ledgerwise prototype — migration 02
+-- Internal calendar source, conversation booking flag, and slot occupancy guarantee.
+-- Apply after migration 01. Run manually in the Supabase SQL Editor.
+-- Conversations carry an explicit booking-request flag. A booking request is a
+-- needs_human conversation plus this flag; it does not create or hold a booking.
+alter table public.conversations
+  add column if not exists booking_request boolean not null default false;
+-- Replace the old calendar source check so internal slots are allowed.
+do $$
+declare
+  c record;
+begin
+  for c in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.calendar_slots'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%source%'
+  loop
+    execute format('alter table public.calendar_slots drop constraint %I', c.conname);
+  end loop;
+end $$;
+alter table public.calendar_slots
+  add constraint calendar_slots_source_check
+  check (source in ('calcom', 'demo', 'internal'));
+alter table public.calendar_slots
+  alter column source set default 'internal';
+-- Before this index can be created, check for existing conflicts:
+-- select slot_id, count()
+-- from public.bookings
+-- where slot_id is not null
+--   and status in ('pending', 'confirmed', 'needs_human')
+-- group by slot_id
+-- having count() > 1;
+-- If that query returns rows, resolve the duplicates first. Then run this file.
+create unique index if not exists bookings_active_slot_unique
+  on public.bookings (slot_id)
+  where slot_id is not null
+    and status in ('pending', 'confirmed', 'needs_human');
+create index if not exists bookings_slot_status_idx
+  on public.bookings (slot_id, status);
+create index if not exists bookings_conversation_idx
+  on public.bookings (conversation_id);
+create index if not exists bookings_company_idx
+  on public.bookings (company_id);
+create index if not exists conversations_booking_request_idx
+  on public.conversations (booking_request)
+  where booking_request = true;
+notify pgrst, 'reload schema';
+===== MIGRATION 03 =====
+-- Ledgerwise prototype — migration 03
+-- Optional Google Calendar sync metadata. The internal calendar works without this.
+-- Apply after migration 02. Run manually in the Supabase SQL Editor.
+alter table public.bookings
+  add column if not exists google_event_id text;
+alter table public.bookings
+  add column if not exists calendar_sync_status text not null default 'not_configured';
+alter table public.bookings
+  add column if not exists calendar_synced_at timestamptz;
+alter table public.calendar_slots
+  add column if not exists google_calendar_id text;
+-- Keep this constraint idempotent so an earlier draft can be re-applied safely.
+alter table public.bookings
+  drop constraint if exists bookings_calendar_sync_status_check;
+alter table public.bookings
+  add constraint bookings_calendar_sync_status_check
+  check (
+    calendar_sync_status in (
+      'not_configured',
+      'pending',
+      'synced',
+      'failed',
+      'deleted'
+    )
+  );
+notify pgrst, 'reload schema';
+===== CALENDAR ACTIONS (1–420) =====
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { isSuppressed } from "@/lib/suppression";
+import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+import {
+  OCCUPYING_BOOKING_STATUSES,
+  validateBookingInput,
+  validateSlotInput,
+} from "@/lib/calendar/time";
+import {
+  deleteGoogleEvent,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+  type GoogleEventInput,
+} from "@/lib/calendar/google";
+export type CalendarActionResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  slotId?: string;
+  bookingId?: string;
+};
+type SlotRow = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  source: string;
+  is_available: boolean;
+};
+type BookingRow = {
+  id: string;
+  company_id: string | null;
+  conversation_id: string | null;
+  slot_id: string | null;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  status: string;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+};
+function revalidateCalendar() {
+  revalidatePath("/calendar");
+  revalidatePath("/conversations");
+}
+async function loadSlot(
+  supabase: ServerSupabase,
+  slotId: string
+): Promise<{ slot?: SlotRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .select("id,start_time,end_time,timezone,source,is_available")
+    .eq("id", slotId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Slot not found." };
+  return { slot: data as SlotRow };
+}
+async function loadBooking(
+  supabase: ServerSupabase,
+  bookingId: string
+): Promise<{ booking?: BookingRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Booking not found." };
+  return { booking: data as BookingRow };
+}
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: Ledgerwise call: ${booking.prospect_name || booking.prospect_email},
+    description: [
+      Prospect: ${booking.prospect_name || "unknown"},
+      Email: ${booking.prospect_email},
+      Company: ${booking.company_id ?? "unknown"},
+      "Managed from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+async function recordGoogleSync(
+  supabase: ServerSupabase,
+  bookingId: string,
+  result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
+  deleted = false
+): Promise {
+  if (result.status === "not_configured") return;
+  if (result.status === "synced") {
+    await supabase
+      .from("bookings")
+      .update(
+        deleted
+          ? {
+              google_event_id: null,
+              calendar_sync_status: "deleted",
+              calendar_synced_at: new Date().toISOString(),
+            }
+          : {
+              ...(result.eventId ? { google_event_id: result.eventId } : {}),
+              calendar_sync_status: "synced",
+              calendar_synced_at: new Date().toISOString(),
+            }
+      )
+      .eq("id", bookingId);
+    return;
+  }
+  await supabase
+    .from("bookings")
+    .update({ calendar_sync_status: "failed" })
+    .eq("id", bookingId);
+}
+async function checkSuppressed(
+  supabase: ServerSupabase,
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (await isSuppressed(supabase, email)) {
+      return {
+        ok: false,
+        error: "This contact is on the permanent suppression list. A booking cannot be created or confirmed.",
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The suppression check failed. Apply the database migrations first.",
+    };
+  }
+}
+async function checkSlotFree(
+  supabase: ServerSupabase,
+  slot: SlotRow,
+  ignoreBookingId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: overlappingSlots, error: slotError } = await supabase
+    .from("calendar_slots")
+    .select("id")
+    .lt("start_time", slot.end_time)
+    .gt("end_time", slot.start_time);
+  if (slotError) return { ok: false, error: slotError.message };
+  const slotIds = Array.from(
+    new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
+  );
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .in("slot_id", slotIds)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES]);
+  if (error) return { ok: false, error: error.message };
+  const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+  if (conflict) {
+    return { ok: false, error: "That time is already held by another booking." };
+  }
+  return { ok: true };
+}
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const validation = validateSlotInput(input);
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .insert({
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+      external_id: null,
+      is_available: true,
+      fetched_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      error:
+        error?.message ??
+        "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+    };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_created",
+    entityType: "calendar_slots",
+    entityId: data.id,
+    detail: {
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId: data.id, message: "Internal slot created." };
+}
+export async function deleteSlot(slotId: string): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+  const loaded = await loadSlot(supabase, slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { data: active, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("slot_id", slotId)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES])
+    .limit(1);
+  if (error) return { ok: false, error: error.message };
+  if ((active ?? []).length > 0) {
+    return {
+      ok: false,
+      error: "Cancel or reschedule the active booking before deleting this slot.",
+    };
+  }
+  const { error: deleteError } = await supabase
+    .from("calendar_slots")
+    .delete()
+    .eq("id", slotId);
+  if (deleteError) return { ok: false, error: deleteError.message };
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_deleted",
+    entityType: "calendar_slots",
+    entityId: slotId,
+    detail: {
+      start_time: loaded.slot.start_time,
+      end_time: loaded.slot.end_time,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId, message: "Slot deleted." };
+}
+export async function bookSlot(input: {
+  slotId: string;
+  companyId?: string | null;
+  conversationId?: string | null;
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+  let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
+  const conversationId =
+    input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+  let prospectName = input.prospectName;
+  let prospectEmail = normalizeEmail(input.prospectEmail);
+  if (conversationId) {
+    const { data: conversation } = await supabase
+      .from("conversations")
+      .select("id,company_id,contact_email,status")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (!conversation) return { ok: false, error: "Conversation not found." };
+    if (conversation.status === "suppressed") {
+      return {
+        ok: false,
+        error: "This contact is suppressed. A booking cannot be created.",
+      };
+    }
+    companyId = companyId ?? conversation.company_id;
+    if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
+  }
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name,contact_name,contact_email")
+      .eq("id", companyId)
+      .maybeSingle();
+    if (company) {
+      if (!prospectName.trim() && company.contact_name !== "unknown") {
+        prospectName = company.contact_name;
+      }
+      if (!prospectEmail && company.contact_email) {
+        prospectEmail = normalizeEmail(company.contact_email);
+      }
+    }
+  }
+  if (!isValidEmail(prospectEmail)) {
+    return { ok: false, error: "A valid prospect email is required." };
+  }
+  const suppression = await checkSuppressed(supabase, prospectEmail);
+  if (!suppression.ok) return { ok: false, error: suppression.error };
+  const cleanProspectName = trimText(prospectName, 200);
+  if (!cleanProspectName) {
+    return { ok: false, error: "A prospect name is required." };
+  }
+  const validation = validateBookingInput({
+    prospectName: cleanProspectName,
+    prospectEmail,
+    timezone: input.timezone,
+  });
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const loaded = await loadSlot(supabase, input.slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { slot } = loaded;
+  if (!slot.is_available) {
+    return { ok: false, error: "That slot is marked unavailable." };
+  }
+  if (Date.parse(slot.end_time) <= Date.now()) {
+    return { ok: false, error: "That slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, slot);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: inserted, error } = await supabase
+    .from("bookings")
+    .insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      slot_id: input.slotId,
+      prospect_name: cleanProspectName,
+      prospect_email: prospectEmail,
+      timezone: input.timezone,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    if (error?.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error?.message ?? "The booking could not be created." };
+  }
+  if (conversationId) {
+    await supabase
+      .from("conversations")
+      .update({ status: "human_takeover", booking_request: false })
+      .eq("id", conversationId);
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_created",
+    entityType: "bookings",
+    entityId: inserted.id,
+    detail: {
+      slot_id: input.slotId,
+      company_id: companyId,
+      conversation_id: conversationId,
+      prospect_email: prospectEmail,
+      status: "pending",
+    },
+  });
+  const google = await syncBookingToGoogle({
+    summary: Ledgerwise call: ${cleanProspectName},
+    description: [
+      Prospect: ${cleanProspectName},
+      Email: ${prospectEmail},
+      Company: ${companyId ?? "unknown"},
+      "Created from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone: slot.timezone,
+  });
+===== CALENDAR TIME HELPERS =====
+export const DEFAULT_TIMEZONE = "America/New_York";
+export const MIN_SLOT_MINUTES = 15;
+export const MAX_SLOT_MINUTES = 120;
+export const DEFAULT_SLOT_MINUTES = 30;
+export const WORK_START_HOUR = 9;
+export const WORK_END_HOUR = 17;
+export const TIMEZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "UTC",
+  "Europe/London",
+] as const;
+export const OCCUPYING_BOOKING_STATUSES = [
+  "pending",
+  "confirmed",
+  "needs_human",
+] as const;
+export type OccupyingBookingStatus = (typeof OCCUPYING_BOOKING_STATUSES)[number];
+export function isOccupyingBooking(status: string): status is OccupyingBookingStatus {
+  return (OCCUPYING_BOOKING_STATUSES as readonly string[]).includes(status);
+}
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+type LocalParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+function localParts(date: Date, timeZone: string): LocalParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+  };
+}
+export function localDateKey(date: Date, timeZone: string): string {
+  const p = localParts(date, timeZone);
+  return ${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")};
+}
+export function localMinutes(date: Date, timeZone: string): number {
+  const p = localParts(date, timeZone);
+  return p.hour * 60 + p.minute;
+}
+export function formatSlotRange(
+  startIso: string,
+  endIso: string,
+  timeZone: string
+): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return ${startIso} – ${endIso};
+  }
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(start);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return ${date}, ${time.format(start)} – ${time.format(end)} (${timeZone});
+}
+export function slotDurationMinutes(startIso: string, endIso: string): number | null {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return Math.round((end - start) / 60_000);
+}
+export type SlotInput = {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+function offsetMs(date: Date, timeZone: string): number {
+  const p = localParts(date, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  return asUtc - date.getTime();
+}
+// Converts a datetime-local value such as 2026-11-15T09:00 into a UTC instant
+// interpreted in the chosen IANA timezone.
+export function zonedDateTimeToIso(
+  localDateTime: string,
+  timeZone: string
+): string | null {
+  if (!isValidTimeZone(timeZone)) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(localDateTime);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = new Date(desired);
+  for (let i = 0; i < 3; i++) {
+    guess = new Date(desired - offsetMs(guess, timeZone));
+  }
+  return Number.isNaN(guess.getTime()) ? null : guess.toISOString();
+}
+export function defaultLocalSlot(date: Date = new Date()): {
+  start: string;
+  end: string;
+} {
+  const next = new Date(date.getTime() + 24 * 60 * 60 * 1_000);
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, "0");
+  const d = String(next.getDate()).padStart(2, "0");
+  return { start: ${y}-${m}-${d}T09:00, end: ${y}-${m}-${d}T09:30 };
+}
+export type ValidationResult = { ok: boolean; errors: string[] };
+export function validateSlotInput(
+  input: SlotInput,
+  now: Date = new Date()
+): ValidationResult {
+  const errors: string[] = [];
+  const start = Date.parse(input.startTime);
+  const end = Date.parse(input.endTime);
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return { ok: false, errors: ["Start and end must be valid date-times."] };
+  }
+  if (!isValidTimeZone(input.timezone)) {
+    errors.push("Choose a valid IANA timezone.");
+    return { ok: false, errors };
+  }
+  if (end <= start) errors.push("The end time must be after the start time.");
+  const duration = Math.round((end - start) / 60_000);
+  if (duration < MIN_SLOT_MINUTES || duration > MAX_SLOT_MINUTES) {
+    errors.push(
+      Slot length must be between ${MIN_SLOT_MINUTES} and ${MAX_SLOT_MINUTES} minutes.
+    );
+  }
+  if (start <= now.getTime()) errors.push("The slot must start in the future.");
+  const startDate = localDateKey(new Date(start), input.timezone);
+  const endDate = localDateKey(new Date(end), input.timezone);
+  if (startDate !== endDate) {
+    errors.push("A slot must start and end on the same local day.");
+  }
+  const startMinutes = localMinutes(new Date(start), input.timezone);
+  const endMinutes = localMinutes(new Date(end), input.timezone);
+  if (startMinutes < WORK_START_HOUR * 60 || endMinutes > WORK_END_HOUR * 60) {
+    errors.push(
+      Slots must fit between ${WORK_START_HOUR}:00 and ${WORK_END_HOUR}:00 local time.
+    );
+  }
+  return { ok: errors.length === 0, errors };
+}
+export function validateBookingInput(input: {
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): ValidationResult {
+  const errors: string[] = [];
+  if (!input.prospectName.trim()) errors.push("A prospect name is required.");
+  if (!/^\S+@\S+.\S+$/.test(input.prospectEmail.trim())) {
+    errors.push("A valid prospect email is required.");
+  }
+  if (!isValidTimeZone(input.timezone)) errors.push("Choose a valid IANA timezone.");
+  return { ok: errors.length === 0, errors };
+}
+export function activeBookingForSlot<T extends { slot_id: string | null; status: string }>(
+  bookings: T[],
+  slotId: string
+): T | null {
+  return (
+    bookings.find(
+      (booking) =>
+        booking.slot_id === slotId && isOccupyingBooking(booking.status)
+    ) ?? null
+  );
+}
+export function canDeleteSlot(
+  bookings: { slot_id: string | null; status: string }[],
+  slotId: string
+): boolean {
+  return activeBookingForSlot(bookings, slotId) === null;
+}
+
+
+ChatGPT:
+I've reviewed the supplied source. We can start with a contained fix that does not depend on changing the database: timezone conversion and DST validation.
+Two defects are confirmed in lib/calendar/time.ts:
+
+zonedDateTimeToIso() can silently normalize nonexistent local times and choose one occurrence of an ambiguous time.
+defaultLocalSlot() uses the server's timezone and adds 24 elapsed hours, rather than advancing one calendar day in America/New_York.
+
+We'll fix those first and add regression tests. This gives us a small, independently verifiable change before we touch booking transactions.
+
+
+ChatGPT:
+I've reviewed the supplied source. We can start with a contained fix that does not depend on changing the database: timezone conversion and DST validation.
+Two defects are confirmed in lib/calendar/time.ts:
+
+zonedDateTimeToIso() can silently normalize nonexistent local times and choose one occurrence of an ambiguous time.
+defaultLocalSlot() uses the server's timezone and adds 24 elapsed hours, rather than advancing one calendar day in America/New_York.
+
+We'll fix those first and add regression tests. This gives us a small, independently verifiable change before we touch booking transactions.
+Step 1A — Apply the timezone fix
+Run this from the project root. It changes only lib/calendar/time.ts and tests/calendar-time.test.ts, preserving the rest of both files.
+
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("lib/calendar/time.ts")
+source = path.read_text()
+start = source.index("// Converts a datetime-local value")
+end = source.index("\nexport type ValidationResult", start)
+replacement = r'''// Converts a datetime-local value into a UTC instant.
+//
+// Nonexistent local times (spring-forward gaps) and ambiguous local times
+// (fall-back overlaps) are rejected instead of silently normalized.
+export function zonedDateTimeToIso(
+  localDateTime: string,
+  timeZone: string
+): string | null {
+  if (!isValidTimeZone(timeZone)) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(
+    localDateTime
+  );
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  const check = new Date(desired);
+  // Date.UTC normalizes invalid dates, so verify the original components.
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() + 1 !== month ||
+    check.getUTCDate() !== day ||
+    check.getUTCHours() !== hour ||
+    check.getUTCMinutes() !== minute
+  ) {
+    return null;
+  }
+  const candidates = new Set();
+  // Sample offsets on both sides of nearby timezone transitions.
+  // This captures both offsets during a fall-back overlap.
+  for (let deltaHours = -48; deltaHours <= 48; deltaHours += 3) {
+    const sample = new Date(desired + deltaHours * 60 * 60 * 1_000);
+    const offset = offsetMs(sample, timeZone);
+    const candidate = desired - offset;
+    const actual = localParts(new Date(candidate), timeZone);
+if (
+  actual.year === year &&
+  actual.month === month &&
+  actual.day === day &&
+  actual.hour === hour &&
+  actual.minute === minute
+) {
+  candidates.add(candidate);
+}
+
+  }
+  // Exactly one matching instant is required.
+  if (candidates.size !== 1) return null;
+  return new Date([...candidates][0]).toISOString();
+}
+export function defaultLocalSlot(date: Date = new Date()): {
+  start: string;
+  end: string;
+} {
+  const current = localParts(date, DEFAULT_TIMEZONE);
+  // Advance one calendar day in the configured timezone, not 24 elapsed hours.
+  const nextDay = new Date(
+    Date.UTC(current.year, current.month - 1, current.day + 1)
+  );
+  const y = nextDay.getUTCFullYear();
+  const m = String(nextDay.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(nextDay.getUTCDate()).padStart(2, "0");
+  return {
+    start: ${y}-${m}-${d}T09:00,
+    end: ${y}-${m}-${d}T09:30,
+  };
+}
+'''
+path.write_text(source[:start] + replacement + source[end:])
+print("Updated lib/calendar/time.ts")
+PY
+python3 - <<'PY'
+from pathlib import Path
+path = Path("tests/calendar-time.test.ts")
+source = path.read_text()
+source = source.replace(
+    "  canDeleteSlot,\n",
+    "  canDeleteSlot,\n  defaultLocalSlot,\n",
+    1,
+)
+addition = r'''
+test("zoned conversion rejects nonexistent and ambiguous DST times", () => {
+  // New York jumps from 01:59 to 03:00 on this date.
+  assert.equal(
+    zonedDateTimeToIso("2026-03-08T02:30", "America/New_York"),
+    null
+  );
+  // New York repeats the 01:00 hour on this date.
+  assert.equal(
+    zonedDateTimeToIso("2026-11-01T01:30", "America/New_York"),
+    null
+  );
+});
+test("zoned conversion rejects malformed and impossible local dates", () => {
+  assert.equal(
+    zonedDateTimeToIso("2026-02-30T09:00", "America/New_York"),
+    null
+  );
+  assert.equal(
+    zonedDateTimeToIso("2026-07-15T09:00:00", "America/New_York"),
+    null
+  );
+});
+test("default slot advances by calendar day in New York timezone", () => {
+  // 02:00 UTC on November 15 is still November 14 in New York.
+  const result = defaultLocalSlot(new Date("2026-11-15T02:00:00.000Z"));
+  assert.deepEqual(result, {
+    start: "2026-11-15T09:00",
+    end: "2026-11-15T09:30",
+  });
+});
+'''
+if 'zoned conversion rejects nonexistent and ambiguous DST times' in source:
+    raise SystemExit("Regression tests already appear to exist; no test changes made.")
+path.write_text(source.rstrip() + addition + "\n")
+print("Updated tests/calendar-time.test.ts")
+PY
+printf '\n===== RUN CALENDAR TIME TESTS =====\n'
+node --test --experimental-strip-types tests/calendar-time.test.ts
+
+Step 1B — Send me the results
+If the test command passes, run:
+npx tsc --noEmit
+npm test
+git diff --check
+git diff -- lib/calendar/time.ts tests/calendar-time.test.ts
+
+Paste the output, including any failures. Don't apply any Supabase migration yet.
+Current status
+
+
+
+Component
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 email
+Implemented; simulated sending
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar
+Hardening in progress
+
+
+Timezone/DST fix
+Patch prepared; awaiting local test
+
+
+Transactional booking migration
+Next
+
+
+Google OAuth/outbox
+Approved; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Last recorded full verification
+127 tests passed
+
+
+After this passes, we'll move to the transactional SQL functions and matching server-action changes.
+
+
+ChatGPT:
+Step 1A — Apply the timezone fix
+Run this from the project root. It changes only lib/calendar/time.ts and tests/calendar-time.test.ts, preserving the rest of both files.
+
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("lib/calendar/time.ts")
+source = path.read_text()
+start = source.index("// Converts a datetime-local value")
+end = source.index("\nexport type ValidationResult", start)
+replacement = r'''// Converts a datetime-local value into a UTC instant.
+//
+// Nonexistent local times (spring-forward gaps) and ambiguous local times
+// (fall-back overlaps) are rejected instead of silently normalized.
+export function zonedDateTimeToIso(
+  localDateTime: string,
+  timeZone: string
+): string | null {
+  if (!isValidTimeZone(timeZone)) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(
+    localDateTime
+  );
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  const check = new Date(desired);
+  // Date.UTC normalizes invalid dates, so verify the original components.
+  if (
+    check.getUTCFullYear() !== year ||
+    check.getUTCMonth() + 1 !== month ||
+    check.getUTCDate() !== day ||
+    check.getUTCHours() !== hour ||
+    check.getUTCMinutes() !== minute
+  ) {
+    return null;
+  }
+  const candidates = new Set();
+  // Sample offsets on both sides of nearby timezone transitions.
+  // This captures both offsets during a fall-back overlap.
+  for (let deltaHours = -48; deltaHours <= 48; deltaHours += 3) {
+    const sample = new Date(desired + deltaHours * 60 * 60 * 1_000);
+    const offset = offsetMs(sample, timeZone);
+    const candidate = desired - offset;
+    const actual = localParts(new Date(candidate), timeZone);
+if (
+  actual.year === year &&
+  actual.month === month &&
+  actual.day === day &&
+  actual.hour === hour &&
+  actual.minute === minute
+) {
+  candidates.add(candidate);
+}
+
+  }
+  // Exactly one matching instant is required.
+  if (candidates.size !== 1) return null;
+  return new Date([...candidates][0]).toISOString();
+}
+export function defaultLocalSlot(date: Date = new Date()): {
+  start: string;
+  end: string;
+} {
+  const current = localParts(date, DEFAULT_TIMEZONE);
+  // Advance one calendar day in the configured timezone, not 24 elapsed hours.
+  const nextDay = new Date(
+    Date.UTC(current.year, current.month - 1, current.day + 1)
+  );
+  const y = nextDay.getUTCFullYear();
+  const m = String(nextDay.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(nextDay.getUTCDate()).padStart(2, "0");
+  return {
+    start: ${y}-${m}-${d}T09:00,
+    end: ${y}-${m}-${d}T09:30,
+  };
+}
+'''
+path.write_text(source[:start] + replacement + source[end:])
+print("Updated lib/calendar/time.ts")
+PY
+python3 - <<'PY'
+from pathlib import Path
+path = Path("tests/calendar-time.test.ts")
+source = path.read_text()
+source = source.replace(
+    "  canDeleteSlot,\n",
+    "  canDeleteSlot,\n  defaultLocalSlot,\n",
+    1,
+)
+addition = r'''
+test("zoned conversion rejects nonexistent and ambiguous DST times", () => {
+  // New York jumps from 01:59 to 03:00 on this date.
+  assert.equal(
+    zonedDateTimeToIso("2026-03-08T02:30", "America/New_York"),
+    null
+  );
+  // New York repeats the 01:00 hour on this date.
+  assert.equal(
+    zonedDateTimeToIso("2026-11-01T01:30", "America/New_York"),
+    null
+  );
+});
+test("zoned conversion rejects malformed and impossible local dates", () => {
+  assert.equal(
+    zonedDateTimeToIso("2026-02-30T09:00", "America/New_York"),
+    null
+  );
+  assert.equal(
+    zonedDateTimeToIso("2026-07-15T09:00:00", "America/New_York"),
+    null
+  );
+});
+test("default slot advances by calendar day in New York timezone", () => {
+  // 02:00 UTC on November 15 is still November 14 in New York.
+  const result = defaultLocalSlot(new Date("2026-11-15T02:00:00.000Z"));
+  assert.deepEqual(result, {
+    start: "2026-11-15T09:00",
+    end: "2026-11-15T09:30",
+  });
+});
+'''
+if 'zoned conversion rejects nonexistent and ambiguous DST times' in source:
+    raise SystemExit("Regression tests already appear to exist; no test changes made.")
+path.write_text(source.rstrip() + addition + "\n")
+print("Updated tests/calendar-time.test.ts")
+PY
+printf '\n===== RUN CALENDAR TIME TESTS =====\n'
+node --test --experimental-strip-types tests/calendar-time.test.ts
+
+Step 1B — Send me the results
+If the test command passes, run:
+npx tsc --noEmit
+npm test
+git diff --check
+git diff -- lib/calendar/time.ts tests/calendar-time.test.ts
+
+Paste the output, including any failures. Don't apply any Supabase migration yet.
+Current status
+
+
+
+Component
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 email
+Implemented; simulated sending
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar
+Hardening in progress
+
+
+Timezone/DST fix
+Patch prepared; awaiting local test
+
+
+Transactional booking migration
+Next
+
+
+Google OAuth/outbox
+Approved; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Last recorded full verification
+127 tests passed
+
+
+After this passes, we'll move to the transactional SQL functions and matching server-action changes.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ >....
+});
+'''
+if 'zoned conversion rejects nonexistent and ambiguous DST times' in source:
+    raise SystemExit("Regression tests already appear to exist; no test changes made.")
+path.write_text(source.rstrip() + addition + "\n")
+print("Updated tests/calendar-time.test.ts")
+PY
+printf '\n===== RUN CALENDAR TIME TESTS =====\n'
+node --test --experimental-strip-types tests/calendar-time.test.ts
+Updated lib/calendar/time.ts
+Updated tests/calendar-time.test.ts
+===== RUN CALENDAR TIME TESTS =====
+node:internal/util:226
+    throw new ERR_NO_TYPESCRIPT();
+    ^
+Error [ERR_NO_TYPESCRIPT]: Node.js is not compiled with TypeScript support
+    at assertTypeScript (node:internal/util:226:11)
+    at node:internal/modules/typescript:41:3
+    at node:internal/util:785:15
+    at parseTypeScript (node:internal/modules/typescript:53:17)
+    at processTypeScriptCode (node:internal/modules/typescript:133:42)
+    at stripTypeScriptModuleTypes (node:internal/modules/typescript:163:10)
+    at Module._compile (node:internal/modules/cjs/loader:1657:15)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1838:10)
+    at Module.load (node:internal/modules/cjs/loader:1441:32)
+    at Module._load (node:internal/modules/cjs/loader:1263:12) {
+  code: 'ERR_NO_TYPESCRIPT'
+}
+Node.js v22.22.2
+✖ tests/calendar-time.test.ts (106.352022ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 115.575525
+✖ failing tests:
+test at tests/calendar-time.test.ts:1:1
+✖ tests/calendar-time.test.ts (106.352022ms)
+  'test failed'
+
+
+ChatGPT:
+Good news: both files were updated successfully. The error is from the test runner, not yet evidence of a defect in our timezone code.
+Your Node.js 22.22.2 installation does not support the --experimental-strip-types option in this build. Our project already has a working test setup, so we should use its existing runner instead of introducing another tool.
+Step 1 — Run the project's normal checks
+Please execute:
+printf '\n===== PROJECT TEST SUITE =====\n'
+npm test
+
+printf '\n===== TYPESCRIPT =====\n'
+npx tsc --noEmit
+
+printf '\n===== LINT =====\n'
+npm run lint
+
+printf '\n===== DIFF CHECK =====\n'
+git diff --check
+
+Paste the complete output.
+Don't rerun the Node command that failed. Don't install anything or change Node versions.
+Ledgerwise status board
+
+
+
+Component
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 email
+Implemented; simulated
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar
+Hardening underway
+
+
+Timezone/DST patch
+Applied; verification pending
+
+
+Transactional booking migration
+Next
+
+
+Google OAuth
+Approved; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Last recorded full test result
+127 passed
+
+
+We should establish that the existing test runner accepts the changes before proceeding to database work.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ npx tsc --noEmit
+npm test
+git diff --check
+git diff -- lib/calendar/time.ts tests/calendar-time.test.ts
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (94.061364ms)
+✔ falls through to the next provider on a 429 (1.671604ms)
+✔ a rate-limited model is skipped on the next call (1.336517ms)
+✔ a model is retried after its cooldown expires (2.311201ms)
+✔ a Retry-After header sets the cooldown (4.131805ms)
+✔ repeated 429s escalate the cooldown (2.25936ms)
+✔ a success resets the escalation (2.081436ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.686114ms)
+✔ truncated output tries the next model without cooling the first (1.513277ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (1.106044ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.504141ms)
+✔ oversized input is never sent to Groq (0.597313ms)
+✔ when every model is cooling down it throws without any network call (0.753351ms)
+✔ nothing configured throws and makes no network call (0.322101ms)
+✔ consecutive calls to one provider are spaced out (0.716198ms)
+✔ extractJson strips code fences (2.949601ms)
+✔ extractJson throws on garbage (0.435262ms)
+✔ a valid 30-minute business-hours slot passes (48.642593ms)
+✔ slot durations are limited to 15–120 minutes (108.185279ms)
+✔ slots must fit inside 9:00–17:00 local time (60.940921ms)
+✔ slots must be in the future and use a valid timezone (19.491548ms)
+✔ zoned conversion handles standard and daylight time (17.359917ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.519749ms)
+✔ booking input requires a name, a valid email, and a timezone (0.855368ms)
+✔ slot range formatting includes the timezone (1.381698ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (16.896612ms)
+✔ zoned conversion rejects malformed and impossible local dates (1.035172ms)
+✔ default slot advances by calendar day in New York timezone (2.668397ms)
+��� opt-out requests suppress and stop all replies (3.211158ms)
+✔ opt-out wins over a pricing question in the same message (0.261475ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.63622ms)
+✔ pricing, legal, sensitive, and human requests escalate (2.44525ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.729776ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.392246ms)
+✔ bot disclosure is explicit and safe (2.804717ms)
+✔ general fallback is safe and contains no invented facts (2.575188ms)
+✔ reply validation blocks pricing and human claims (0.643589ms)
+✔ reply prompt includes only recent thread messages and verified facts (0.993217ms)
+✔ parseReply accepts JSON and rejects empty output (5.406872ms)
+✔ selectEmailSources keeps only human-verified, usable sources (6.303958ms)
+✔ selectEmailSources caps the number of facts sent to the model (1.163721ms)
+✔ the fallback draft uses verified claims and passes guardrails (2.245868ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (0.544679ms)
+✔ draft validation rejects placeholders and unsafe content (1.740328ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.887681ms)
+✔ the prompt carries only supplied facts and the revision note (0.707425ms)
+✔ contact first name handles unknown contacts (0.188803ms)
+✔ Google status never claims operational without explicit verification (5.835753ms)
+✔ sync is a no-op unless explicitly enabled (0.862304ms)
+✔ access token exchange sends a refresh-token grant (93.802462ms)
+✔ sync creates a Google event and returns its id (4.753271ms)
+✔ Google HTTP failures are reported without claiming success (1.406104ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.266441ms)
+✔ events can be updated with PATCH using the new slot details (1.907294ms)
+✔ deletion treats an already-removed event as success (1.176935ms)
+✔ update and delete are no-ops unless sync is enabled (0.558597ms)
+✔ claim types are exactly the closed set of seven (3.437479ms)
+✔ accepts us_ecommerce (0.917523ms)
+✔ accepts category (0.72347ms)
+✔ accepts size_fit (0.175629ms)
+✔ accepts growth_signal (0.173883ms)
+✔ accepts pain_signal (0.164898ms)
+✔ accepts disqualifier (0.287573ms)
+✔ accepts contact (0.234796ms)
+✔ rejects claim_type "size" (0.717486ms)
+✔ rejects claim_type "other" (0.835992ms)
+✔ rejects claim_type "pain_sigal" (0.203198ms)
+✔ rejects claim_type "" (0.140679ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.211542ms)
+✔ disqualifier rows still need a source (0.179792ms)
+✔ retrieved_at must be a real calendar date (0.22224ms)
+✔ contact must be Name | Role (0.186918ms)
+✔ extracts claims and attaches the actual fetched page URL (1.750813ms)
+✔ ignores any source URL supplied by the AI (0.355899ms)
+✔ returns an empty array when the AI finds no supported claims (1.42536ms)
+✔ rejects malformed JSON (0.425512ms)
+✔ rejects a response without a claims array (0.547885ms)
+✔ rejects malformed claim objects (0.311049ms)
+✔ splits long pages into overlapping chunks (0.302324ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.353938ms)
+✔ CSV output uses the exact importer columns and preserves values (9.248226ms)
+✔ CSV output includes headers when no claims were accepted (0.54508ms)
+✔ report includes totals, sources, rejected claims, and errors (0.742523ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.821207ms)
+✔ uses a fallback title when Reader provides no title (3.684722ms)
+✔ rejects an empty Reader response (0.812015ms)
+✔ discovers same-site links and prioritizes useful pages (3.1837ms)
+✔ ignores duplicate links and removes tracking query strings (0.303193ms)
+✔ rejects non-HTTP and private/local URLs (0.304626ms)
+✔ fetches through Jina Reader and returns the original page URL (83.822043ms)
+✔ reports Reader HTTP errors clearly (0.52479ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.454735ms)
+✔ rejects local hostnames with a trailing dot (0.537365ms)
+✔ parses company names, homepages, and optional same-site pages (9.518741ms)
+✔ rejects invalid URLs and extra pages from another website (0.875279ms)
+✔ rejects empty research input (0.289597ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (1.830976ms)
+✔ continues to the next company when one homepage cannot be fetched (0.835808ms)
+✔ records an extraction failure without losing the company report (0.341729ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.327605ms)
+✔ runResearch rejects extra pages from another hostname (0.388442ms)
+✔ accepts a claim when its evidence appears on the fetched page (3.058024ms)
+✔ matches evidence despite case and whitespace differences (0.543472ms)
+✔ rejects evidence that does not appear on the page (0.609475ms)
+✔ rejects unsupported claim types (0.226016ms)
+✔ rejects a source URL that was not fetched (0.24541ms)
+✔ rejects evidence outside the permitted length (0.225232ms)
+✔ accepts a contact only when name and role appear in the evidence (0.851811ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.341623ms)
+✔ rejects a contact email that is not on the page (0.5976ms)
+✔ rejects duplicate claims (0.76837ms)
+✔ accepts no more than three claims of the same type (0.439625ms)
+✔ shipped config has no weights set yet (2.102592ms)
+✔ blank weights: criteria evaluated, no points, no total (0.86529ms)
+✔ partial weights: still no total (0.780877ms)
+✔ full weights: total sums points of met criteria (0.411508ms)
+✔ unmet criterion says unknown and carries no sources (0.513053ms)
+✔ every met criterion is traceable to at least one source (0.213218ms)
+✔ disqualifiers are surfaced and never count as criterion evidence (0.330232ms)
+✔ newly imported sources are pending review and are not human-verified (1.206128ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.242016ms)
+✔ rejection requires a non-empty note (0.42276ms)
+✔ status transition guards (0.197142ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.390857ms)
+✔ structural validation does not imply human verification (0.124203ms)
+✔ a recipient email needs a verified contact source containing it (0.438113ms)
+✔ status labels are explicit (0.121464ms)
+✔ email normalization trims and lowercases (2.172492ms)
+✔ email validation accepts normal addresses and rejects malformed ones (1.080575ms)
+✔ trimText enforces required text and maximum length (0.340054ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1754.979265
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ printf '\n===== PROJECT TEST SUITE =====\n'
+npm test
+printf '\n===== TYPESCRIPT =====\n'
+npx tsc --noEmit
+printf '\n===== LINT =====\n'
+npm run lint
+printf '\n===== DIFF CHECK =====\n'
+git diff --check
+===== PROJECT TEST SUITE =====
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (80.106979ms)
+✔ falls through to the next provider on a 429 (2.16244ms)
+✔ a rate-limited model is skipped on the next call (1.598864ms)
+✔ a model is retried after its cooldown expires (2.396028ms)
+✔ a Retry-After header sets the cooldown (6.550878ms)
+✔ repeated 429s escalate the cooldown (1.874769ms)
+✔ a success resets the escalation (6.188896ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.727224ms)
+✔ truncated output tries the next model without cooling the first (5.805936ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (1.481499ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.594671ms)
+✔ oversized input is never sent to Groq (5.427605ms)
+✔ when every model is cooling down it throws without any network call (0.990252ms)
+✔ nothing configured throws and makes no network call (0.34407ms)
+✔ consecutive calls to one provider are spaced out (0.743016ms)
+✔ extractJson strips code fences (4.127879ms)
+✔ extractJson throws on garbage (0.474668ms)
+✔ a valid 30-minute business-hours slot passes (33.145584ms)
+✔ slot durations are limited to 15–120 minutes (63.027083ms)
+✔ slots must fit inside 9:00–17:00 local time (55.825062ms)
+✔ slots must be in the future and use a valid timezone (16.935526ms)
+✔ zoned conversion handles standard and daylight time (17.093331ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.788332ms)
+✔ booking input requires a name, a valid email, and a timezone (0.674949ms)
+✔ slot range formatting includes the timezone (0.807077ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (16.427297ms)
+✔ zoned conversion rejects malformed and impossible local dates (1.04715ms)
+✔ default slot advances by calendar day in New York timezone (3.077467ms)
+✔ opt-out requests suppress and stop all replies (1.801742ms)
+✔ opt-out wins over a pricing question in the same message (0.217832ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.653231ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.696005ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.710927ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.371018ms)
+✔ bot disclosure is explicit and safe (2.926043ms)
+✔ general fallback is safe and contains no invented facts (2.643356ms)
+✔ reply validation blocks pricing and human claims (0.90165ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.777515ms)
+✔ parseReply accepts JSON and rejects empty output (3.359841ms)
+✔ selectEmailSources keeps only human-verified, usable sources (4.278995ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.538437ms)
+✔ the fallback draft uses verified claims and passes guardrails (3.842575ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (0.940286ms)
+✔ draft validation rejects placeholders and unsafe content (0.452844ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.073659ms)
+✔ the prompt carries only supplied facts and the revision note (0.775021ms)
+✔ contact first name handles unknown contacts (0.183261ms)
+✔ Google status never claims operational without explicit verification (2.604418ms)
+✔ sync is a no-op unless explicitly enabled (0.528946ms)
+✔ access token exchange sends a refresh-token grant (81.196663ms)
+✔ sync creates a Google event and returns its id (3.837695ms)
+✔ Google HTTP failures are reported without claiming success (1.782562ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.203076ms)
+✔ events can be updated with PATCH using the new slot details (2.019294ms)
+✔ deletion treats an already-removed event as success (1.974175ms)
+✔ update and delete are no-ops unless sync is enabled (0.481215ms)
+✔ claim types are exactly the closed set of seven (7.160725ms)
+✔ accepts us_ecommerce (1.5171ms)
+✔ accepts category (0.586495ms)
+✔ accepts size_fit (0.172194ms)
+✔ accepts growth_signal (0.165998ms)
+✔ accepts pain_signal (0.156771ms)
+✔ accepts disqualifier (0.301004ms)
+✔ accepts contact (0.235179ms)
+✔ rejects claim_type "size" (0.768191ms)
+✔ rejects claim_type "other" (0.707256ms)
+✔ rejects claim_type "pain_sigal" (0.221428ms)
+✔ rejects claim_type "" (0.141784ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.202077ms)
+✔ disqualifier rows still need a source (0.173351ms)
+✔ retrieved_at must be a real calendar date (0.204926ms)
+✔ contact must be Name | Role (0.173173ms)
+✔ extracts claims and attaches the actual fetched page URL (3.063138ms)
+✔ ignores any source URL supplied by the AI (0.603241ms)
+✔ returns an empty array when the AI finds no supported claims (2.139981ms)
+✔ rejects malformed JSON (0.599738ms)
+✔ rejects a response without a claims array (0.803039ms)
+✔ rejects malformed claim objects (0.393888ms)
+✔ splits long pages into overlapping chunks (0.436805ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.544254ms)
+✔ CSV output uses the exact importer columns and preserves values (8.311654ms)
+✔ CSV output includes headers when no claims were accepted (0.571793ms)
+✔ report includes totals, sources, rejected claims, and errors (0.769046ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.493982ms)
+✔ uses a fallback title when Reader provides no title (2.259633ms)
+✔ rejects an empty Reader response (0.76868ms)
+✔ discovers same-site links and prioritizes useful pages (3.345093ms)
+✔ ignores duplicate links and removes tracking query strings (0.342259ms)
+✔ rejects non-HTTP and private/local URLs (0.33458ms)
+✔ fetches through Jina Reader and returns the original page URL (65.021912ms)
+✔ reports Reader HTTP errors clearly (0.681395ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.508506ms)
+✔ rejects local hostnames with a trailing dot (0.415774ms)
+✔ parses company names, homepages, and optional same-site pages (7.885203ms)
+✔ rejects invalid URLs and extra pages from another website (0.885775ms)
+✔ rejects empty research input (0.175055ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (2.045288ms)
+✔ continues to the next company when one homepage cannot be fetched (1.064762ms)
+✔ records an extraction failure without losing the company report (0.482303ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.50782ms)
+✔ runResearch rejects extra pages from another hostname (0.552139ms)
+✔ accepts a claim when its evidence appears on the fetched page (3.027682ms)
+✔ matches evidence despite case and whitespace differences (0.420734ms)
+✔ rejects evidence that does not appear on the page (0.632657ms)
+✔ rejects unsupported claim types (0.260094ms)
+✔ rejects a source URL that was not fetched (0.275669ms)
+✔ rejects evidence outside the permitted length (0.249086ms)
+✔ accepts a contact only when name and role appear in the evidence (0.72438ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.517854ms)
+✔ rejects a contact email that is not on the page (0.69634ms)
+✔ rejects duplicate claims (0.8244ms)
+✔ accepts no more than three claims of the same type (0.470652ms)
+✔ shipped config has no weights set yet (4.28371ms)
+✔ blank weights: criteria evaluated, no points, no total (0.880284ms)
+✔ partial weights: still no total (0.485114ms)
+✔ full weights: total sums points of met criteria (0.259317ms)
+✔ unmet criterion says unknown and carries no sources (0.410504ms)
+✔ every met criterion is traceable to at least one source (0.215942ms)
+✔ disqualifiers are surfaced and never count as criterion evidence (0.493443ms)
+✔ newly imported sources are pending review and are not human-verified (1.903355ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.647202ms)
+✔ rejection requires a non-empty note (0.895523ms)
+✔ status transition guards (0.322077ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.644798ms)
+✔ structural validation does not imply human verification (0.167872ms)
+✔ a recipient email needs a verified contact source containing it (0.549167ms)
+✔ status labels are explicit (0.157053ms)
+✔ email normalization trims and lowercases (0.954633ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.274778ms)
+✔ trimText enforces required text and maximum length (0.132865ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1528.906667
+===== TYPESCRIPT =====
+===== LINT =====
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+===== DIFF CHECK =====
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$
+
+
+ChatGPT:
+Excellent. The timezone patch is now verified by the project's actual test runner.
+130 tests passed · 0 failed
+The checks confirm:
+
+DST handling: nonexistent spring-forward times and ambiguous fall-back times are rejected.
+Date validation: impossible dates and malformed datetime inputs are rejected.
+Default slot: advances by calendar day in the configured New York timezone.
+TypeScript: npx tsc --noEmit passed with no errors.
+Lint: passed with no errors.
+Git diff check: clean.
+
+One important correction: the earlier 127-test result is now superseded by 130 passing tests.
+Next: transactional calendar operations
+We can now move to the next major Phase 7 task: making booking, cancellation, rescheduling, and slot deletion safe against concurrent requests.
+The key issue is that the current actions perform multiple separate database operations. Two requests could race, or a booking could be created without its corresponding audit record. We'll move critical state changes into PostgreSQL transactions and keep Google Calendar synchronization separate and retryable.
+Before writing that migration, I need to verify the complete current security policies in migration 01. Please run:
+cat supabase/migrations/20261114_01_source_verification_and_security.sql
+
+Paste the output. I'll use it to design the next migration without accidentally weakening existing protections or breaking the email and conversation workflows.
+Ledgerwise status board
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 — Email
+Implemented; simulated only
+
+
+Phase 6 — Conversations
+Implemented
+
+
+Phase 7 — Calendar
+Hardening underway
+
+
+Timezone/DST handling
+Verified
+
+
+Transactional booking operations
+Next
+
+
+Google OAuth
+Approved; not implemented
+
+
+Migrations 01–03
+Reviewed; not applied remotely
+
+
+Latest tests
+130 passed, 0 failed
+
+
+TypeScript / lint / diff check
+Clean
+
+
+Commit / push / deployment
+Not performed
+
+
+We will continue with the existing project changes intact. No remote migration will be applied without your review and approval.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ cat supabase/migrations/20261114_01_source_verification_and_security.sql
+-- Ledgerwise prototype — migration 01
+-- Source verification, RLS hardening, append-only protection, suppression RPCs.
+-- IMPORTANT
+-- 1. Export existing policies and constraints first. See docs/MIGRATION_INSTRUCTIONS.md.
+-- 2. This migration replaces policies on the listed tables with authenticated-only
+--    policies. It does NOT provide per-user or tenant isolation. It is for the
+--    single-team prototype assumption described in docs/SECURITY.md.
+-- 3. Run this file manually in the Supabase SQL Editor. It is not executed by the app.
+
+-- 1. Source verification columns and one-time backfill
+
+do $$
+declare
+  fresh_columns boolean;
+begin
+  select not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'company_sources'
+      and column_name = 'verification_status'
+  ) into fresh_columns;
+  alter table public.company_sources
+    add column if not exists imported_by uuid references public.users(id);
+  alter table public.company_sources
+    add column if not exists verification_status text not null default 'pending_review';
+  alter table public.company_sources
+    add column if not exists reviewed_by uuid references public.users(id);
+  alter table public.company_sources
+    add column if not exists reviewed_at timestamptz;
+  alter table public.company_sources
+    add column if not exists verification_note text;
+  if fresh_columns then
+    -- The old verified_by value was stamped automatically by the importer and
+    -- cannot be treated as human verification. Preserve it as import attribution,
+    -- then clear it and put every existing source back into the review queue.
+    update public.company_sources
+    set imported_by = verified_by,
+        verified_by = null,
+        verification_status = 'pending_review',
+        reviewed_by = null,
+        reviewed_at = null,
+        verification_note = null;
+  end if;
+end $$;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'company_sources_verification_status_check'
+      and conrelid = 'public.company_sources'::regclass
+  ) then
+    alter table public.company_sources
+      add constraint company_sources_verification_status_check
+      check (verification_status in ('pending_review', 'verified', 'rejected'));
+  end if;
+end $$;
+alter table public.conversations
+  add column if not exists ai_processing_at timestamptz;
+create index if not exists company_sources_company_id_idx
+  on public.company_sources (company_id);
+create index if not exists company_sources_verification_status_idx
+  on public.company_sources (verification_status);
+create index if not exists company_sources_company_verification_idx
+  on public.company_sources (company_id, verification_status);
+create index if not exists qualification_scores_company_id_idx
+  on public.qualification_scores (company_id);
+create index if not exists email_drafts_company_status_idx
+  on public.email_drafts (company_id, status);
+create index if not exists email_events_draft_created_idx
+  on public.email_events (draft_id, created_at);
+create index if not exists conversations_company_status_idx
+  on public.conversations (company_id, status);
+create index if not exists messages_conversation_created_idx
+  on public.messages (conversation_id, created_at);
+create index if not exists audit_logs_entity_idx
+  on public.audit_logs (entity_type, entity_id);
+
+-- 2. Suppression unique index
+
+-- A duplicate index on the same expression is harmless and keeps ON CONFLICT
+-- (lower(email)) reliable even if an earlier index had a different name.
+create unique index if not exists suppressed_contacts_email_lower_idx
+  on public.suppressed_contacts (lower(email));
+
+-- 3. RLS replacement — authenticated-only single-team policies
+
+alter table public.companies enable row level security;
+alter table public.company_sources enable row level security;
+alter table public.qualification_scores enable row level security;
+alter table public.email_drafts enable row level security;
+alter table public.email_events enable row level security;
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+alter table public.calendar_slots enable row level security;
+alter table public.bookings enable row level security;
+alter table public.suppressed_contacts enable row level security;
+alter table public.audit_logs enable row level security;
+do $$
+declare
+  r record;
+begin
+  for r in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = any (array[
+        'companies',
+        'company_sources',
+        'qualification_scores',
+        'email_drafts',
+        'email_events',
+        'conversations',
+        'messages',
+        'calendar_slots',
+        'bookings',
+        'suppressed_contacts',
+        'audit_logs'
+      ])
+  loop
+    execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
+  end loop;
+end $$;
+-- Companies
+create policy auth_select_companies on public.companies
+  for select to authenticated using (true);
+create policy auth_insert_companies on public.companies
+  for insert to authenticated with check (true);
+create policy auth_update_companies on public.companies
+  for update to authenticated using (true) with check (true);
+-- Company sources
+create policy auth_select_company_sources on public.company_sources
+  for select to authenticated using (true);
+create policy auth_insert_company_sources on public.company_sources
+  for insert to authenticated with check (true);
+create policy auth_update_company_sources on public.company_sources
+  for update to authenticated using (true) with check (true);
+-- Qualification scores
+create policy auth_select_qualification_scores on public.qualification_scores
+  for select to authenticated using (true);
+create policy auth_insert_qualification_scores on public.qualification_scores
+  for insert to authenticated with check (true);
+create policy auth_update_qualification_scores on public.qualification_scores
+  for update to authenticated using (true) with check (true);
+-- Email drafts
+create policy auth_select_email_drafts on public.email_drafts
+  for select to authenticated using (true);
+create policy auth_insert_email_drafts on public.email_drafts
+  for insert to authenticated with check (true);
+create policy auth_update_email_drafts on public.email_drafts
+  for update to authenticated using (true) with check (true);
+-- Email events: append-only in normal operation
+create policy auth_select_email_events on public.email_events
+  for select to authenticated using (true);
+create policy auth_insert_email_events on public.email_events
+  for insert to authenticated with check (true);
+-- Conversations
+create policy auth_select_conversations on public.conversations
+  for select to authenticated using (true);
+create policy auth_insert_conversations on public.conversations
+  for insert to authenticated with check (true);
+create policy auth_update_conversations on public.conversations
+  for update to authenticated using (true) with check (true);
+-- Messages
+create policy auth_select_messages on public.messages
+  for select to authenticated using (true);
+create policy auth_insert_messages on public.messages
+  for insert to authenticated with check (true);
+create policy auth_update_messages on public.messages
+  for update to authenticated using (true) with check (true);
+-- Calendar slots
+create policy auth_select_calendar_slots on public.calendar_slots
+  for select to authenticated using (true);
+create policy auth_insert_calendar_slots on public.calendar_slots
+  for insert to authenticated with check (true);
+create policy auth_update_calendar_slots on public.calendar_slots
+  for update to authenticated using (true) with check (true);
+create policy auth_delete_calendar_slots on public.calendar_slots
+  for delete to authenticated using (true);
+-- Bookings: no direct delete; cancellation is the supported path
+create policy auth_select_bookings on public.bookings
+  for select to authenticated using (true);
+create policy auth_insert_bookings on public.bookings
+  for insert to authenticated with check (true);
+create policy auth_update_bookings on public.bookings
+  for update to authenticated using (true) with check (true);
+-- Suppression: read and insert only
+create policy auth_select_suppressed_contacts on public.suppressed_contacts
+  for select to authenticated using (true);
+create policy auth_insert_suppressed_contacts on public.suppressed_contacts
+  for insert to authenticated with check (true);
+-- Audit: read and insert only
+create policy auth_select_audit_logs on public.audit_logs
+  for select to authenticated using (true);
+create policy auth_insert_audit_logs on public.audit_logs
+  for insert to authenticated with check (true);
+
+-- 4. Append-only triggers for suppression and audit
+
+create or replace function public.reject_append_only_mutation()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'This table is append-only; % is not allowed on %', tg_op, tg_table_name;
+end;
+$$;
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'suppressed_contacts_append_only'
+      and tgrelid = 'public.suppressed_contacts'::regclass
+  ) then
+    create trigger suppressed_contacts_append_only
+      before update or delete on public.suppressed_contacts
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'audit_logs_append_only'
+      and tgrelid = 'public.audit_logs'::regclass
+  ) then
+    create trigger audit_logs_append_only
+      before update or delete on public.audit_logs
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+end $$;
+
+-- 5. Suppression RPCs
+
+create or replace function public.is_suppressed(p_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.suppressed_contacts
+    where lower(email) = lower(trim(coalesce(p_email, '')))
+  );
+$$;
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+  if v_email = '' or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+.[^@[:space:]]+$' then
+    raise exception 'invalid_email';
+  end if;
+  insert into public.suppressed_contacts (email, reason, source_message_id)
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+  if v_row.id is null then
+    select * into v_row
+    from public.suppressed_contacts
+    where lower(email) = v_email;
+    return v_row;
+  end if;
+  insert into public.audit_logs (actor_id, action, entity_type, entity_id, detail)
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+  return v_row;
+end;
+$$;
+revoke all on function public.is_suppressed(text) from public;
+revoke all on function public.suppress_contact(text, text, uuid) from public;
+grant execute on function public.is_suppressed(text) to authenticated;
+grant execute on function public.suppress_contact(text, text, uuid) to authenticated;
+notify pgrst, 'reload schema';
+
+
+ChatGPT:
+Thanks. I now have the complete migration 01, so we can review its actual security behavior rather than guess.
+There are two issues I want to correct before we apply any migrations.
+Migration 01 review
+1. Import attribution can be overwritten
+This backfill currently does:
+set imported_by = verified_by
+
+If imported_by already contains valid importer attribution, this overwrites it.
+The safer version is:
+set imported_by = coalesce(imported_by, verified_by)
+
+That preserves existing attribution and uses the old verified_by value only when no importer is recorded.
+2. Table privileges need explicit hardening
+The migration replaces RLS policies, but it does not explicitly revoke broad table privileges from anon or narrow direct mutation privileges for authenticated.
+RLS and SQL grants are separate protections:
+
+RLS determines which rows a role can access.
+Grants determine which database operations that role is permitted to attempt.
+
+Our transactional booking design should revoke direct booking mutations and route them through narrowly scoped database functions. We should also revoke anonymous access to the relevant application tables without breaking legitimate authenticated workflows.
+Do not apply migration 01 yet. We'll account for these corrections in the final reviewed migration plan.
+Next: verify the exact calendar actions
+Before designing the database functions, I want the current complete action file, so our SQL and TypeScript interfaces match exactly.
+Run:
+sed -n '1,760p' "app/(dashboard)/calendar/actions.ts"
+
+Paste the output.
+I'll use it to map each existing operation to its transactional replacement:
+
+
+
+Existing operation
+Intended database protection
+
+
+
+Create slot
+Atomic slot creation and audit
+
+
+Delete slot
+Lock slot, reject active bookings, delete and audit atomically
+
+
+Book slot
+Lock slot, validate availability, create booking and audit atomically
+
+
+Confirm booking
+Lock booking and update status with audit
+
+
+Cancel booking
+Lock booking, cancel and audit atomically
+
+
+Reschedule booking
+Lock both slots in stable order, move booking and audit atomically
+
+
+Google Calendar synchronization will remain outside those database transactions. That prevents an external API failure from leaving the internal booking transaction half-completed.
+Ledgerwise status board
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Paused
+
+
+Phase 5 — Email
+Implemented; simulated only
+
+
+Phase 6 — Conversations
+Implemented
+
+
+Phase 7 — Calendar
+Hardening underway
+
+
+Timezone/DST fixes
+130 tests passed
+
+
+Transactional database operations
+Design underway
+
+
+Migration 01
+Reviewed; corrections needed
+
+
+Migrations 02–03
+Reviewed; unapplied
+
+
+Google OAuth
+Approved; not implemented
+
+
+Latest checks
+130 tests passed; TypeScript, lint and diff check clean
+
+
+Commit / push / deployment
+Not performed
+
+
+We are keeping the existing research work and uncommitted changes intact.
+
+If you want, I can:
+
+Show complete migration SQL file
+Explain key security features in migration
+Outline next migration plan based on current policies

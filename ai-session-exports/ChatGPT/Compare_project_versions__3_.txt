@@ -1,0 +1,2087 @@
+Compare project versions (3)
+============================
+
+ChatGPT:
+Actually, your logs show that the refresh-token problem appears to be resolved on the second run.
+Look at the difference:
+1. First run — stale authentication token
+You had repeated:
+Invalid Refresh Token: Refresh Token Not Found
+code: 'refresh_token_not_found'
+
+Then this happened:
+POST /auth/signout 303
+GET /login 200
+
+That indicates the application attempted to sign out and return you to the login page.
+2. Second run — clean startup
+After restarting with npm run dev, there are:
+
+No AuthApiError messages.
+No refresh-token errors.
+Successful /prospects requests.
+Successful discovery API responses.
+
+Refresh-token errors absent in second run
+So don't clear your cache again. Let's verify the application is working properly.
+What to do now
+
+Keep the second development server running.
+Open http://localhost:3000.
+If redirected to /login, sign in normally.
+Navigate to Prospects.
+Click Discover Companies exactly once.
+Wait for the discovery operation to finish.
+
+Then tell me what happens:
+
+Are companies imported?
+Does discovery return zero companies?
+Does an error appear in the application?
+
+One additional observation: Your logs show two separate discovery requests in each run. That may simply mean the button was clicked twice, but let's check whether the UI is triggering duplicate requests.
+If the refresh-token errors return during this clean session, we'll inspect proxy.ts and the Supabase server-client cookie handling rather than repeatedly clearing browser data.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm run dev
+
+ledgerwise-prototype@0.1.0 dev
+next dev
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Local:         http://localhost:3000
+Network:       http://192.168.43.89:3000
+Environments: .env.local
+✓ Ready in 490ms
+✓ Running next.config.ts took 98ms
+Experiments (use with caution):
+· serverActions
+
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+ GET /login 200 in 1753ms (next.js: 1399ms, proxy.ts: 145ms, application-code: 208ms)
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+ GET /login 200 in 192ms (next.js: 6ms, proxy.ts: 128ms, application-code: 58ms)
+ GET /prospects 200 in 2.4s (next.js: 157ms, proxy.ts: 1236ms, application-code: 1017ms)
+ GET /prospects 200 in 1248ms (next.js: 10ms, proxy.ts: 570ms, application-code: 668ms)
+ POST /api/prospects/discover 200 in 15.1s (next.js: 459ms, proxy.ts: 726ms, application-code: 13.9s)
+ GET /prospects 200 in 1892ms (next.js: 7ms, proxy.ts: 805ms, application-code: 1081ms)
+ GET /prospects/dc8bfa9e-67b9-4028-b278-f2b0df0e5680 200 in 2.2s (next.js: 541ms, proxy.ts: 1202ms, application-code: 506ms)
+ POST /auth/signout 303 in 1930ms (next.js: 124ms, proxy.ts: 1518ms, application-code: 288ms)
+ GET /login 200 in 78ms (next.js: 29ms, proxy.ts: 3ms, application-code: 46ms)
+ GET /login 200 in 61ms (next.js: 26ms, proxy.ts: 4ms, application-code: 30ms)
+ GET /prospects 200 in 1752ms (next.js: 26ms, proxy.ts: 602ms, application-code: 1123ms)
+ GET /prospects 200 in 1536ms (next.js: 16ms, proxy.ts: 950ms, application-code: 570ms)
+ POST /api/prospects/discover 200 in 3.7s (next.js: 26ms, proxy.ts: 690ms, application-code: 3.0s)
+ GET /prospects 200 in 558ms (next.js: 9ms, proxy.ts: 141ms, application-code: 409ms)
+ POST /api/prospects/discover 200 in 3.3s (next.js: 7ms, proxy.ts: 142ms, application-code: 3.1s)
+ GET /prospects 200 in 531ms (next.js: 5ms, proxy.ts: 112ms, application-code: 415ms)
+^C
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm run dev
+
+ledgerwise-prototype@0.1.0 dev
+next dev
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Local:         http://localhost:3000
+Network:       http://192.168.43.89:3000
+Environments: .env.local
+✓ Ready in 558ms
+✓ Running next.config.ts took 40ms
+Experiments (use with caution):
+· serverActions
+
+ GET /prospects 200 in 2.5s (next.js: 515ms, proxy.ts: 868ms, application-code: 1145ms)
+ GET /prospects 200 in 958ms (next.js: 9ms, proxy.ts: 223ms, application-code: 727ms)
+ POST /api/prospects/discover 200 in 2.9s (next.js: 116ms, proxy.ts: 257ms, application-code: 2.5s)
+ GET /prospects 200 in 536ms (next.js: 18ms, proxy.ts: 123ms, application-code: 396ms)
+ POST /api/prospects/discover 200 in 3.1s (next.js: 19ms, proxy.ts: 741ms, application-code: 2.3s)
+ GET /prospects 200 in 668ms (next.js: 3ms, proxy.ts: 181ms, application-code: 484ms)
+ POST /auth/signout 303 in 1194ms (next.js: 73ms, proxy.ts: 956ms, application-code: 165ms)
+ GET /login 200 in 199ms (next.js: 110ms, proxy.ts: 6ms, application-code: 84ms)
+ GET /login 200 in 72ms (next.js: 14ms, proxy.ts: 6ms, application-code: 53ms)
+ GET /login 200 in 52ms (next.js: 5ms, proxy.ts: 7ms, application-code: 40ms)
+ GET /prospects 200 in 1885ms (next.js: 10ms, proxy.ts: 843ms, application-code: 1032ms)
+ GET /prospects 200 in 1165ms (next.js: 3ms, proxy.ts: 870ms, application-code: 291ms)
+ POST /api/prospects/discover 200 in 2.1s (next.js: 8ms, proxy.ts: 134ms, application-code: 1947ms)
+ GET /prospects 200 in 600ms (next.js: 3ms, proxy.ts: 94ms, application-code: 503ms)
+
+
+ChatGPT:
+Now we have a more important clue: the refresh-token error disappears on the second startup, but the application is still signing you out.
+Look at the second run:
+POST /api/prospects/discover 200
+GET /prospects 200
+POST /auth/signout 303
+GET /login 200
+
+That POST /auth/signout 303 is the part we need to investigate. Something is triggering the sign-out route after discovery.
+A 200 from discovery means the API request completed successfully at the HTTP level. It does not prove that authentication remained valid or that companies were imported.
+Step 1 — Inspect the authentication code
+Stop the development server with Ctrl+C.
+Run these commands from your project directory:
+1. Inspect proxy.ts:
+sed -n '1,260p' proxy.ts
+
+2. Find the sign-out implementation:
+rg -n -C 5 "auth/signout|signOut\\(|signout" app lib
+
+3. Find Supabase server-client creation and session handling:
+rg -n -C 4 "createServerClient|createBrowserClient|createClient|refreshSession|getUser\\(|getSession\\(" app lib proxy.ts
+
+4. Find authentication redirects:
+rg -n -C 3 "redirect\\(\"/login\"|redirect\\('/login'|NextResponse.redirect|signOut" app lib proxy.ts
+
+Step 2 — Send me the output
+Paste the results of those four commands here.
+Do not paste .env.local or any API keys.
+What we're looking for
+There are two things I want to establish:
+
+Whether proxy.ts is trying to refresh an invalid session and mishandling the resulting error.
+Whether the sign-out route is being triggered automatically by application code rather than by your clicking the logout button.
+
+Don't change any code yet. Let's identify the exact cause first, then fix the authentication flow without disturbing your discovery and research improvements.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm run dev
+
+ledgerwise-prototype@0.1.0 dev
+next dev
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Local:         http://localhost:3000
+Network:       http://192.168.43.89:3000
+Environments: .env.local
+✓ Ready in 490ms
+✓ Running next.config.ts took 98ms
+Experiments (use with caution):
+· serverActions
+
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+ GET /login 200 in 1753ms (next.js: 1399ms, proxy.ts: 145ms, application-code: 208ms)
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+Error [AuthApiError]: Invalid Refresh Token: Refresh Token Not Found
+    at ignore-listed frames {
+  __isAuthError: true,
+  status: 400,
+  code: 'refresh_token_not_found'
+}
+ GET /login 200 in 192ms (next.js: 6ms, proxy.ts: 128ms, application-code: 58ms)
+ GET /prospects 200 in 2.4s (next.js: 157ms, proxy.ts: 1236ms, application-code: 1017ms)
+ GET /prospects 200 in 1248ms (next.js: 10ms, proxy.ts: 570ms, application-code: 668ms)
+ POST /api/prospects/discover 200 in 15.1s (next.js: 459ms, proxy.ts: 726ms, application-code: 13.9s)
+ GET /prospects 200 in 1892ms (next.js: 7ms, proxy.ts: 805ms, application-code: 1081ms)
+ GET /prospects/dc8bfa9e-67b9-4028-b278-f2b0df0e5680 200 in 2.2s (next.js: 541ms, proxy.ts: 1202ms, application-code: 506ms)
+ POST /auth/signout 303 in 1930ms (next.js: 124ms, proxy.ts: 1518ms, application-code: 288ms)
+ GET /login 200 in 78ms (next.js: 29ms, proxy.ts: 3ms, application-code: 46ms)
+ GET /login 200 in 61ms (next.js: 26ms, proxy.ts: 4ms, application-code: 30ms)
+ GET /prospects 200 in 1752ms (next.js: 26ms, proxy.ts: 602ms, application-code: 1123ms)
+ GET /prospects 200 in 1536ms (next.js: 16ms, proxy.ts: 950ms, application-code: 570ms)
+ POST /api/prospects/discover 200 in 3.7s (next.js: 26ms, proxy.ts: 690ms, application-code: 3.0s)
+ GET /prospects 200 in 558ms (next.js: 9ms, proxy.ts: 141ms, application-code: 409ms)
+ POST /api/prospects/discover 200 in 3.3s (next.js: 7ms, proxy.ts: 142ms, application-code: 3.1s)
+ GET /prospects 200 in 531ms (next.js: 5ms, proxy.ts: 112ms, application-code: 415ms)
+^C
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm run dev
+
+ledgerwise-prototype@0.1.0 dev
+next dev
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Local:         http://localhost:3000
+Network:       http://192.168.43.89:3000
+Environments: .env.local
+✓ Ready in 558ms
+✓ Running next.config.ts took 40ms
+Experiments (use with caution):
+· serverActions
+
+ GET /prospects 200 in 2.5s (next.js: 515ms, proxy.ts: 868ms, application-code: 1145ms)
+ GET /prospects 200 in 958ms (next.js: 9ms, proxy.ts: 223ms, application-code: 727ms)
+ POST /api/prospects/discover 200 in 2.9s (next.js: 116ms, proxy.ts: 257ms, application-code: 2.5s)
+ GET /prospects 200 in 536ms (next.js: 18ms, proxy.ts: 123ms, application-code: 396ms)
+ POST /api/prospects/discover 200 in 3.1s (next.js: 19ms, proxy.ts: 741ms, application-code: 2.3s)
+ GET /prospects 200 in 668ms (next.js: 3ms, proxy.ts: 181ms, application-code: 484ms)
+ POST /auth/signout 303 in 1194ms (next.js: 73ms, proxy.ts: 956ms, application-code: 165ms)
+ GET /login 200 in 199ms (next.js: 110ms, proxy.ts: 6ms, application-code: 84ms)
+ GET /login 200 in 72ms (next.js: 14ms, proxy.ts: 6ms, application-code: 53ms)
+ GET /login 200 in 52ms (next.js: 5ms, proxy.ts: 7ms, application-code: 40ms)
+ GET /prospects 200 in 1885ms (next.js: 10ms, proxy.ts: 843ms, application-code: 1032ms)
+ GET /prospects 200 in 1165ms (next.js: 3ms, proxy.ts: 870ms, application-code: 291ms)
+ POST /api/prospects/discover 200 in 2.1s (next.js: 8ms, proxy.ts: 134ms, application-code: 1947ms)
+ GET /prospects 200 in 600ms (next.js: 3ms, proxy.ts: 94ms, application-code: 503ms)
+clear
+^C
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,260p' proxy.ts
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+export async function proxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(list) {
+          list.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          list.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
+      },
+    }
+  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+  if (!user && path !== "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+  if (user && path === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/prospects";
+    return NextResponse.redirect(url);
+  }
+  return response;
+}
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
+And:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ rg -n -C 5 "auth/signout|signOut\(|signout" app lib
+app/(dashboard)/layout.tsx
+26-          
+27-          
+28-            Ledgerwise
+29-            Business workspace
+30-          
+31:          
+32-            Sign out
+33-          
+34-        
+35-
+36-        
+47-        
+48-          
+49-            Signed in as
+50-            {email}
+51-          
+52:          
+53-            
+54-              
+55-                
+56-              
+57-              Sign out
+app/auth/signout/route.ts
+1-import { NextResponse, type NextRequest } from "next/server";
+2-import { createClient } from "@/lib/supabase/server";
+3-
+4-export async function POST(request: NextRequest) {
+5-  const supabase = await createClient();
+6:  await supabase.auth.signOut();
+7-  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+8-}
+
+
+ChatGPT:
+Good. We've found the first concrete issue in your authentication code.
+Your proxy.ts is not preserving refreshed Supabase cookies when it redirects users. This can cause session-refresh problems and repeated authentication failures.
+There is also an important distinction: /auth/signout is not being called automatically by the code shown so far. Your dashboard layout contains two sign-out forms (mobile and desktop), and we need to establish what triggers the POST request.
+1. What I found in proxy.ts
+Your current code does this:
+if (!user && path !== "/login") {
+  const url = request.nextUrl.clone();
+  url.pathname = "/login";
+  return NextResponse.redirect(url);
+}
+
+The problem is that it creates a new redirect response without carrying over any cookies that Supabase may have refreshed or cleared.
+We should fix this while preserving the existing session-handling behavior.
+2. I need two more files before changing anything
+Please run these commands:
+A. Inspect your Supabase server client:
+sed -n '1,240p' lib/supabase/server.ts
+
+B. Inspect your browser client:
+sed -n '1,200p' lib/supabase/client.ts
+
+C. Inspect the sign-out route and dashboard layout together:
+sed -n '1,120p' app/auth/signout/route.ts
+sed -n '1,110p' 'app/(dashboard)/layout.tsx'
+
+3. What we'll fix
+Once I see those files, I'll give you the exact replacement code.
+The objectives are:
+
+Preserve refreshed cookies across redirects.
+Handle invalid refresh tokens without repeatedly throwing authentication errors.
+Ensure sign-out works correctly.
+Prevent authenticated users from being unexpectedly redirected to login.
+Preserve the existing prospect discovery functionality.
+
+Don't modify anything yet. We're now investigating the actual authentication implementation rather than repeatedly clearing browser cache.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ rg -n -C 4 "createServerClient|createBrowserClient|createClient|refreshSession|getUser\(|getSession\(" app lib proxy.ts
+proxy.ts
+1:import { createServerClient } from "@supabase/ssr";
+2-import { NextResponse, type NextRequest } from "next/server";
+3-
+4-export async function proxy(request: NextRequest) {
+5-  let response = NextResponse.next({ request });
+6-
+7:  const supabase = createServerClient(
+8-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+9-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+10-    {
+11-      cookies: {
+24-  );
+25-
+26-  const {
+27-    data: { user },
+28:  } = await supabase.auth.getUser();
+29-  const path = request.nextUrl.pathname;
+30-
+31-  if (!user && path !== "/login") {
+32-    const url = request.nextUrl.clone();
+app/(dashboard)/calendar/actions.ts
+1-"use server";
+2-
+3-import { revalidatePath } from "next/cache";
+4:import { createClient } from "@/lib/supabase/server";
+5-import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+6-import { isSuppressed } from "@/lib/suppression";
+7-import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+8-import {
+148-  startTime: string;
+149-  endTime: string;
+150-  timezone: string;
+151-}): Promise {
+152:  const supabase = await createClient();
+153-  const user = await getSessionUser(supabase);
+154-  if (!user) return { ok: false, error: "Not signed in." };
+155-
+156-  const validation = validateSlotInput(input);
+173-  return { ok: true, slotId, message: "Internal slot created." };
+174-}
+175-
+176-export async function deleteSlot(slotId: string): Promise {
+177:  const supabase = await createClient();
+178-  const user = await getSessionUser(supabase);
+179-  if (!user) return { ok: false, error: "Not signed in." };
+180-  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+181-
+200-  prospectName: string;
+201-  prospectEmail: string;
+202-  timezone: string;
+203-}): Promise {
+204:  const supabase = await createClient();
+205-  const user = await getSessionUser(supabase);
+206-  if (!user) return { ok: false, error: "Not signed in." };
+207-  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+208-  if (input.companyId && !isUuid(input.companyId)) {
+320-
+321-export async function confirmBooking(
+322-  bookingId: string
+323-): Promise {
+324:  const supabase = await createClient();
+325-  const user = await getSessionUser(supabase);
+326-  if (!user) return { ok: false, error: "Not signed in." };
+327-  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+328-
+370-export async function cancelBooking(
+371-  bookingId: string,
+372-  reason: string
+373-): Promise {
+374:  const supabase = await createClient();
+375-  const user = await getSessionUser(supabase);
+376-  if (!user) return { ok: false, error: "Not signed in." };
+377-  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+378-
+425-  bookingId: string,
+426-  newSlotId: string,
+427-  reason: string
+428-): Promise {
+429:  const supabase = await createClient();
+430-  const user = await getSessionUser(supabase);
+431-  if (!user) return { ok: false, error: "Not signed in." };
+432-  if (!isUuid(bookingId) || !isUuid(newSlotId)) {
+433-    return { ok: false, error: "Invalid booking or slot ID." };
+app/(dashboard)/calendar/page.tsx
+1:import { createClient } from "@/lib/supabase/server";
+2-import { isUuid } from "@/lib/validation";
+3-import {
+4-  activeBookingForSlot,
+5-  formatSlotRange,
+66-    params.conversation && isUuid(params.conversation) ? params.conversation : undefined;
+67-  const defaultCompanyId =
+68-    params.company && isUuid(params.company) ? params.company : undefined;
+69-
+70:  const supabase = await createClient();
+71-  const now = new Date().toISOString();
+72-  const [
+73-    { data: slotData, error: slotError },
+74-    { data: bookingData },
+app/login/page.tsx
+1-"use client";
+2-
+3-import { useState } from "react";
+4-import { useRouter } from "next/navigation";
+5:import { createClient } from "@/lib/supabase/client";
+6-
+7-export default function LoginPage() {
+8-  const router = useRouter();
+9-  const [email, setEmail] = useState("");
+14-  async function handleSubmit(e: React.FormEvent) {
+15-    e.preventDefault();
+16-    setLoading(true);
+17-    setError(null);
+18:    const supabase = createClient();
+19-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+20-    if (error) {
+21-      setError(error.message);
+22-      setLoading(false);
+app/(dashboard)/layout.tsx
+1:import { createClient } from "@/lib/supabase/server";
+2-import NavLink from "@/components/NavLink";
+3-
+4-export default async function DashboardLayout({
+5-  children,
+6-}: {
+7-  children: React.ReactNode;
+8-}) {
+9:  const supabase = await createClient();
+10-  const {
+11-    data: { user },
+12:  } = await supabase.auth.getUser();
+13-
+14-  const email = user?.email ?? "Workspace user";
+15-  const initials = email.slice(0, 1).toUpperCase();
+16-
+lib/supabase/server.ts
+1:import { createServerClient } from "@supabase/ssr";
+2-import { cookies } from "next/headers";
+3-
+4:export async function createClient() {
+5-  const cookieStore = await cookies();
+6:  return createServerClient(
+7-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+8-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+9-    {
+10-      cookies: {
+lib/server/auth.ts
+1:import type { createClient } from "@/lib/supabase/server";
+2-
+3:export type ServerSupabase = Awaited<ReturnType>;
+4-
+5-export type SessionUser = {
+6-  id: string;
+7-  email: string | null;
+12-): Promise<SessionUser | null> {
+13-  const {
+14-    data: { user },
+15-    error,
+16:  } = await supabase.auth.getUser();
+17-
+18-  if (error || !user) return null;
+19-  return { id: user.id, email: user.email ?? null };
+20-}
+lib/supabase/client.ts
+1:import { createBrowserClient } from "@supabase/ssr";
+2-
+3:export function createClient() {
+4:  return createBrowserClient(
+5-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+6-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+7-  );
+8-}
+app/(dashboard)/emails/page.tsx
+1-import Link from "next/link";
+2:import { createClient } from "@/lib/supabase/server";
+3-import { normalizeEmail } from "@/lib/validation";
+4-import {
+5-  isUsableVerifiedContact,
+6-  type SourceLike,
+33-  return Array.isArray(row.companies) ? row.companies[0] ?? null : row.companies;
+34-}
+35-
+36-export default async function EmailsPage() {
+37:  const supabase = await createClient();
+38-  const [
+39-    { data: draftData, error: draftError },
+40-    { data: companyData },
+41-    { data: contactSourceData },
+app/(dashboard)/conversations/page.tsx
+1-import Link from "next/link";
+2:import { createClient } from "@/lib/supabase/server";
+3-import ConversationStatusBadge from "@/components/conversations/StatusBadge";
+4-
+5-type ConversationRow = {
+6-  id: string;
+36-  return messages[messages.length - 1] ?? null;
+37-}
+38-
+39-export default async function ConversationsPage() {
+40:  const supabase = await createClient();
+41-  const { data, error } = await supabase
+42-    .from("conversations")
+43-    .select(
+44-      "id,status,contact_email,booking_request,created_at,companies(name),messages(body,created_at,sender,needs_review)"
+app/(dashboard)/conversations/[id]/page.tsx
+1-import Link from "next/link";
+2-import { notFound } from "next/navigation";
+3:import { createClient } from "@/lib/supabase/server";
+4-import { isUuid } from "@/lib/validation";
+5-import { selectEmailSources, type DraftSource } from "@/lib/email/draft";
+6-import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
+7-import ConversationStatusBadge from "@/components/conversations/StatusBadge";
+73-}) {
+74-  const { id } = await params;
+75-  if (!isUuid(id)) notFound();
+76-
+77:  const supabase = await createClient();
+78-  const { data: conversationData } = await supabase
+79-    .from("conversations")
+80-    .select(
+81-      "id,company_id,contact_email,status,booking_request,assigned_to,created_at,companies(id,name,website,contact_name)"
+app/(dashboard)/emails/actions.ts
+1-"use server";
+2-
+3-import { revalidatePath } from "next/cache";
+4-import { generate } from "@/lib/ai";
+5:import { createClient } from "@/lib/supabase/server";
+6-import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+7-import { writeAudit } from "@/lib/server/audit";
+8-import { isSuppressed, suppressContact } from "@/lib/suppression";
+9-import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+150-
+151-export async function createDraftForCompany(
+152-  companyId: string
+153-): Promise {
+154:  const supabase = await createClient();
+155-  const user = await getSessionUser(supabase);
+156-  if (!user) return { ok: false, error: "Not signed in." };
+157-  if (!isUuid(companyId)) return { ok: false, error: "Invalid company ID." };
+158-
+270-  draftId: string,
+271-  subject: string,
+272-  body: string
+273-): Promise {
+274:  const supabase = await createClient();
+275-  const user = await getSessionUser(supabase);
+276-  if (!user) return { ok: false, error: "Not signed in." };
+277-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+278-
+344-  return { ok: true, draftId };
+345-}
+346-
+347-export async function approveDraft(draftId: string): Promise {
+348:  const supabase = await createClient();
+349-  const user = await getSessionUser(supabase);
+350-  if (!user) return { ok: false, error: "Not signed in." };
+351-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+352-
+408-export async function rejectDraft(
+409-  draftId: string,
+410-  note: string
+411-): Promise {
+412:  const supabase = await createClient();
+413-  const user = await getSessionUser(supabase);
+414-  if (!user) return { ok: false, error: "Not signed in." };
+415-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+416-
+468-export async function requestDraftRevision(
+469-  draftId: string,
+470-  note: string
+471-): Promise {
+472:  const supabase = await createClient();
+473-  const user = await getSessionUser(supabase);
+474-  if (!user) return { ok: false, error: "Not signed in." };
+475-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+476-
+589-
+590-export async function simulateSendDraft(
+591-  draftId: string
+592-): Promise {
+593:  const supabase = await createClient();
+594-  const user = await getSessionUser(supabase);
+595-  if (!user) return { ok: false, error: "Not signed in." };
+596-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+597-
+735-
+736-export async function sendApprovedDraft(
+737-  draftId: string
+738-): Promise {
+739:  const supabase = await createClient();
+740-  const user = await getSessionUser(supabase);
+741-  if (!user) return { ok: false, error: "Not signed in." };
+742-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+743-  if (process.env.EMAIL_LIVE_SEND_ENABLED !== "1") {
+926-export async function suppressFromDraft(
+927-  draftId: string,
+928-  reason: string
+929-): Promise {
+930:  const supabase = await createClient();
+931-  const user = await getSessionUser(supabase);
+932-  if (!user) return { ok: false, error: "Not signed in." };
+933-  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+934-
+app/(dashboard)/conversations/actions.ts
+1-"use server";
+2-
+3-import { revalidatePath } from "next/cache";
+4-import { generate } from "@/lib/ai";
+5:import { createClient } from "@/lib/supabase/server";
+6-import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+7-import { writeAudit } from "@/lib/server/audit";
+8-import { isSuppressed, suppressContact } from "@/lib/suppression";
+9-import { isUuid, trimText } from "@/lib/validation";
+175-export async function addProspectReply(
+176-  conversationId: string,
+177-  body: string
+178-): Promise {
+179:  const supabase = await createClient();
+180-  const user = await getSessionUser(supabase);
+181-  if (!user) return { ok: false, error: "Not signed in." };
+182-  if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
+183-
+467-
+468-export async function approveAiMessage(
+469-  messageId: string
+470-): Promise {
+471:  const supabase = await createClient();
+472-  const user = await getSessionUser(supabase);
+473-  if (!user) return { ok: false, error: "Not signed in." };
+474-  if (!isUuid(messageId)) return { ok: false, error: "Invalid message ID." };
+475-
+556-
+557-export async function discardAiMessage(
+558-  messageId: string
+559-): Promise {
+560:  const supabase = await createClient();
+561-  const user = await getSessionUser(supabase);
+562-  if (!user) return { ok: false, error: "Not signed in." };
+563-  if (!isUuid(messageId)) return { ok: false, error: "Invalid message ID." };
+564-
+605-
+606-export async function takeoverConversation(
+607-  conversationId: string
+608-): Promise {
+609:  const supabase = await createClient();
+610-  const user = await getSessionUser(supabase);
+611-  if (!user) return { ok: false, error: "Not signed in." };
+612-  if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
+613-
+644-export async function sendHumanReply(
+645-  conversationId: string,
+646-  body: string
+647-): Promise {
+648:  const supabase = await createClient();
+649-  const user = await getSessionUser(supabase);
+650-  if (!user) return { ok: false, error: "Not signed in." };
+651-  if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
+652-
+727-
+728-export async function closeConversation(
+729-  conversationId: string
+730-): Promise {
+731:  const supabase = await createClient();
+732-  const user = await getSessionUser(supabase);
+733-  if (!user) return { ok: false, error: "Not signed in." };
+734-  if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
+735-
+760-export async function suppressConversation(
+761-  conversationId: string,
+762-  reason: string
+763-): Promise {
+764:  const supabase = await createClient();
+765-  const user = await getSessionUser(supabase);
+766-  if (!user) return { ok: false, error: "Not signed in." };
+767-  if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
+768-
+815-
+816-export async function resolveBookingRequest(
+817-  conversationId: string
+818-): Promise {
+819:  const supabase = await createClient();
+820-  const user = await getSessionUser(supabase);
+821-  if (!user) return { ok: false, error: "Not signed in." };
+822-  if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
+823-
+app/(dashboard)/prospects/import/actions.ts
+1-"use server";
+2-
+3:import { createClient } from "@/lib/supabase/server";
+4-import { newImportFields } from "@/lib/sources/verification";
+5-import { validateRow, type RawRow, type ValidRow } from "@/lib/import-schema";
+6-
+7-export type ImportResult = {
+22-export async function importRows(
+23-  rows: RawRow[],
+24-  source: "csv" | "autonomous_discovery" = "csv",
+25-): Promise {
+26:  const supabase = await createClient();
+27-  const {
+28-    data: { user },
+29:  } = await supabase.auth.getUser();
+30-  if (!user) return { ...empty, error: "Not signed in." };
+31-  if (rows.length === 0) return { ...empty, error: "The file has no rows." };
+32-  if (rows.length > 2000) return { ...empty, error: "Max 2000 rows per import." };
+33-
+app/api/prospects/discover/route.ts
+1-import { NextResponse } from "next/server";
+2-import { revalidatePath } from "next/cache";
+3:import { createClient } from "@/lib/supabase/server";
+4-import { runResearch } from "@/lib/research/runner";
+5-import { discoverSameSiteLinks } from "@/lib/research/pages";
+6-import { hostFromUrl, type RawRow } from "@/lib/import-schema";
+7-import { importRows } from "@/app/(dashboard)/prospects/import/actions";
+76-  if (origin && origin !== new URL(request.url).origin) {
+77-    return NextResponse.json({ error: "Invalid request origin." }, { status: 403 });
+78-  }
+79-
+80:  const supabase = await createClient();
+81:  const { data: { user } } = await supabase.auth.getUser();
+82-
+83-  if (!user) {
+84-    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+85-  }
+app/(dashboard)/prospects/[id]/page.tsx
+1-import Link from "next/link";
+2-import { notFound } from "next/navigation";
+3:import { createClient } from "@/lib/supabase/server";
+4-import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
+5-import ScoreBreakdown, { SourceItem } from "@/components/ScoreBreakdown";
+6-import SourceReviewTable, {
+7-  type SourceReviewRow,
+12-}: {
+13-  params: Promise<{ id: string }>;
+14-}) {
+15-  const { id } = await params;
+16:  const supabase = await createClient();
+17-
+18-  const { data: company } = await supabase
+19-    .from("companies")
+20-    .select("*")
+app/(dashboard)/prospects/source-actions.ts
+1-"use server";
+2-
+3-import { revalidatePath } from "next/cache";
+4:import { createClient } from "@/lib/supabase/server";
+5-import { getSessionUser } from "@/lib/server/auth";
+6-import { writeAudit } from "@/lib/server/audit";
+7-import { isUuid, trimText } from "@/lib/validation";
+8-import {
+32-
+33-async function loadSource(
+34-  sourceId: string
+35-): Promise<{ source?: LoadedSource; error?: string }> {
+36:  const supabase = await createClient();
+37-  const { data, error } = await supabase
+38-    .from("company_sources")
+39-    .select("id,company_id,claim,claim_type,source_url,evidence,verification_status")
+40-    .eq("id", sourceId)
+52-  revalidatePath("/emails");
+53-}
+54-
+55-export async function verifySource(sourceId: string): Promise {
+56:  const supabase = await createClient();
+57-  const user = await getSessionUser(supabase);
+58-  if (!user) return { ok: false, error: "Not signed in." };
+59-  if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
+60-
+145-export async function rejectSource(
+146-  sourceId: string,
+147-  note: string
+148-): Promise {
+149:  const supabase = await createClient();
+150-  const user = await getSessionUser(supabase);
+151-  if (!user) return { ok: false, error: "Not signed in." };
+152-  if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
+153-
+196-export async function resetSourceToPending(
+197-  sourceId: string,
+198-  reason: string
+199-): Promise {
+200:  const supabase = await createClient();
+201-  const user = await getSessionUser(supabase);
+202-  if (!user) return { ok: false, error: "Not signed in." };
+203-  if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
+204-
+app/(dashboard)/emails/[id]/page.tsx
+1-import Link from "next/link";
+2-import { notFound } from "next/navigation";
+3:import { createClient } from "@/lib/supabase/server";
+4-import { isUuid } from "@/lib/validation";
+5-import { validateEmailDraft, type DraftSource } from "@/lib/email/draft";
+6-import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
+7-import EmailStatusBadge from "@/components/emails/StatusBadge";
+75-}) {
+76-  const { id } = await params;
+77-  if (!isUuid(id)) notFound();
+78-
+79:  const supabase = await createClient();
+80-  const { data: draftData } = await supabase
+81-    .from("email_drafts")
+82-    .select(
+83-      "id,company_id,subject,body,status,source_ids,revision_note,reviewed_by,reviewed_at,created_at,updated_at,companies(id,name,website,contact_name,contact_role,contact_email)"
+app/(dashboard)/prospects/scoring-actions.ts
+1-"use server";
+2-
+3-import { revalidatePath } from "next/cache";
+4:import { createClient } from "@/lib/supabase/server";
+5-import { getSessionUser } from "@/lib/server/auth";
+6-import { writeAudit } from "@/lib/server/audit";
+7-import { getScoringConfig } from "@/lib/scoring/custom";
+8-import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
+17-
+18-type CompanyRow = { id: string; name: string };
+19-
+20-export async function generateQualificationScores(): Promise {
+21:  const supabase = await createClient();
+22-  const user = await getSessionUser(supabase);
+23-  if (!user) return { ok: false, error: "Not signed in." };
+24-
+25-  const scoringConfig = getScoringConfig();
+app/auth/signout/route.ts
+1-import { NextResponse, type NextRequest } from "next/server";
+2:import { createClient } from "@/lib/supabase/server";
+3-
+4-export async function POST(request: NextRequest) {
+5:  const supabase = await createClient();
+6-  await supabase.auth.signOut();
+7-  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+8-}
+app/(dashboard)/prospects/page.tsx
+1-import Link from "next/link";
+2-import DiscoverCompaniesButton from "@/components/DiscoverCompaniesButton";
+3:import { createClient } from "@/lib/supabase/server";
+4-import ScoreGenerationButton from "./ScoreGenerationButton";
+5-
+6-type Row = {
+7-  id: string;
+27-  provisional: boolean;
+28-};
+29-
+30-export default async function ProspectsPage() {
+31:  const supabase = await createClient();
+32-
+33-  const [
+34-    { data, error },
+35-    pendingReview,
+app/(dashboard)/prospects/review/page.tsx
+1-import Link from "next/link";
+2:import { createClient } from "@/lib/supabase/server";
+3-import { isUuid } from "@/lib/validation";
+4-import SourceReviewTable, {
+5-  type SourceReviewRow,
+6-} from "@/components/prospects/SourceReviewTable";
+15-}) {
+16-  const params = await searchParams;
+17-  const companyFilter =
+18-    params.company && isUuid(params.company) ? params.company : null;
+19:  const supabase = await createClient();
+20-
+21-  let query = supabase
+22-    .from("company_sources")
+23-    .select(SOURCE_FIELDS)
+4th request:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ rg -n -C 3 "redirect\("/login"|redirect\('/login'|NextResponse.redirect|signOut" app lib proxy.ts
+proxy.ts
+31-  if (!user && path !== "/login") {
+32-    const url = request.nextUrl.clone();
+33-    url.pathname = "/login";
+34:    return NextResponse.redirect(url);
+35-  }
+36-  if (user && path === "/login") {
+37-    const url = request.nextUrl.clone();
+38-    url.pathname = "/prospects";
+39:    return NextResponse.redirect(url);
+40-  }
+41-  return response;
+42-}
+app/auth/signout/route.ts
+3-
+4-export async function POST(request: NextRequest) {
+5-  const supabase = await createClient();
+6:  await supabase.auth.signOut();
+7:  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+8-}
+
+
+ChatGPT:
+Thanks. This output gives us a clearer picture. I can now narrow down the problem.
+What we've established
+1. Your proxy checks authentication on every request.
+const {
+  data: { user },
+} = await supabase.auth.getUser();
+
+When Supabase receives an invalid refresh token, this call can produce the errors you're seeing.
+2. Your sign-out route is explicit.
+await supabase.auth.signOut();
+return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+
+The POST /auth/signout log means that a sign-out form was submitted. It is not evidence that proxy.ts automatically called signOut().
+3. We haven't yet inspected the complete server-client cookie implementation.
+That's the next important piece.
+Please run these two commands
+cat lib/supabase/server.ts
+
+cat app/auth/signout/route.ts
+
+You already provided the sign-out route through the search output, but I want its complete contents alongside the server client.
+Why I'm asking
+I want to correct the cookie handling in both places:
+
+proxy.ts: preserve refreshed cookies when redirecting.
+lib/supabase/server.ts: correctly read and write cookies using Next.js cookies().
+Sign-out route: ensure expired sessions are handled without creating another authentication failure.
+
+We will make a targeted fix, then run:
+npx tsc --noEmit
+npm test
+
+Don't delete more cookies or change your Supabase project settings. We should fix the application code first.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ cat lib/supabase/server.ts
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+export async function createClient() {
+  const cookieStore = await cookies();
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(list) {
+          try {
+            list.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options)
+            );
+          } catch {
+            // Called from a Server Component; the middleware refreshes sessions.
+          }
+        },
+      },
+    }
+  );
+}
+OK and this one:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ cat app/auth/signout/route.ts
+import { NextResponse, type NextRequest } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  return NextResponse.redirect(new URL("/login", request.url), { status: 303 });
+}
+
+
+ChatGPT:
+Excellent. Now we've found a likely cause, and I can give you a targeted fix.
+The problem is in proxy.ts, not lib/supabase/server.ts.
+Your server client is using the standard Supabase SSR cookie pattern. The problem is what happens when authentication fails:
+
+Supabase detects an invalid refresh token.
+It attempts to clear the invalid authentication cookies.
+Your proxy creates a redirect to /login.
+That redirect discards the cookies Supabase just tried to clear.
+The browser sends the same invalid refresh token again on the next request.
+
+This explains why clearing the cache appeared to help temporarily.
+Step 1 — Replace proxy.ts
+Stop the development server with Ctrl+C.
+Run this command to replace the file:
+
+cat > proxy.ts <<'EOF'
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
+
+export async function proxy(request: NextRequest) {
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(list) {
+          list.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+      response = NextResponse.next({ request });
+
+      list.forEach(({ name, value, options }) => {
+        response.cookies.set(name, value, options);
+      });
+    },
+  },
+}
+
+  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const path = request.nextUrl.pathname;
+  if (!user && path !== "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+const redirectResponse = NextResponse.redirect(url);
+
+// Preserve cookies Supabase refreshed or cleared.
+response.cookies.getAll().forEach((cookie) => {
+  redirectResponse.cookies.set(cookie);
+});
+
+return redirectResponse;
+
+  }
+  if (user && path === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/prospects";
+const redirectResponse = NextResponse.redirect(url);
+
+response.cookies.getAll().forEach((cookie) => {
+  redirectResponse.cookies.set(cookie);
+});
+
+return redirectResponse;
+
+  }
+  return response;
+}
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
+EOF
+
+The important change is that both redirects now preserve Supabase's cookie updates.
+Step 2 — Run the checks
+npx tsc --noEmit
+npm test
+git diff --check
+
+If these pass, start the app:
+npm run dev
+
+Step 3 — Test authentication
+
+Open http://localhost:3000.
+Sign in if prompted.
+Navigate between Prospects and another dashboard page.
+Refresh the browser.
+Check whether the refresh-token errors return.
+
+Expected result Invalid refresh tokens should be cleared rather than repeatedly reused.
+Important: Don't change lib/supabase/server.ts or the sign-out route yet. Let's verify this targeted fix first. If the error persists, we'll investigate the browser client and session lifecycle next.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npx tsc --noEmit
+npm test
+git diff --check
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (62.020473ms)
+✔ falls through to the next provider on a 429 (1.971577ms)
+✔ a rate-limited model is skipped on the next call (1.497229ms)
+✔ a model is retried after its cooldown expires (2.227292ms)
+✔ a Retry-After header sets the cooldown (5.876077ms)
+✔ repeated 429s escalate the cooldown (2.161206ms)
+✔ a success resets the escalation (1.674928ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.575194ms)
+✔ truncated output tries the next model without cooling the first (1.734553ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (1.268969ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.606837ms)
+✔ oversized input is never sent to Groq (0.874754ms)
+✔ when every model is cooling down it throws without any network call (0.90905ms)
+✔ nothing configured throws and makes no network call (0.299698ms)
+✔ consecutive calls to one provider are spaced out (0.679496ms)
+✔ extractJson strips code fences (2.132742ms)
+✔ extractJson throws on garbage (0.748211ms)
+✔ a valid 30-minute business-hours slot passes (48.291585ms)
+✔ slot durations are limited to 15–120 minutes (58.332522ms)
+✔ slots must fit inside 9:00–17:00 local time (36.616082ms)
+✔ slots must be in the future and use a valid timezone (10.921607ms)
+✔ zoned conversion handles standard and daylight time (10.572532ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.329339ms)
+✔ booking input requires a name, a valid email, and a timezone (0.432855ms)
+✔ slot range formatting includes the timezone (0.611662ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (9.526421ms)
+✔ zoned conversion rejects malformed and impossible local dates (0.713299ms)
+✔ default slot advances by calendar day in New York timezone (1.898448ms)
+✔ opt-out requests suppress and stop all replies (2.538954ms)
+✔ opt-out wins over a pricing question in the same message (0.256471ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.459291ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.865998ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.746969ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.633692ms)
+✔ bot disclosure is explicit and safe (2.972749ms)
+✔ general fallback is safe and contains no invented facts (8.216321ms)
+✔ reply validation blocks pricing and human claims (0.947846ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.823619ms)
+✔ parseReply accepts JSON and rejects empty output (3.190565ms)
+✔ selectEmailSources keeps only human-verified, usable sources (4.081697ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.531398ms)
+✔ the fallback draft uses verified claims and passes guardrails (3.250368ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (0.968742ms)
+✔ draft validation rejects placeholders and unsafe content (0.501362ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.431449ms)
+✔ the prompt carries only supplied facts and the revision note (0.800295ms)
+✔ contact first name handles unknown contacts (0.215304ms)
+✔ Google status never claims operational without explicit verification (3.239221ms)
+✔ sync is a no-op unless explicitly enabled (0.538846ms)
+✔ access token exchange sends a refresh-token grant (124.905735ms)
+✔ sync creates a Google event and returns its id (3.327383ms)
+✔ Google HTTP failures are reported without claiming success (0.969519ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.201003ms)
+✔ events can be updated with PATCH using the new slot details (3.217374ms)
+✔ deletion treats an already-removed event as success (1.065416ms)
+✔ update and delete are no-ops unless sync is enabled (0.482687ms)
+✔ claim types are exactly the closed set of seven (2.623655ms)
+✔ accepts us_ecommerce (0.803464ms)
+✔ accepts category (0.312802ms)
+✔ accepts size_fit (0.109777ms)
+✔ accepts growth_signal (0.101641ms)
+✔ accepts pain_signal (0.089473ms)
+✔ accepts disqualifier (0.194683ms)
+✔ accepts contact (0.148756ms)
+✔ rejects claim_type "size" (0.352302ms)
+✔ rejects claim_type "other" (0.463104ms)
+✔ rejects claim_type "pain_sigal" (0.142547ms)
+✔ rejects claim_type "" (0.092656ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.141547ms)
+✔ disqualifier rows still need a source (0.118281ms)
+✔ retrieved_at must be a real calendar date (0.136207ms)
+✔ contact must be Name | Role (0.11321ms)
+✔ accepts a genuine online retailer with storefront evidence (3.020964ms)
+✔ accepts a Shopify storefront with catalog and platform evidence (1.1325ms)
+✔ rejects an e-commerce bookkeeping consultancy such as Ecom CFO (0.966168ms)
+✔ rejects an agency that mentions Shopify but has no storefront (0.381465ms)
+✔ rejects a SaaS platform without actual product storefront evidence (0.189533ms)
+✔ rejects vague retail claims without transaction or platform evidence (0.165529ms)
+✔ does not reject a genuine store merely because it mentions consulting (0.305083ms)
+✔ extracts claims and attaches the actual fetched page URL (2.613254ms)
+✔ ignores any source URL supplied by the AI (0.357884ms)
+✔ returns an empty array when the AI finds no supported claims (1.7986ms)
+✔ rejects malformed JSON (0.7331ms)
+✔ rejects a response without a claims array (0.988149ms)
+✔ rejects malformed claim objects (0.247298ms)
+✔ splits long pages into overlapping chunks (0.278544ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.456874ms)
+✔ source freshness uses explicit 90 and 180 day bands (1.994018ms)
+✔ invalid or future retrieval dates are unknown (0.282566ms)
+✔ CSV output uses the exact importer columns and preserves values (7.804209ms)
+✔ CSV output includes headers when no claims were accepted (1.004684ms)
+✔ report includes totals, sources, rejected claims, and errors (1.047522ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.827756ms)
+✔ uses a fallback title when Reader provides no title (2.111876ms)
+✔ rejects an empty Reader response (0.778585ms)
+✔ discovers same-site links and prioritizes useful pages (4.313065ms)
+✔ ignores duplicate links and removes tracking query strings (0.351193ms)
+✔ rejects non-HTTP and private/local URLs (0.568971ms)
+✔ fetches through Jina Reader and returns the original page URL (69.620569ms)
+✔ reports Reader HTTP errors clearly (0.67671ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.694834ms)
+✔ rejects local hostnames with a trailing dot (0.655105ms)
+✔ prioritizes company, leadership, hiring and operational pages over generic blog pages (0.717534ms)
+✔ parses company names, homepages, and optional same-site pages (10.992645ms)
+✔ rejects invalid URLs and extra pages from another website (1.00066ms)
+✔ rejects empty research input (0.351364ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (3.106941ms)
+✔ continues to the next company when one homepage cannot be fetched (1.162747ms)
+✔ records an extraction failure without losing the company report (0.641312ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.383462ms)
+✔ runResearch rejects extra pages from another hostname (0.557593ms)
+✔ runResearch limits concurrent companies and preserves input order (32.032446ms)
+✔ discovers a second level of same-site pages without exceeding the page cap (4.641941ms)
+✔ caps a hostile or overly broad link graph at eight pages per company (1.203423ms)
+✔ accepts a claim when its evidence appears on the fetched page (3.125864ms)
+✔ matches evidence despite case and whitespace differences (0.539525ms)
+✔ rejects evidence that does not appear on the page (0.54027ms)
+✔ rejects unsupported claim types (0.221692ms)
+✔ rejects a source URL that was not fetched (0.226355ms)
+✔ rejects evidence outside the permitted length (0.233826ms)
+✔ accepts a contact only when name and role appear in the evidence (0.599481ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.266659ms)
+✔ rejects a contact email that is not on the page (0.579693ms)
+✔ rejects duplicate claims (0.740424ms)
+✔ accepts no more than three claims of the same type (0.425723ms)
+✔ live sending requires explicit enablement and sender credentials (2.141278ms)
+✔ provider refuses to send while live sending is disabled (0.742739ms)
+✔ Resend request includes stable idempotency key and returns provider ID (67.838455ms)
+✔ provider error is returned without pretending an email was sent (0.928758ms)
+✔ qualification weights match the approved 100-point rubric (3.746209ms)
+✔ all verified evidence earns the full 100 points (0.729899ms)
+✔ pending evidence remains unknown and earns no points (0.543669ms)
+✔ rejected evidence cannot earn points (0.209997ms)
+✔ partial verified evidence produces a provisional partial score (0.324668ms)
+✔ only human-verified sources are attached to criterion results (0.214047ms)
+✔ only verified disqualifiers are surfaced and they earn no points (0.324158ms)
+✔ custom scoring criteria accept valid weights totaling 100 (2.306847ms)
+✔ custom scoring rejects weights that do not total 100 (0.896693ms)
+✔ custom scoring rejects duplicate keys and unsupported claim types (0.651483ms)
+✔ invalid environment config safely falls back to approved default rubric (0.53264ms)
+✔ newly imported sources are pending review and are not human-verified (1.198318ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.258843ms)
+✔ rejection requires a non-empty note (0.436595ms)
+✔ status transition guards (0.182308ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.480791ms)
+✔ structural validation does not imply human verification (0.139445ms)
+✔ a recipient email needs a verified contact source containing it (0.543839ms)
+✔ status labels are explicit (0.157403ms)
+✔ email normalization trims and lowercases (0.969273ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.22669ms)
+✔ trimText enforces required text and maximum length (0.137789ms)
+ℹ tests 151
+ℹ suites 0
+ℹ pass 151
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1888.185627
+
+
+ChatGPT:
+All checks passed
+Excellent. The proxy.ts change passes all three checks:
+
+TypeScript: no errors.
+Tests: 151 passed, 0 failed.
+Git diff check: no whitespace errors.
+
+Your discovery eligibility and US-market evidence tests are also still passing, so this change hasn't broken those checks.
+
+
+ChatGPT:
+All checks passed
+Excellent. The proxy.ts change passes all three checks:
+
+TypeScript: no errors.
+Tests: 151 passed, 0 failed.
+Git diff check: no whitespace errors.
+
+Your discovery eligibility and US-market evidence tests are also still passing, so this change hasn't broken those checks.
+Next step — verify it in the browser
+Start the app:
+npm run dev
+
+Then:
+
+Open http://localhost:3000.
+Sign in if necessary.
+Navigate between dashboard pages.
+Refresh the page several times.
+Watch the terminal for Invalid Refresh Token errors.
+
+One thing I want to establish: does the error disappear completely, or does it return after navigating or refreshing?
+If it returns, send me the new terminal output. We can then isolate whether the remaining issue is session persistence or another authentication call.
+
+
+ChatGPT:
+Next step — verify it in the browser
+Start the app:
+npm run dev
+
+Then:
+
+Open http://localhost:3000.
+Sign in if necessary.
+Navigate between dashboard pages.
+Refresh the page several times.
+Watch the terminal for Invalid Refresh Token errors.
+
+One thing I want to establish: does the error disappear completely, or does it return after navigating or refreshing?
+If it returns, send me the new terminal output. We can then isolate whether the remaining issue is session persistence or another authentication call.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ npm run dev
+
+ledgerwise-prototype@0.1.0 dev
+next dev
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Local:         http://localhost:3000
+Network:       http://192.168.43.89:3000
+Environments: .env.local
+✓ Ready in 469ms
+✓ Running next.config.ts took 32ms
+Experiments (use with caution):
+· serverActions
+
+ GET /prospects 200 in 2.8s (next.js: 891ms, proxy.ts: 756ms, application-code: 1114ms)
+ POST /api/prospects/discover 200 in 9.2s (next.js: 146ms, proxy.ts: 701ms, application-code: 8.3s)
+ GET /prospects 200 in 1697ms (next.js: 31ms, proxy.ts: 763ms, application-code: 903ms)
+I pressed the discover 30 companies button, and the app returned no results
+
+
+ChatGPT:
+Good news: the authentication issue appears stable in this run. There are no refresh-token errors, and the discovery endpoint completed successfully with HTTP 200.
+However, HTTP 200 with zero results means the request ran, not that any companies passed qualification. Our new eligibility and US-market evidence gates may be rejecting candidates.
+Let's find out exactly which gate is responsible before changing anything.
+Step 1 — inspect the discovery response
+
+Open the app in your browser.
+Press F12 to open Developer Tools.
+Select Network.
+Click Discover 30 Companies again.
+Select the POST /api/prospects/discover request.
+Open its Response tab.
+
+Copy and paste the response JSON here.
+I specifically need the report, errors, rejectedClaims, and totals fields if present.
+Don't change the eligibility rules yet. We should identify whether candidates are being rejected because they aren't genuine e-commerce stores, lack verified US evidence, or are failing earlier in the research pipeline.
+
+
+You:
+2:"[project]/node_modules/next/dist/next-devtools/userspace/app/segment-explorer-node.js [app-client] (ecmascript)"
+3:"/next/static/chunks/node_modules_next_dist_20wefz_f1k6jn..js"
+4:I["$2",["$3"],"SegmentViewNode"]
+6:"$Sreact.fragment"
+18:"[project]/node_modules/next/dist/client/components/layout-router.js [app-client] (ecmascript)"
+19:I["$18",["$3"],"default"]
+1b:"[project]/node_modules/next/dist/client/components/render-from-template-context.js [app-client] (ecmascript)"
+1c:I["$1b",["$3"],"default"]
+4e:"[project]/node_modules/next/dist/lib/framework/boundary-components.js [app-client] (ecmascript)"
+4f:I["$4e",["$3"],"OutletBoundary"]
+51:"$Sreact.suspense"
+5e:"ViewportBoundary"
+5f:I["$4e",["$3"],"$5e"]
+68:"MetadataBoundary"
+69:I["$4e",["$3"],"$68"]
+:HL["/next/static/chunks/%5Broot-of-the-server%5D__0cbk-n2kjjn59..css","style"]
+9:D"$13"
+9:D"$a"
+9:D"$15"
+1e:D"$20"
+1e:D"$1f"
+1e:D"$22"
+1e:D"$21"
+1e:D"$23"
+1e:[["$","title",null,{"children":"404: This page could not be found."},"$21","$24",1],["$","div",null,{"style":{"fontFamily":"system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}},"$21","$27",1],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404},"$21","$28",1],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."},"$21","$2a",1]},"$21","$29",1]]},"$21","$26",1]},"$21","$25",1]]
+9:["$","html",null,{"lang":"en","className":"geist_a71539c9-module__T19VSG__variable geist_mono_8d43a2aa-module__8Li5zG__variable h-full antialiased","children":["$","body",null,{"className":"min-h-full flex flex-col","children":["$","$L19",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L1c",null,{},null,"$1a",1],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":["$","$L4","c-not-found",{"type":"not-found","pagePath":"__next_builtin__not-found.js","children":["$1e",[]]},null,"$1d",0],"forbidden":"$undefined","unauthorized":"$undefined","segmentViewBoundaries":[["$","$L4",null,{"type":"boundary:not-found","pagePath":"__next_builtin__not-found.js@boundary"},null,"$2b",1],"$undefined","$undefined",["$","$L4",null,{"type":"boundary:global-error","pagePath":"__next_builtin__global-error.js"},null,"$2c",1]]},null,"$17",1]},"$a","$16",1]},"$a","$14",1]
+31:D"$39"
+31:D"$32"
+3e:X
+42:D"$46"
+42:D"$43"
+48:D"$4b"
+48:D"$49"
+48:D"$4d"
+48:["$","$L4f",null,{"children":["$","$51",null,{"name":"Next.MetadataOutlet","children":"$@52"},"$49","$50",1]},"$49","$4c",1]
+3f:[["children",{"s":"PAGE","d":{"r":["$","$6","c",{"children":[["$","$L4","c-page",{"type":"page","pagePath":"(dashboard)/prospects/page.tsx","children":"$L42"},null,"$41",1],[["$","script","script-0",{"src":"/next/static/chunks/06rnf_2aztwf..js","async":true,"nonce":"$undefined"},null,"$47",0]],"$48"]},null,"$40",0],"p":false,"v":null}}]]
+3a:[["children",{"s":"prospects","d":{"r":["$","$6","c",{"children":[null,["$","$L19",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L1c",null,{},null,"$3d",1],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined","segmentViewBoundaries":["$undefined","$undefined","$undefined","$undefined"]},null,"$3c",1]]},null,"$3b",0],"p":false,"v":"$3e"},"c":"$Q3f"}]]
+2d:[["children",{"s":"(dashboard)","d":{"r":["$","$L4","layout",{"type":"layout","pagePath":"(dashboard)/layout.tsx","children":["$","$6","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/0_sn7jz4jd21x..js","async":true,"nonce":"$undefined"},null,"$30",0]],"$L31"]},null,"$2f",1]},null,"$2e",0],"p":false,"v":null},"c":"$Q3a"}]]
+54:D"$57"
+54:D"$55"
+54:D"$58"
+54:null
+59:D"$5b"
+59:D"$5a"
+59:D"$5d"
+60:D"$62"
+60:D"$61"
+59:["$","$L5f","768bb476v",{"children":"$L60"},"$5a","$5c",1]
+63:D"$65"
+63:D"$64"
+63:D"$67"
+6c:D"$6e"
+6c:D"$6d"
+6f:D"$71"
+6f:D"$70"
+6f:D"$72"
+6f:null
+63:["$","$L69","768bb476m",{"children":[["$","div",null,{"hidden":true,"children":["$","$51",null,{"name":"Next.Metadata","children":"$L6c"},"$64","$6b",1]},"$64","$6a",1],"$6f"]},"$64","$66",1]
+0:{"q":"","i":true,"S":false,"r":"$undefined","b":"development","t":{"t":{"s":"","h":16,"d":{"r":["$","$L4","layout",{"type":"layout","pagePath":"layout.tsx","children":["$","$6","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/next/static/chunks/%5Broot-of-the-server%5D__0cbk-n2kjjn59..css","precedence":"next_static/chunks/[root-of-the-server]_0cbk-n2kjjn59..css","crossOrigin":"$undefined","nonce":"$undefined"},null,"$7",0],["$","script","script-0",{"src":"/next/static/chunks/node_modules_next_dist_20wefz_f1k6jn..js","async":true,"nonce":"$undefined"},null,"$8",0]],"$9"]},null,"$5",1]},null,"$1",0],"p":false,"v":null},"c":"$Q2d"},"h":{"r":["$","$6","h",{"children":["$54","$59","$63"]},null,"$53",0],"p":false,"v":null}}}
+3e:C
+60:D"$73"
+60:[["$","meta","0",{"charSet":"utf-8"},"$49","$74",0],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"},"$49","$75",0]]
+7c:"[project]/node_modules/next/dist/lib/metadata/generate/icon-mark.js [app-client] (ecmascript)"
+7d:I["$7c",["$3"],"IconMark"]
+52:D"$76"
+52:null
+6c:D"$77"
+6c:[["$","title","0",{"children":"Ledgerwise | Business Workspace"},"$49","$78",0],["$","meta","1",{"name":"description","content":"A focused workspace for prospect management, communications, and bookings."},"$49","$79",0],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.117ezoe8m31dk.ico","sizes":"48x48","type":"image/x-icon"},"$49","$7a",0],["$","$L7d","3",{},"$49","$7b",0]]
+9f:"[project]/components/NavLink.tsx [app-client] (ecmascript)"
+a0:"/_next/static/chunks/0_sn7jz4jd21x..js"
+a1:I["$9f",["$3","$a0"],"default"]
+31:D"$81"
+31:D"$83"
+31:D"$84"
+31:D"$88"
+31:D"$8a"
+31:D"$8b"
+31:D"$8f"
+31:["$","div",null,{"className":"min-h-screen md:flex","children":[["$","aside",null,{"className":"relative z-10 flex w-full shrink-0 flex-col border-b border-slate-200 bg-white md:fixed md:inset-y-0 md:w-[258px] md:border-b-0 md:border-r","children":[["$","div",null,{"className":"flex h-[76px] items-center gap-3 border-b border-slate-100 px-5","children":[["$","div",null,{"className":"flex h-10 w-10 items-center justify-center rounded-xl bg-[#102f53] text-white shadow-sm","children":["$","svg",null,{"viewBox":"0 0 24 24","fill":"none","className":"h-5 w-5","aria-hidden":"true","children":[["$","path",null,{"d":"M4 19.5V5.8c0-.8.6-1.3 1.4-1.3h13.2c.8 0 1.4.5 1.4 1.3v13.7H4Z","stroke":"currentColor","strokeWidth":"1.7","strokeLinejoin":"round"},"$32","$94",1],["$","path",null,{"d":"M8 8h8M8 11.5h8M8 15h4","stroke":"currentColor","strokeWidth":"1.7","strokeLinecap":"round"},"$32","$95",1]]},"$32","$93",1]},"$32","$92",1],["$","div",null,{"className":"min-w-0","children":[["$","div",null,{"className":"text-[17px] font-bold tracking-tight text-[#142b46]","children":"Ledgerwise"},"$32","$97",1],["$","div",null,{"className":"text-[10px] font-semibold uppercase tracking-[.15em] text-slate-400","children":"Business workspace"},"$32","$98",1]]},"$32","$96",1],["$","form",null,{"action":"/auth/signout","method":"post","className":"ml-auto md:hidden","children":["$","button",null,{"aria-label":"Sign out","className":"rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50","children":"Sign out"},"$32","$9a",1]},"$32","$99",1]]},"$32","$91",1],["$","div",null,{"className":"px-4 pt-7","children":[["$","div",null,{"className":"mb-3 px-3 text-[10px] font-bold uppercase tracking-[.16em] text-slate-400","children":"Workspace"},"$32","$9c",1],["$","nav",null,{"className":"flex gap-1 overflow-x-auto pb-3 md:flex-col md:overflow-visible md:pb-0","children":[["$","$La1",null,{"href":"/prospects","label":"Prospects","icon":"building"},"$32","$9e",1],["$","$La1",null,{"href":"/emails","label":"Email review","icon":"mail"},"$32","$a2",1],["$","$La1",null,{"href":"/conversations","label":"Conversations","icon":"messages"},"$32","$a3",1],["$","$La1",null,{"href":"/calendar","label":"Calendar & bookings","icon":"calendar"},"$32","$a4",1],["$","$La1",null,{"href":"/settings/integrations","label":"Integrations & setup","icon":"settings"},"$32","$a5",1]]},"$32","$9d",1]]},"$32","$9b",1],["$","div",null,{"className":"mt-auto hidden p-4 md:block","children":[["$","div",null,{"className":"mb-3 rounded-xl border border-slate-100 bg-slate-50 p-3","children":[["$","div",null,{"className":"mb-1 text-[10px] font-bold uppercase tracking-[.14em] text-slate-400","children":"Signed in as"},"$32","$a8",1],["$","div",null,{"className":"truncate text-xs font-medium text-slate-700","children":"kratoskrater674@gmail.com"},"$32","$a9",1]]},"$32","$a7",1],["$","form",null,{"action":"/auth/signout","method":"post","children":["$","button",null,{"className":"flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900","children":[["$","svg",null,{"viewBox":"0 0 24 24","fill":"none","className":"h-4 w-4","aria-hidden":"true","children":["$","path",null,{"d":"M10 17l5-5-5-5M15 12H3m9-8h6a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6","stroke":"currentColor","strokeWidth":"1.7","strokeLinecap":"round","strokeLinejoin":"round"},"$32","$ad",1]},"$32","$ac",1],"Sign out"]},"$32","$ab",1]},"$32","$aa",1]]},"$32","$a6",1]]},"$32","$90",1],["$","div",null,{"className":"min-w-0 flex-1 md:ml-[258px]","children":[["$","header",null,{"className":"sticky top-0 z-[5] hidden h-[76px] items-center justify-between border-b border-slate-200/80 bg-white/90 px-8 backdrop-blur md:flex","children":[["$","div",null,{"children":[["$","div",null,{"className":"text-xs font-medium text-slate-400","children":"Ledgerwise / Workspace"},"$32","$b1",1],["$","div",null,{"className":"mt-0.5 text-sm font-semibold text-slate-700","children":"Operations overview"},"$32","$b2",1]]},"$32","$b0",1],["$","div",null,{"className":"flex items-center gap-3","children":[["$","div",null,{"className":"text-right","children":[["$","div",null,{"className":"text-xs font-semibold text-slate-700","children":"kratoskrater674@gmail.com"},"$32","$b5",1],["$","div",null,{"className":"text-[11px] text-slate-400","children":"Workspace account"},"$32","$b6",1]]},"$32","$b4",1],["$","div",null,{"className":"flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f2fc] text-sm font-bold text-[#245f98]","children":"K"},"$32","$b7",1]]},"$32","$b3",1]]},"$32","$af",1],"$Lb8"]},"$32","$ae",1]]},"$32","$8e",1]
+b8:D"$ba"
+bf:D"$c1"
+bf:D"$c0"
+bf:D"$c3"
+bf:D"$c2"
+bf:D"$c4"
+bf:[["$","title",null,{"children":"404: This page could not be found."},"$c2","$c5",1],["$","div",null,{"style":"$1e:1:props:style","children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}},"$c2","$c8",1],["$","h1",null,{"className":"next-error-h1","style":"$1e:1:props:children:props:children:1:props:style","children":404},"$c2","$c9",1],["$","div",null,{"style":"$1e:1:props:children:props:children:2:props:style","children":["$","h2",null,{"style":"$1e:1:props:children:props:children:2:props:children:props:style","children":"This page could not be found."},"$c2","$cb",1]},"$c2","$ca",1]]},"$c2","$c7",1]},"$c2","$c6",1]]
+b8:["$","main",null,{"className":"min-h-[calc(100vh-76px)] bg-[#f4f7fb] px-4 py-6 sm:px-6 md:px-8 md:py-8","children":["$","div",null,{"className":"mx-auto w-full max-w-[1440px]","children":["$","$L19",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L1c",null,{},null,"$bd",1],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":["$","$L4","c-not-found",{"type":"not-found","pagePath":"__next_builtin__not-found.js","children":["$bf",[]]},null,"$be",0],"forbidden":"$undefined","unauthorized":"$undefined","segmentViewBoundaries":[["$","$L4",null,{"type":"boundary:not-found","pagePath":"__next_builtin__not-found.js@boundary"},null,"$cc",1],"$undefined","$undefined","$undefined"]},null,"$bc",1]},"$32","$bb",1]},"$32","$b9",1]
+de:"[project]/components/DiscoverCompaniesButton.tsx [app-client] (ecmascript)"
+df:"/next/static/chunks/06rnf_2aztwf..js"
+e0:I["$de",["$3","$a0","$df"],"default"]
+e6:"[project]/node_modules/next/dist/client/app-dir/link.js [app-client] (ecmascript)"
+e7:I["$e6",["$3","$a0","$df"],""]
+ee:"[project]/app/(dashboard)/prospects/ScoreGenerationButton.tsx [app-client] (ecmascript)"
+ef:I["$ee",["$3","$a0","$df"],"default"]
+42:D"$cd"
+42:D"$cf"
+42:D"$d0"
+42:D"$d4"
+42:D"$d6"
+42:D"$d7"
+42:D"$d9"
+e1:D"$e3"
+e1:D"$e2"
+e1:D"$e5"
+e1:["$","$Le7",null,{"href":"/prospects/review","className":"rounded border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900","children":["Review sources (",5,")"]},"$e2","$e4",1]
+e8:D"$ea"
+e8:D"$e9"
+e8:D"$ec"
+e8:["$","$Le7",null,{"href":"/prospects/import","className":"rounded bg-blue-600 px-4 py-2 text-sm text-white","children":"Import CSV"},"$e9","$eb",1]
+fd:D"$ff"
+fd:D"$fe"
+fd:D"$101"
+fd:["$","$Le7",null,{"href":"/prospects/d88a8782-e646-4269-9028-11a29361b53a","className":"text-blue-700 underline","children":"Amberjack"},"$fe","$100",1]
+10a:D"$10c"
+10a:D"$10b"
+10a:D"$10e"
+10a:["$","$Le7",null,{"href":"/prospects/c7da281b-e5b4-4124-8a87-0975fc9a1f5d","className":"text-blue-700 underline","children":"ARES Tool"},"$10b","$10d",1]
+117:D"$119"
+117:D"$118"
+117:D"$11b"
+117:["$","$Le7",null,{"href":"/prospects/dbe4d0fe-a3a8-4a77-9725-81f19aa795bb","className":"text-blue-700 underline","children":"Aviator Nation"},"$118","$11a",1]
+124:D"$126"
+124:D"$125"
+124:D"$128"
+124:["$","$Le7",null,{"href":"/prospects/32d798b7-96ba-4333-99a7-49f5fba1041c","className":"text-blue-700 underline","children":"Body & Bra"},"$125","$127",1]
+131:D"$133"
+131:D"$132"
+131:D"$135"
+131:["$","$Le7",null,{"href":"/prospects/043c6229-76c3-48fd-98eb-df55b4c50721","className":"text-blue-700 underline","children":"Boyd Cycling"},"$132","$134",1]
+13e:D"$140"
+13e:D"$13f"
+13e:D"$142"
+13e:["$","$Le7",null,{"href":"/prospects/4d8c3261-eee3-4866-856b-4332edef39b1","className":"text-blue-700 underline","children":"Bunch Bikes"},"$13f","$141",1]
+42:["$","div",null,{"className":"space-y-4","children":[["$","div",null,{"className":"flex flex-wrap items-center justify-between gap-3","children":[["$","h1",null,{"className":"text-2xl font-semibold","children":["Prospects (",42,")"]},"$43","$db",1],["$","div",null,{"className":"flex flex-wrap items-center gap-2","children":[["$","$Le0",null,{},"$43","$dd",1],"$e1","$e8",["$","$Lef",null,{},"$43","$ed",1]]},"$43","$dc",1]]},"$43","$da",1],null,null,["$","div",null,{"className":"overflow-x-auto rounded-xl border border-slate-200 bg-white","children":["$","table",null,{"className":"w-full text-sm","children":[["$","thead",null,{"className":"bg-slate-50 text-left text-slate-600","children":["$","tr",null,{"children":[["$","th",null,{"className":"p-3","children":"Company"},"$43","$f4",1],["$","th",null,{"className":"p-3","children":"Website"},"$43","$f5",1],["$","th",null,{"className":"p-3","children":"Category"},"$43","$f6",1],["$","th",null,{"className":"p-3","children":"Sources"},"$43","$f7",1],["$","th",null,{"className":"p-3","children":"Score"},"$43","$f8",1],["$","th",null,{"className":"p-3","children":"Status"},"$43","$f9",1]]},"$43","$f3",1]},"$43","$f2",1],["$","tbody",null,{"children":[["$","tr","d88a8782-e646-4269-9028-11a29361b53a",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$fd"},"$43","$fc",1],["$","td",null,{"className":"p-3","children":"amberjack.shop"},"$43","$102",1],["$","td",null,{"className":"p-3","children":"Men's dress-casual shoes and sneakers"},"$43","$103",1],["$","td",null,{"className":"p-3","children":6},"$43","$104",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$106",1]},"$43","$105",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$107",1]]},"$43","$fb",0],["$","tr","c7da281b-e5b4-4124-8a87-0975fc9a1f5d",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$10a"},"$43","$109",1],["$","td",null,{"className":"p-3","children":"arestool.com"},"$43","$10f",1],["$","td",null,{"className":"p-3","children":"Hand tools automotive tools electrical tools and home improvement solutions"},"$43","$110",1],["$","td",null,{"className":"p-3","children":6},"$43","$111",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$113",1]},"$43","$112",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$114",1]]},"$43","$108",0],["$","tr","dbe4d0fe-a3a8-4a77-9725-81f19aa795bb",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$117"},"$43","$116",1],["$","td",null,{"className":"p-3","children":"aviatornation.com"},"$43","$11c",1],["$","td",null,{"className":"p-3","children":"1970s-inspired California lifestyle apparel handmade in Los Angeles"},"$43","$11d",1],["$","td",null,{"className":"p-3","children":6},"$43","$11e",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$120",1]},"$43","$11f",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$121",1]]},"$43","$115",0],["$","tr","32d798b7-96ba-4333-99a7-49f5fba1041c",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$124"},"$43","$123",1],["$","td",null,{"className":"p-3","children":"bodyandbra.com"},"$43","$129",1],["$","td",null,{"className":"p-3","children":"Premium wireless bras shapewear and underwear for comfort-focused women"},"$43","$12a",1],["$","td",null,{"className":"p-3","children":6},"$43","$12b",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$12d",1]},"$43","$12c",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$12e",1]]},"$43","$122",0],["$","tr","043c6229-76c3-48fd-98eb-df55b4c50721",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$131"},"$43","$130",1],["$","td",null,{"className":"p-3","children":"boydcycling.com"},"$43","$136",1],["$","td",null,{"className":"p-3","children":"High-end bicycle wheels for road gravel cyclocross and mountain bike"},"$43","$137",1],["$","td",null,{"className":"p-3","children":6},"$43","$138",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$13a",1]},"$43","$139",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$13b",1]]},"$43","$12f",0],["$","tr","4d8c3261-eee3-4866-856b-4332edef39b1",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$13e"},"$43","$13d",1],["$","td",null,{"className":"p-3","children":"bunchbike.com"},"$43","$143",1],["$","td",null,{"className":"p-3","children":"Electric front-load cargo bikes for families and dog owners"},"$43","$144",1],["$","td",null,{"className":"p-3","children":6},"$43","$145",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$147",1]},"$43","$146",1],"$L148"]},"$43","$13c",0],"$L149","$L14a","$L14b","$L14c","$L14d","$L14e","$L14f","$L150","$L151","$L152","$L153","$L154","$L155","$L156","$L157","$L158","$L159","$L15a","$L15b","$L15c","$L15d","$L15e","$L15f","$L160","$L161","$L162","$L163","$L164","$L165","$L166","$L167","$L168","$L169","$L16a","$L16b","$L16c"]},"$43","$fa",1]]},"$43","$f1",1]},"$43","$f0",1]]},"$43","$d8",1]
+148:D"$16e"
+148:["$","td",null,{"className":"p-3","children":"new"},"$43","$16d",1]
+149:D"$170"
+172:D"$174"
+172:D"$173"
+172:D"$176"
+172:["$","$Le7",null,{"href":"/prospects/970a4dbf-c6eb-4f30-ba6a-a31930f22788","className":"text-blue-700 underline","children":"cadootz!"},"$173","$175",1]
+149:["$","tr","970a4dbf-c6eb-4f30-ba6a-a31930f22788",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$172"},"$43","$171",1],["$","td",null,{"className":"p-3","children":"cadootz.com"},"$43","$177",1],["$","td",null,{"className":"p-3","children":"Organic high-protein seed oil-free snacks for children"},"$43","$178",1],["$","td",null,{"className":"p-3","children":6},"$43","$179",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$17b",1]},"$43","$17a",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$17c",1]]},"$43","$16f",0]
+14a:D"$17e"
+180:D"$182"
+180:D"$181"
+180:D"$184"
+180:["$","$Le7",null,{"href":"/prospects/8087c130-24a9-408b-aada-6b93cc93d2ac","className":"text-blue-700 underline","children":"Cariloha"},"$181","$183",1]
+14a:["$","tr","8087c130-24a9-408b-aada-6b93cc93d2ac",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$180"},"$43","$17f",1],["$","td",null,{"className":"p-3","children":"cariloha.com"},"$43","$185",1],["$","td",null,{"className":"p-3","children":"Sustainable bamboo-based bedding bath goods and apparel"},"$43","$186",1],["$","td",null,{"className":"p-3","children":6},"$43","$187",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$189",1]},"$43","$188",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$18a",1]]},"$43","$17d",0]
+14b:D"$18c"
+18e:D"$190"
+18e:D"$18f"
+18e:D"$192"
+18e:["$","$Le7",null,{"href":"/prospects/f2b889f2-8b52-43ca-9b16-9e1a797b0ea6","className":"text-blue-700 underline","children":"Facelove"},"$18f","$191",1]
+14b:["$","tr","f2b889f2-8b52-43ca-9b16-9e1a797b0ea6",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$18e"},"$43","$18d",1],["$","td",null,{"className":"p-3","children":"facelove.com"},"$43","$193",1],["$","td",null,{"className":"p-3","children":"Pro-age beauty brand for women 45+ offering facial fitness and cosmetics"},"$43","$194",1],["$","td",null,{"className":"p-3","children":6},"$43","$195",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$197",1]},"$43","$196",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$198",1]]},"$43","$18b",0]
+14c:D"$19a"
+19c:D"$19e"
+19c:D"$19d"
+19c:D"$1a0"
+19c:["$","$Le7",null,{"href":"/prospects/638901f5-3ef5-474a-b206-32aa6b6b6b82","className":"text-blue-700 underline","children":"Fields Good"},"$19d","$19f",1]
+14c:["$","tr","638901f5-3ef5-474a-b206-32aa6b6b6b82",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$19c"},"$43","$19b",1],["$","td",null,{"className":"p-3","children":"fieldsgoodchicken.com"},"$43","$1a1",1],["$","td",null,{"className":"p-3","children":"Fast casual restaurant specializing in grilled and rotisserie chicken"},"$43","$1a2",1],["$","td",null,{"className":"p-3","children":6},"$43","$1a3",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$1a5",1]},"$43","$1a4",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1a6",1]]},"$43","$199",0]
+14d:D"$1a8"
+1aa:D"$1ac"
+1aa:D"$1ab"
+1aa:D"$1ae"
+1aa:["$","$Le7",null,{"href":"/prospects/dc8bfa9e-67b9-4028-b278-f2b0df0e5680","className":"text-blue-700 underline","children":"Fractional CFO and Accounting for $10M+ Ecommerce Brands"},"$1ab","$1ad",1]
+14d:["$","tr","dc8bfa9e-67b9-4028-b278-f2b0df0e5680",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1aa"},"$43","$1a9",1],["$","td",null,{"className":"p-3","children":"ecomcfo.co"},"$43","$1af",1],["$","td",null,{"className":"p-3","children":"unknown"},"$43","$1b0",1],["$","td",null,{"className":"p-3","children":5},"$43","$1b1",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"text-slate-400","children":"Not scored"},"$43","$1b3",1]},"$43","$1b2",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1b4",1]]},"$43","$1a7",0]
+14e:D"$1b6"
+1b8:D"$1ba"
+1b8:D"$1b9"
+1b8:D"$1bc"
+1b8:["$","$Le7",null,{"href":"/prospects/7690144d-55fa-4122-87f7-06f12a792a3a","className":"text-blue-700 underline","children":"Furry Muse"},"$1b9","$1bb",1]
+14e:["$","tr","7690144d-55fa-4122-87f7-06f12a792a3a",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1b8"},"$43","$1b7",1],["$","td",null,{"className":"p-3","children":"furrymuse.com"},"$43","$1bd",1],["$","td",null,{"className":"p-3","children":"Fashion-first performance pet accessories like bow harnesses and leashes"},"$43","$1be",1],["$","td",null,{"className":"p-3","children":6},"$43","$1bf",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$1c1",1]},"$43","$1c0",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1c2",1]]},"$43","$1b5",0]
+14f:D"$1c4"
+1c6:D"$1c8"
+1c6:D"$1c7"
+1c6:D"$1ca"
+1c6:["$","$Le7",null,{"href":"/prospects/82ed917b-9f4f-4086-8f0a-9cff0ff05bcb","className":"text-blue-700 underline","children":"Gamer's Choice"},"$1c7","$1c9",1]
+14f:["$","tr","82ed917b-9f4f-4086-8f0a-9cff0ff05bcb",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1c6"},"$43","$1c5",1],["$","td",null,{"className":"p-3","children":"gamerschoice.com"},"$43","$1cb",1],["$","td",null,{"className":"p-3","children":"Trading card games including Pokemon Yu-Gi-Oh Magic and One Piece"},"$43","$1cc",1],["$","td",null,{"className":"p-3","children":6},"$43","$1cd",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$1cf",1]},"$43","$1ce",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1d0",1]]},"$43","$1c3",0]
+150:D"$1d2"
+1d4:D"$1d6"
+1d4:D"$1d5"
+1d4:D"$1d8"
+1d4:["$","$Le7",null,{"href":"/prospects/f1c72838-0f37-42f8-b2a8-847f362463c8","className":"text-blue-700 underline","children":"Golden Pet Brands"},"$1d5","$1d7",1]
+150:["$","tr","f1c72838-0f37-42f8-b2a8-847f362463c8",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1d4"},"$43","$1d3",1],["$","td",null,{"className":"p-3","children":"goldenpetbrands.com"},"$43","$1d9",1],["$","td",null,{"className":"p-3","children":"Pet nutrition and supplements including freeze-dried and air-dried foods"},"$43","$1da",1],["$","td",null,{"className":"p-3","children":6},"$43","$1db",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$1dd",1]},"$43","$1dc",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1de",1]]},"$43","$1d1",0]
+151:D"$1e0"
+1e2:D"$1e4"
+1e2:D"$1e3"
+1e2:D"$1e6"
+1e2:["$","$Le7",null,{"href":"/prospects/a75dcf45-faf1-40b9-be10-a554a7bf9edd","className":"text-blue-700 underline","children":"Good Girl Snacks"},"$1e3","$1e5",1]
+151:["$","tr","a75dcf45-faf1-40b9-be10-a554a7bf9edd",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1e2"},"$43","$1e1",1],["$","td",null,{"className":"p-3","children":"goodgirlsnacks.com"},"$43","$1e7",1],["$","td",null,{"className":"p-3","children":"Viral pickle brand (Hot Girl Pickles) with bold flavors"},"$43","$1e8",1],["$","td",null,{"className":"p-3","children":6},"$43","$1e9",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$1eb",1]},"$43","$1ea",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1ec",1]]},"$43","$1df",0]
+152:D"$1ee"
+1f0:D"$1f2"
+1f0:D"$1f1"
+1f0:D"$1f4"
+1f0:["$","$Le7",null,{"href":"/prospects/497f6f03-8a00-4c30-ad51-8d28495fdec2","className":"text-blue-700 underline","children":"Grove Collaborative"},"$1f1","$1f3",1]
+152:["$","tr","497f6f03-8a00-4c30-ad51-8d28495fdec2",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1f0"},"$43","$1ef",1],["$","td",null,{"className":"p-3","children":"grove.co"},"$43","$1f5",1],["$","td",null,{"className":"p-3","children":"Sustainable household cleaning personal care and wellness products"},"$43","$1f6",1],["$","td",null,{"className":"p-3","children":6},"$43","$1f7",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$1f9",1]},"$43","$1f8",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$1fa",1]]},"$43","$1ed",0]
+153:D"$1fc"
+1fe:D"$200"
+1fe:D"$1ff"
+1fe:D"$202"
+1fe:["$","$Le7",null,{"href":"/prospects/d502a6be-ee77-42ce-928c-3c8da617c0b5","className":"text-blue-700 underline","children":"Hadley Designs"},"$1ff","$201",1]
+153:["$","tr","d502a6be-ee77-42ce-928c-3c8da617c0b5",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$1fe"},"$43","$1fd",1],["$","td",null,{"className":"p-3","children":"hadleydesigns.com"},"$43","$203",1],["$","td",null,{"className":"p-3","children":"Educational posters classroom decor and inspirational stationery"},"$43","$204",1],["$","td",null,{"className":"p-3","children":6},"$43","$205",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$207",1]},"$43","$206",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$208",1]]},"$43","$1fb",0]
+154:D"$20a"
+20c:D"$20e"
+20c:D"$20d"
+20c:D"$210"
+20c:["$","$Le7",null,{"href":"/prospects/4efa13f5-c32e-4bbf-ae85-258cf5dcf57c","className":"text-blue-700 underline","children":"Harken Sweets"},"$20d","$20f",1]
+154:["$","tr","4efa13f5-c32e-4bbf-ae85-258cf5dcf57c",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$20c"},"$43","$20b",1],["$","td",null,{"className":"p-3","children":"harkensweets.com"},"$43","$211",1],["$","td",null,{"className":"p-3","children":"Plant-based clean-label chocolate bars sweetened with dates"},"$43","$212",1],["$","td",null,{"className":"p-3","children":6},"$43","$213",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$215",1]},"$43","$214",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$216",1]]},"$43","$209",0]
+155:D"$218"
+21a:D"$21c"
+21a:D"$21b"
+21a:D"$21e"
+21a:["$","$Le7",null,{"href":"/prospects/06294795-3c9e-494a-8424-c67389f127ef","className":"text-blue-700 underline","children":"Helton Tool & Home"},"$21b","$21d",1]
+155:["$","tr","06294795-3c9e-494a-8424-c67389f127ef",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$21a"},"$43","$219",1],["$","td",null,{"className":"p-3","children":"heltontoolandhome.com"},"$43","$21f",1],["$","td",null,{"className":"p-3","children":"Online retailer of tools and home goods including kitchenware and toys"},"$43","$220",1],["$","td",null,{"className":"p-3","children":6},"$43","$221",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$223",1]},"$43","$222",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$224",1]]},"$43","$217",0]
+156:D"$226"
+228:D"$22a"
+228:D"$229"
+228:D"$22c"
+228:["$","$Le7",null,{"href":"/prospects/41ff60a9-ceab-45bd-9822-1e4e43927553","className":"text-blue-700 underline","children":"HexClad"},"$229","$22b",1]
+156:["$","tr","41ff60a9-ceab-45bd-9822-1e4e43927553",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$228"},"$43","$227",1],["$","td",null,{"className":"p-3","children":"hexclad.com"},"$43","$22d",1],["$","td",null,{"className":"p-3","children":"Hybrid nonstick cookware and kitchen accessories"},"$43","$22e",1],["$","td",null,{"className":"p-3","children":6},"$43","$22f",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$231",1]},"$43","$230",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$232",1]]},"$43","$225",0]
+157:D"$234"
+236:D"$238"
+236:D"$237"
+236:D"$23a"
+236:["$","$Le7",null,{"href":"/prospects/fea1a901-4bb9-45dc-b6e2-e39d08924bc8","className":"text-blue-700 underline","children":"Howler Brothers"},"$237","$239",1]
+157:["$","tr","fea1a901-4bb9-45dc-b6e2-e39d08924bc8",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$236"},"$43","$235",1],["$","td",null,{"className":"p-3","children":"howlerbros.com"},"$43","$23b",1],["$","td",null,{"className":"p-3","children":"Outdoor and fishing-inspired apparel with a Western flair"},"$43","$23c",1],["$","td",null,{"className":"p-3","children":6},"$43","$23d",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$23f",1]},"$43","$23e",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$240",1]]},"$43","$233",0]
+158:D"$242"
+244:D"$246"
+244:D"$245"
+244:D"$248"
+244:["$","$Le7",null,{"href":"/prospects/5411558f-6e05-44fe-9a11-c57fd46c3269","className":"text-blue-700 underline","children":"Innovative Eyewear"},"$245","$247",1]
+158:["$","tr","5411558f-6e05-44fe-9a11-c57fd46c3269",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$244"},"$43","$243",1],["$","td",null,{"className":"p-3","children":"lucyd.co"},"$43","$249",1],["$","td",null,{"className":"p-3","children":"Smart eyewear with Bluetooth audio AI and prescription lenses"},"$43","$24a",1],["$","td",null,{"className":"p-3","children":6},"$43","$24b",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$24d",1]},"$43","$24c",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$24e",1]]},"$43","$241",0]
+159:D"$250"
+252:D"$254"
+252:D"$253"
+252:D"$256"
+252:["$","$Le7",null,{"href":"/prospects/dbc9b9a0-6532-4336-aa3f-7ef4c6a65509","className":"text-blue-700 underline","children":"Jetset Pilates"},"$253","$255",1]
+159:["$","tr","dbc9b9a0-6532-4336-aa3f-7ef4c6a65509",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$252"},"$43","$251",1],["$","td",null,{"className":"p-3","children":"jetsetpilates.com"},"$43","$257",1],["$","td",null,{"className":"p-3","children":"Boutique reformer Pilates studio franchise and fitness apparel"},"$43","$258",1],["$","td",null,{"className":"p-3","children":6},"$43","$259",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$25b",1]},"$43","$25a",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$25c",1]]},"$43","$24f",0]
+15a:D"$25e"
+260:D"$262"
+260:D"$261"
+260:D"$264"
+260:["$","$Le7",null,{"href":"/prospects/5d0ce0b9-89ac-45e0-ae7f-cded802924f2","className":"text-blue-700 underline","children":"Last Crumb"},"$261","$263",1]
+15a:["$","tr","5d0ce0b9-89ac-45e0-ae7f-cded802924f2",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$260"},"$43","$25f",1],["$","td",null,{"className":"p-3","children":"lastcrumb.com"},"$43","$265",1],["$","td",null,{"className":"p-3","children":"Luxury handmade small-batch cookies with weekly drops"},"$43","$266",1],["$","td",null,{"className":"p-3","children":6},"$43","$267",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$269",1]},"$43","$268",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$26a",1]]},"$43","$25d",0]
+15b:D"$26c"
+26e:D"$270"
+26e:D"$26f"
+26e:D"$272"
+26e:["$","$Le7",null,{"href":"/prospects/0aa7f414-3027-42fe-aede-172faeee6d9a","className":"text-blue-700 underline","children":"MeUndies"},"$26f","$271",1]
+15b:["$","tr","0aa7f414-3027-42fe-aede-172faeee6d9a",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$26e"},"$43","$26d",1],["$","td",null,{"className":"p-3","children":"meundies.com"},"$43","$273",1],["$","td",null,{"className":"p-3","children":"Underwear loungewear socks and sleepwear via subscription"},"$43","$274",1],["$","td",null,{"className":"p-3","children":6},"$43","$275",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$277",1]},"$43","$276",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$278",1]]},"$43","$26b",0]
+15c:D"$27a"
+27c:D"$27e"
+27c:D"$27d"
+27c:D"$280"
+27c:["$","$Le7",null,{"href":"/prospects/eb072ad2-8fd6-4633-8ece-14f79a7ad6ea","className":"text-blue-700 underline","children":"Mimi So International"},"$27d","$27f",1]
+15c:["$","tr","eb072ad2-8fd6-4633-8ece-14f79a7ad6ea",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$27c"},"$43","$27b",1],["$","td",null,{"className":"p-3","children":"mimiso.com"},"$43","$281",1],["$","td",null,{"className":"p-3","children":"Luxury fine jewelry including diamonds gemstones and custom designs"},"$43","$282",1],["$","td",null,{"className":"p-3","children":6},"$43","$283",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$285",1]},"$43","$284",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$286",1]]},"$43","$279",0]
+15d:D"$288"
+28a:D"$28c"
+28a:D"$28b"
+28a:D"$28e"
+28a:["$","$Le7",null,{"href":"/prospects/a40af4a8-55b8-4f97-ad6b-b1bd90070c64","className":"text-blue-700 underline","children":"Mott & Bow"},"$28b","$28d",1]
+15d:["$","tr","a40af4a8-55b8-4f97-ad6b-b1bd90070c64",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$28a"},"$43","$289",1],["$","td",null,{"className":"p-3","children":"mottandbow.com"},"$43","$28f",1],["$","td",null,{"className":"p-3","children":"Premium denim and elevated essentials for men and women"},"$43","$290",1],["$","td",null,{"className":"p-3","children":6},"$43","$291",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$293",1]},"$43","$292",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$294",1]]},"$43","$287",0]
+15e:D"$296"
+298:D"$29a"
+298:D"$299"
+298:D"$29c"
+298:["$","$Le7",null,{"href":"/prospects/5a0206d1-2d40-4c05-9cd1-eb49d20385c8","className":"text-blue-700 underline","children":"Olive & June"},"$299","$29b",1]
+15e:["$","tr","5a0206d1-2d40-4c05-9cd1-eb49d20385c8",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$298"},"$43","$297",1],["$","td",null,{"className":"p-3","children":"oliveandjune.com"},"$43","$29d",1],["$","td",null,{"className":"p-3","children":"Nail care products including polish press-ons treatments and tools"},"$43","$29e",1],["$","td",null,{"className":"p-3","children":6},"$43","$29f",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2a1",1]},"$43","$2a0",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2a2",1]]},"$43","$295",0]
+15f:D"$2a4"
+2a6:D"$2a8"
+2a6:D"$2a7"
+2a6:D"$2aa"
+2a6:["$","$Le7",null,{"href":"/prospects/3b064865-a3ee-4a5e-986c-7d6e0550eb30","className":"text-blue-700 underline","children":"Petite Keep"},"$2a7","$2a9",1]
+15f:["$","tr","3b064865-a3ee-4a5e-986c-7d6e0550eb30",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2a6"},"$43","$2a5",1],["$","td",null,{"className":"p-3","children":"petitekeep.com"},"$43","$2ab",1],["$","td",null,{"className":"p-3","children":"Personalized keepsake trunks for milestones like weddings births and graduations"},"$43","$2ac",1],["$","td",null,{"className":"p-3","children":6},"$43","$2ad",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2af",1]},"$43","$2ae",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2b0",1]]},"$43","$2a3",0]
+160:D"$2b2"
+2b4:D"$2b6"
+2b4:D"$2b5"
+2b4:D"$2b8"
+2b4:["$","$Le7",null,{"href":"/prospects/ca61e08f-9222-4dee-8583-a1ac1cc2d89a","className":"text-blue-700 underline","children":"Pura"},"$2b5","$2b7",1]
+160:["$","tr","ca61e08f-9222-4dee-8583-a1ac1cc2d89a",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2b4"},"$43","$2b3",1],["$","td",null,{"className":"p-3","children":"pura.com"},"$43","$2b9",1],["$","td",null,{"className":"p-3","children":"Smart home fragrance diffusers and premium fragrances"},"$43","$2ba",1],["$","td",null,{"className":"p-3","children":6},"$43","$2bb",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2bd",1]},"$43","$2bc",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2be",1]]},"$43","$2b1",0]
+161:D"$2c0"
+2c2:D"$2c4"
+2c2:D"$2c3"
+2c2:D"$2c6"
+2c2:["$","$Le7",null,{"href":"/prospects/118014c2-ae54-43d4-ba60-ea2f8e328fec","className":"text-blue-700 underline","children":"Quip"},"$2c3","$2c5",1]
+161:["$","tr","118014c2-ae54-43d4-ba60-ea2f8e328fec",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2c2"},"$43","$2c1",1],["$","td",null,{"className":"p-3","children":"getquip.com"},"$43","$2c7",1],["$","td",null,{"className":"p-3","children":"Oral care products including electric toothbrushes flossers and toothpaste"},"$43","$2c8",1],["$","td",null,{"className":"p-3","children":6},"$43","$2c9",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2cb",1]},"$43","$2ca",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2cc",1]]},"$43","$2bf",0]
+162:D"$2ce"
+2d0:D"$2d2"
+2d0:D"$2d1"
+2d0:D"$2d4"
+2d0:["$","$Le7",null,{"href":"/prospects/f573ae5e-acf4-46d8-a058-1ba202ca807f","className":"text-blue-700 underline","children":"Raw Nutrition"},"$2d1","$2d3",1]
+162:["$","tr","f573ae5e-acf4-46d8-a058-1ba202ca807f",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2d0"},"$43","$2cf",1],["$","td",null,{"className":"p-3","children":"getrawnutrition.com"},"$43","$2d5",1],["$","td",null,{"className":"p-3","children":"Sports nutrition supplements including pre-workout whey protein and creatine"},"$43","$2d6",1],["$","td",null,{"className":"p-3","children":6},"$43","$2d7",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2d9",1]},"$43","$2d8",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2da",1]]},"$43","$2cd",0]
+163:D"$2dc"
+2de:D"$2e0"
+2de:D"$2df"
+2de:D"$2e2"
+2de:["$","$Le7",null,{"href":"/prospects/f2fb74dc-edea-4cf1-b97f-2cd1c83722f5","className":"text-blue-700 underline","children":"RIP-IT"},"$2df","$2e1",1]
+163:["$","tr","f2fb74dc-edea-4cf1-b97f-2cd1c83722f5",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2de"},"$43","$2dd",1],["$","td",null,{"className":"p-3","children":"ripit.com"},"$43","$2e3",1],["$","td",null,{"className":"p-3","children":"Sports gear and apparel designed for female athletes in softball volleyball and soccer"},"$43","$2e4",1],["$","td",null,{"className":"p-3","children":6},"$43","$2e5",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2e7",1]},"$43","$2e6",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2e8",1]]},"$43","$2db",0]
+164:D"$2ea"
+2ec:D"$2ee"
+2ec:D"$2ed"
+2ec:D"$2f0"
+2ec:["$","$Le7",null,{"href":"/prospects/330451cd-5ce3-41fa-8f63-b39af38fc06e","className":"text-blue-700 underline","children":"Sigmas"},"$2ed","$2ef",1]
+164:["$","tr","330451cd-5ce3-41fa-8f63-b39af38fc06e",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2ec"},"$43","$2eb",1],["$","td",null,{"className":"p-3","children":"sigmas.com"},"$43","$2f1",1],["$","td",null,{"className":"p-3","children":"Performance active wear and fitness apparel"},"$43","$2f2",1],["$","td",null,{"className":"p-3","children":6},"$43","$2f3",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$2f5",1]},"$43","$2f4",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$2f6",1]]},"$43","$2e9",0]
+165:D"$2f8"
+2fa:D"$2fc"
+2fa:D"$2fb"
+2fa:D"$2fe"
+2fa:["$","$Le7",null,{"href":"/prospects/b4ba72dd-3062-4eee-88c2-56f520d720a8","className":"text-blue-700 underline","children":"So Good So You"},"$2fb","$2fd",1]
+165:["$","tr","b4ba72dd-3062-4eee-88c2-56f520d720a8",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$2fa"},"$43","$2f9",1],["$","td",null,{"className":"p-3","children":"sogoodsoyou.com"},"$43","$2ff",1],["$","td",null,{"className":"p-3","children":"Organic cold-pressed probiotic juice shots"},"$43","$300",1],["$","td",null,{"className":"p-3","children":6},"$43","$301",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$303",1]},"$43","$302",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$304",1]]},"$43","$2f7",0]
+166:D"$306"
+308:D"$30a"
+308:D"$309"
+308:D"$30c"
+308:["$","$Le7",null,{"href":"/prospects/ae55e9ce-cfbc-40db-8748-d4e21eaafe57","className":"text-blue-700 underline","children":"Something & Nothing"},"$309","$30b",1]
+166:["$","tr","ae55e9ce-cfbc-40db-8748-d4e21eaafe57",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$308"},"$43","$307",1],["$","td",null,{"className":"p-3","children":"somethingandnothing.com"},"$43","$30d",1],["$","td",null,{"className":"p-3","children":"Premium sodas and sparkling flavored water with natural ingredients"},"$43","$30e",1],["$","td",null,{"className":"p-3","children":6},"$43","$30f",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$311",1]},"$43","$310",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$312",1]]},"$43","$305",0]
+167:D"$314"
+316:D"$318"
+316:D"$317"
+316:D"$31a"
+316:["$","$Le7",null,{"href":"/prospects/103c3a1c-991b-4446-9260-f8f5f54683aa","className":"text-blue-700 underline","children":"Summit Brands"},"$317","$319",1]
+167:["$","tr","103c3a1c-991b-4446-9260-f8f5f54683aa",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$316"},"$43","$315",1],["$","td",null,{"className":"p-3","children":"summitbrands.com"},"$43","$31b",1],["$","td",null,{"className":"p-3","children":"Specialized household cleaning products including rust removers and laundry solutions"},"$43","$31c",1],["$","td",null,{"className":"p-3","children":6},"$43","$31d",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$31f",1]},"$43","$31e",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$320",1]]},"$43","$313",0]
+168:D"$322"
+324:D"$326"
+324:D"$325"
+324:D"$328"
+324:["$","$Le7",null,{"href":"/prospects/a6fa911f-a07f-4a9a-9db0-da9456e03905","className":"text-blue-700 underline","children":"Taylor Stitch"},"$325","$327",1]
+168:["$","tr","a6fa911f-a07f-4a9a-9db0-da9456e03905",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$324"},"$43","$323",1],["$","td",null,{"className":"p-3","children":"taylorstitch.com"},"$43","$329",1],["$","td",null,{"className":"p-3","children":"Sustainable menswear including shirts denim outerwear and footwear"},"$43","$32a",1],["$","td",null,{"className":"p-3","children":6},"$43","$32b",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$32d",1]},"$43","$32c",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$32e",1]]},"$43","$321",0]
+169:D"$330"
+332:D"$334"
+332:D"$333"
+332:D"$336"
+332:["$","$Le7",null,{"href":"/prospects/f670a89e-cb22-4af9-b006-6049a1f668a4","className":"text-blue-700 underline","children":"Tom Beckbe"},"$333","$335",1]
+169:["$","tr","f670a89e-cb22-4af9-b006-6049a1f668a4",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$332"},"$43","$331",1],["$","td",null,{"className":"p-3","children":"tombeckbe.com"},"$43","$337",1],["$","td",null,{"className":"p-3","children":"Premium outdoor apparel and gear focused on the American sporting and hunting tradition"},"$43","$338",1],["$","td",null,{"className":"p-3","children":6},"$43","$339",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$33b",1]},"$43","$33a",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$33c",1]]},"$43","$32f",0]
+16a:D"$33e"
+340:D"$342"
+340:D"$341"
+340:D"$344"
+340:["$","$Le7",null,{"href":"/prospects/15c82b18-dbe3-4e9b-bb42-c789b86e6835","className":"text-blue-700 underline","children":"Traeger"},"$341","$343",1]
+16a:["$","tr","15c82b18-dbe3-4e9b-bb42-c789b86e6835",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$340"},"$43","$33f",1],["$","td",null,{"className":"p-3","children":"traeger.com"},"$43","$345",1],["$","td",null,{"className":"p-3","children":"Wood pellet grills and outdoor cooking accessories"},"$43","$346",1],["$","td",null,{"className":"p-3","children":6},"$43","$347",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$349",1]},"$43","$348",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$34a",1]]},"$43","$33d",0]
+16b:D"$34c"
+34e:D"$350"
+34e:D"$34f"
+34e:D"$352"
+34e:["$","$Le7",null,{"href":"/prospects/820bfabf-164f-4906-860c-3706401dc9de","className":"text-blue-700 underline","children":"Uproot Clean"},"$34f","$351",1]
+16b:["$","tr","820bfabf-164f-4906-860c-3706401dc9de",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$34e"},"$43","$34d",1],["$","td",null,{"className":"p-3","children":"uprootclean.com"},"$43","$353",1],["$","td",null,{"className":"p-3","children":"Pet hair removal tools and cleaning accessories"},"$43","$354",1],["$","td",null,{"className":"p-3","children":6},"$43","$355",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$357",1]},"$43","$356",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$358",1]]},"$43","$34b",0]
+16c:D"$35a"
+35c:D"$35e"
+35c:D"$35d"
+35c:D"$360"
+35c:["$","$Le7",null,{"href":"/prospects/ebe9eaab-18ab-4c5b-a066-1964901b69fe","className":"text-blue-700 underline","children":"Wild RyÐµ"},"$35d","$35f",1]
+16c:["$","tr","ebe9eaab-18ab-4c5b-a066-1964901b69fe",{"className":"border-t border-slate-100","children":[["$","td",null,{"className":"p-3 font-medium","children":"$35c"},"$43","$35b",1],["$","td",null,{"className":"p-3","children":"wild-rye.com"},"$43","$361",1],["$","td",null,{"className":"p-3","children":"Women's technical outdoor apparel"},"$43","$362",1],["$","td",null,{"className":"p-3","children":6},"$43","$363",1],["$","td",null,{"className":"p-3","children":["$","span",null,{"className":"font-semibold text-slate-800","children":[100,"/100",false]},"$43","$365",1]},"$43","$364",1],["$","td",null,{"className":"p-3","children":"new"},"$43","$366",1]]},"$43","$359",0]
+
+
+You:
+2:"[project]/node_modules/next/dist/next-devtools/userspace/app/segment-explorer-node.js [app-client] (ecmascript)"
+3:"/next/static/chunks/node_modules_next_dist_20wefz_f1k6jn..js"
+4:I["$2",["$3"],"SegmentViewNode"]
+6:"$Sreact.fragment"
+18:"[project]/node_modules/next/dist/client/components/layout-router.js [app-client] (ecmascript)"
+19:I["$18",["$3"],"default"]
+1b:"[project]/node_modules/next/dist/client/components/render-from-template-context.js [app-client] (ecmascript)"
+1c:I["$1b",["$3"],"default"]
+4e:"[project]/node_modules/next/dist/lib/framework/boundary-components.js [app-client] (ecmascript)"
+4f:I["$4e",["$3"],"OutletBoundary"]
+51:"$Sreact.suspense"
+5e:"ViewportBoundary"
+5f:I["$4e",["$3"],"$5e"]
+68:"MetadataBoundary"
+69:I["$4e",["$3"],"$68"]
+:HL["/next/static/chunks/%5Broot-of-the-server%5D__0cbk-n2kjjn59..css","style"]
+9:D"$13"
+9:D"$a"
+9:D"$15"
+1e:D"$20"
+1e:D"$1f"
+1e:D"$22"
+1e:D"$21"
+1e:D"$23"
+The message is too long, so I pasted the start only
+
+
+ChatGPT:
+This looks like a Next.js React Server Components (RSC) payload, not a normal error message.
+The lines you pasted, such as:
+[project]/node_modules/next/dist/client/components/layout-router.js
+SegmentViewNode
+ViewportBoundary
+MetadataBoundary
+
+are internal references generated by Next.js. They don't identify the underlying problem by themselves.
+Let's identify where this output is coming from.
+
+Is this appearing in your browser page instead of the Ledgerwise UI, or in the terminal?
+If it's in the browser, open DevTools → Network, reload the page, and check the failed request (if any). Look at its Status Code and Response.
+
+Send me the status code and the last 20–30 lines of the response, especially any part containing Error, message, digest, or stack.
+Don't paste environment variables, cookies, or authorization headers. I want to distinguish an RSC rendering error from the Supabase authentication issue before we change any more code.
+
+
+You:
+Request URL
+http://localhost:3000/prospects?_rsc=Adywa9C3HjoJ6ded
+Request method
+GET
+Status code
+200 OK
+Remote address
+[::1]:3000
+Referrer policy
+strict-origin-when-cross-origin
+cache-control
+no-store
+connection
+keep-alive
+content-encoding
+gzip
+content-type
+text/x-component
+date
+Sun, 15 Nov 2026 17:54:19 GMT
+keep-alive
+timeout=5
+transfer-encoding
+chunked
+vary
+rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch, Accept-Encoding
+accept
+/
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+en-US,en;q=0.6
+connection
+keep-alive
+cookie
+sb-pojlqkostcqrojwppljv-auth-token=base64-eyJhY2Nlc3NfdG
+
+
+ChatGPT:
+Good. This tells us something important: that request is succeeding.
+Here's what the details mean:
+
+GET /prospects?_rsc=... — Next.js is requesting the Prospects page during client-side navigation.
+200 OK — the server successfully responded.
+content-type: text/x-component — this is the normal response format for Next.js React Server Components.
+vary: rsc, next-router-state-tree... — normal Next.js routing metadata.
+
+So the text you pasted earlier is most likely a normal RSC payload, not an error.
+Let's check one thing before changing code again.
+In DevTools → Network:
+
+Select the Doc filter.
+Reload http://localhost:3000/prospects.
+Select the /prospects request (without ?_rsc=...).
+Tell me its status code and whether the actual page displays correctly.
+
+Also, your request headers contain a Supabase authentication cookie. Please don't paste the full cookie header or any access/refresh tokens.
+One question: Are you actually seeing a broken/blank page in the browser, or does Ledgerwise display normally while the terminal prints those messages?
+
+
+You:
+I think Imma use Claude for this one
+Prompt to him the current problem, the Agent not being able to fetch 30 companies
+
+
+ChatGPT:
+Here's a prompt you can give Claude. It includes the current Ledgerwise context, the discovery eligibility changes we've made, and the specific issue with the agent failing to fetch 30 companies.
+# Ledgerwise — Debug and Fix Autonomous Company Discovery (30-Company Target)
+You are helping me debug and improve Ledgerwise, an AI SDR platform built with Next.js, TypeScript, Tailwind CSS v4, and Supabase.
+I want you to focus on one specific problem: the autonomous company-discovery agent is not successfully fetching 30 qualified companies.
+1. Project context
+Ledgerwise is an AI SDR platform for a fictional US bookkeeping firm targeting e-commerce businesses.
+The discovery workflow should:
+
+Search for potential US e-commerce businesses.
+Fetch and research their official websites.
+Extract and verify relevant evidence.
+Evaluate whether each candidate meets our target customer criteria.
+Import qualified companies into the Prospects database.
+
+The intended target is 30 qualified companies, not merely 30 URLs or search results.
+2. Ideal customer profile (ICP)
+A company should generally meet these criteria:
+
+A genuine e-commerce brand or online retail business.
+Sells physical products through its own online storefront.
+Has a demonstrable US business presence or US e-commerce operations.
+Ideally has approximately $1M–$10M in revenue.
+Ideally has 5–50 employees.
+Has identifiable decision-makers, preferably a founder, CEO, COO, or finance leader.
+May exhibit growth signals or bookkeeping/accounting complexity.
+
+Important exclusions
+Do NOT qualify:
+
+Bookkeeping or accounting firms.
+Fractional CFO businesses.
+Consultants or consulting firms.
+Marketing, web-development, or other agencies.
+SaaS companies and software platforms.
+Lead-generation companies.
+Directories and marketplaces that merely list businesses.
+Companies that talk about e-commerce but do not themselves operate an online store.
+
+A previous false positive was https://ecomcfo.co/. It is a CFO/bookkeeping consultancy, not an e-commerce store. The discovery agent incorrectly returned it.
+3. Changes already implemented
+We recently introduced an e-commerce eligibility filter.
+New file
+lib/research/eligibility.ts
+It evaluates first-party website pages for:
+
+Transaction evidence (Add to Cart, Checkout, Buy Now, etc.).
+Product catalogue evidence (product variants, collections, SKUs, stock status, etc.).
+E-commerce platform evidence (Shopify, WooCommerce, BigCommerce, Magento, etc.).
+Service-provider signals (bookkeeping, accounting, fractional CFO, consulting, agencies, SaaS, etc.).
+
+The filter requires multiple storefront signals and rejects service businesses.
+Modified file
+lib/research/runner.ts
+It now supports:
+requireEcommerceEligibility?: boolean
+When enabled, it rejects candidates whose first-party website pages do not provide sufficient evidence of an actual e-commerce storefront.
+Modified file
+app/api/prospects/discover/route.ts
+Autonomous discovery enables:
+requireEcommerceEligibility: true
+Manual CSV imports should remain unaffected.
+US-market evidence gate
+We also added a gate in lib/research/runner.ts:
+if (
+  deps.requireEcommerceEligibility &&
+  !verification.accepted.some((claim) => claim.claim_type === "us_ecommerce")
+) {
+  report.errors.push(
+    "Autonomous discovery rejected this candidate: no verified first-party evidence of US business presence or US e-commerce operations."
+  );
+  return { rows: [], report };
+}
+
+This requires at least one verified us_ecommerce claim before a candidate can be imported through autonomous discovery.
+Test status
+After these changes, the test suite reported:
+
+151 tests passed.
+0 failures.
+npx tsc --noEmit completed without errors.
+git diff --check completed cleanly.
+
+Do not assume these tests prove the discovery pipeline can actually find 30 companies. They only establish that the existing automated tests pass.
+4. The actual problem to investigate
+The discovery agent is not successfully fetching 30 companies.
+I need you to determine exactly why.
+Potential areas to investigate:
+
+Search query coverage and quality.
+Tavily API search limits and pagination.
+Candidate deduplication.
+URL normalization.
+Search-result filtering.
+Blocked-domain rules.
+Website fetch failures and timeouts.
+The number of pages fetched per company.
+Eligibility-filter strictness.
+Evidence extraction and verification failures.
+The US-market evidence gate.
+Candidate limits and batch-size restrictions.
+Whether the agent stops after a small number of candidates.
+Whether rejected candidates are replaced with new searches.
+Whether the endpoint's response/report accurately explains why candidates were rejected.
+
+Do not immediately weaken the eligibility filter. We need 30 legitimate e-commerce prospects, not 30 arbitrary companies.
+5. What I want you to do
+First, inspect the actual implementation and trace the complete discovery pipeline from:
+app/api/prospects/discover/route.ts
+through:
+
+Search and candidate collection.
+Research runner.
+Website extraction.
+E-commerce eligibility.
+Evidence verification.
+US-market verification.
+Import into Supabase.
+
+Then identify the exact bottleneck.
+I want a practical fix that allows the agent to keep searching for replacement candidates when candidates are rejected, rather than stopping prematurely.
+The target should be:
+Up to 30 successfully qualified and imported companies per discovery run, subject to reasonable execution-time and API limits.
+If fewer than 30 can be found, the agent should report:
+
+How many candidates were discovered.
+How many websites were successfully fetched.
+How many passed storefront eligibility.
+How many passed US-market verification.
+How many were rejected and why.
+How many were imported.
+Whether the search or API limits prevented reaching 30.
+
+Do not fabricate companies or qualification evidence.
+6. Important technical constraints
+
+Preserve the existing application architecture.
+Do not break manual CSV importing.
+Do not weaken the ICP or allow service businesses through.
+Keep research freemium-only; do not introduce paid enrichment subscriptions.
+Do not introduce unnecessary dependencies.
+Do not modify database schema or apply migrations unless absolutely necessary and explicitly justified.
+Do not expose API keys or request that I share .env.local.
+Preserve existing local changes. Do not reset Git, overwrite unrelated work, or discard modifications.
+Do not commit, push, or deploy anything.
+
+7. How I want you to work
+I want you to be practical and implementation-focused.
+
+Inspect the relevant files before proposing changes.
+Explain the actual bottleneck with evidence from the code.
+Implement the smallest coherent fix.
+Add or update tests covering the failure and the fix.
+Run the relevant tests, TypeScript checks, and lint checks.
+Give me the exact terminal commands to test the discovery endpoint locally.
+Explain how to verify that the agent can reach 30 qualified companies.
+
+Do not give me a generic list of possible causes. Trace the actual code and fix the problem.
+Primary objective: Make Ledgerwise's discovery agent reliably find and import up to 30 genuine US e-commerce companies without admitting agencies, consultants, SaaS businesses, or other false positives.
+One important instruction: have Claude inspect the current local working tree before editing anything. The project already contains uncommitted changes, so he must preserve them rather than applying a broad replacement from an older ZIP.

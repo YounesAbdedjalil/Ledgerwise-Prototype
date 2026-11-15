@@ -1,0 +1,4956 @@
+Project Status Update (6)
+=========================
+
+ChatGPT:
+Okay, this confirms OpenCode reached its free usage limit and stopped, rather than completing the remaining work.
+The last operation you pasted was a documentation-only edit to:
+
+docs/SCOPE.md
+docs/SECURITY.md
+
+The Python script produced no output, which is normal for a successful execution, but we haven't independently verified the resulting files.
+Where we stand
+Implementation paused
+
+
+
+Component
+Status
+
+
+
+Source verification
+Implemented
+
+
+Email drafting and simulated sending
+Reported implemented; needs full review
+
+
+Conversations and guardrails
+Reported implemented; needs full review
+
+
+Internal calendar and bookings
+Reported implemented; needs full review
+
+
+Google Calendar sync
+Implementation reported; real OAuth not verified
+
+
+Migrations
+Manual application still required
+
+
+Final verification
+124 tests passed in the last reported run
+
+
+What I recommend
+Don't discard the current work or restart OpenCode from scratch.
+When your free limit resets:
+
+Reopen the existing Ledgerwise project in OpenCode.
+Check git status to preserve all uncommitted work.
+Ask it to inspect the Todo list and repository to identify exactly what remains.
+Have it finish the remaining implementation and final verification.
+
+Use this prompt:
+Resume the Ledgerwise implementation from the current repository state. Your previous session stopped because the usage limit was reached.
+First inspect the existing implementation, Git status, and all project Todo items. Do not repeat completed work or overwrite existing changes.
+Compare the actual repository against the approved Phases 5–7 plan and identify incomplete acceptance criteria.
+Then finish all remaining implementation, tests, migrations, and documentation. Preserve the uncommitted research-agent work. Do not commit, push, deploy, or execute remote Supabase migrations.
+Run the complete final verification, including npm test, TypeScript, lint, git diff --check, and npm run build.
+Give me a final report distinguishing implemented, tested, manually configured, and externally verified functionality. Do not claim Google Calendar is operational without real OAuth and event synchronization testing.
+Ledgerwise status board
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phases 5–7: Implementation partially completed; final audit pending.
+Research-agent changes: Preserve.
+Supabase migrations: Not yet applied.
+Deployment: Not yet authorized.
+
+Most importantly, your existing work is still the starting point. We don't need to rebuild Ledgerwise.
+
+
+You:
+Eh so Opencode reached his free limit, what should we do now ?
+
+
+ChatGPT:
+Honestly, I wouldn't pay for more OpenCode usage immediately, and I definitely wouldn't restart Ledgerwise.
+My recommendation is to preserve what we've built, let the usage limit reset if possible, and use another coding model to finish the remaining work if necessary.
+We have already invested considerable work in the architecture, research pipeline, source verification, email workflows, and guardrails. Losing that progress would be a mistake.
+Here's the plan
+
+  
+    **Freeze the current state**
+
+Don't reset the repository, discard changes, or start a fresh project.
+
+When you can access the terminal, run:
+
+```bash
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+git status --short
+git diff --stat
+git diff --check
+```
+
+Keep the uncommitted research-agent changes intact.
+
+  
+  
+    **Determine exactly what is finished**
+
+OpenCode's last Todo showed Stage 2 in progress, with conversations, calendar, Google Calendar, migrations, and final verification still listed.
+
+We should inspect the actual files rather than trust the Todo or its last status message.
+
+  
+  
+    **Choose how to continue**
+
+- Option A: Wait for OpenCode's free usage to reset and resume its existing session.
+- Option B: Switch to another coding model/provider and continue from the current repository.
+- Option C: I help you implement and review the remaining work in smaller steps, using terminal commands and complete code changes.
+
+I prefer A if the reset is soon; otherwise B or C.
+
+  
+  
+    **Complete the remaining work**
+
+Prioritize conversations, internal calendar and transactional booking, then Google Calendar integration, migrations, documentation, and final regression testing.
+
+  
+
+
+ChatGPT:
+Honestly, I wouldn't pay for more OpenCode usage immediately, and I definitely wouldn't restart Ledgerwise.
+My recommendation is to preserve what we've built, let the usage limit reset if possible, and use another coding model to finish the remaining work if necessary.
+We have already invested considerable work in the architecture, research pipeline, source verification, email workflows, and guardrails. Losing that progress would be a mistake.
+Here's the plan
+
+  
+    **Freeze the current state**
+
+Don't reset the repository, discard changes, or start a fresh project.
+
+When you can access the terminal, run:
+
+```bash
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+git status --short
+git diff --stat
+git diff --check
+```
+
+Keep the uncommitted research-agent changes intact.
+
+  
+  
+    **Determine exactly what is finished**
+
+OpenCode's last Todo showed Stage 2 in progress, with conversations, calendar, Google Calendar, migrations, and final verification still listed.
+
+We should inspect the actual files rather than trust the Todo or its last status message.
+
+  
+  
+    **Choose how to continue**
+
+- Option A: Wait for OpenCode's free usage to reset and resume its existing session.
+- Option B: Switch to another coding model/provider and continue from the current repository.
+- Option C: I help you implement and review the remaining work in smaller steps, using terminal commands and complete code changes.
+
+I prefer A if the reset is soon; otherwise B or C.
+
+  
+  
+    **Complete the remaining work**
+
+Prioritize conversations, internal calendar and transactional booking, then Google Calendar integration, migrations, documentation, and final regression testing.
+
+  
+
+
+One useful thing I found: you may not need to wait for the reset at all.
+OpenCode supports switching providers and models using /connect and /models. Its documentation also describes connecting other providers, including OpenAI through ChatGPT sign-in. 
+Here's what I'd recommend for Ledgerwise.
+My preferred approach
+
+  
+    
+    **Option A — Resume with the existing free account**
+    
+    Try first
+  
+  Wait for the displayed reset time, then resume the existing session. If the limit persists, try another available free model.
+  
+  
+    
+    **Option B — Switch coding provider**
+  
+  Connect another provider and select a capable coding model. This lets us continue without depending on OpenCode's free-model quota.
+  
+  
+    
+    **Option C — Continue with my help**
+  
+  We can inspect the repository, implement missing features, run tests, and review changes step by step using your Kali terminal.
+
+
+One important detail
+Your OpenCode session had approximately 131,221 tokens of context. Don't assume we need to carry all of that into a new session. The approved architecture and repository are more important than the old conversation history.
+We can give a new session the approved implementation plan and a precise repository status report.
+What I suggest we do first
+I want to check one thing before choosing the next model.
+Are you willing to use a model connected through your existing ChatGPT account, or do you want to stay strictly with free models and free API tiers?
+That will determine the most sensible continuation strategy.
+
+Ledgerwise status
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phase 5: Email implementation reported; audit pending.
+Phase 6: Conversation implementation needs completion/audit.
+Phase 7: Internal calendar needs completion/audit.
+Google Calendar: Real OAuth verification pending.
+Supabase migrations: Manual application pending.
+Research-agent changes: Preserve.
+
+We are continuing the existing project, not starting over.
+
+
+ChatGPT:
+One useful thing I found: you may not need to wait for the reset at all.
+OpenCode supports switching providers and models using /connect and /models. Its documentation also describes connecting other providers, including OpenAI through ChatGPT sign-in. 
+Here's what I'd recommend for Ledgerwise.
+My preferred approach
+
+  
+    
+    **Option A — Resume with the existing free account**
+    
+    Try first
+  
+  Wait for the displayed reset time, then resume the existing session. If the limit persists, try another available free model.
+  
+  
+    
+    **Option B — Switch coding provider**
+  
+  Connect another provider and select a capable coding model. This lets us continue without depending on OpenCode's free-model quota.
+  
+  
+    
+    **Option C — Continue with my help**
+  
+  We can inspect the repository, implement missing features, run tests, and review changes step by step using your Kali terminal.
+
+
+One important detail
+Your OpenCode session had approximately 131,221 tokens of context. Don't assume we need to carry all of that into a new session. The approved architecture and repository are more important than the old conversation history.
+We can give a new session the approved implementation plan and a precise repository status report.
+What I suggest we do first
+I want to check one thing before choosing the next model.
+Are you willing to use a model connected through your existing ChatGPT account, or do you want to stay strictly with free models and free API tiers?
+That will determine the most sensible continuation strategy.
+
+Ledgerwise status
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phase 5: Email implementation reported; audit pending.
+Phase 6: Conversation implementation needs completion/audit.
+Phase 7: Internal calendar needs completion/audit.
+Google Calendar: Real OAuth verification pending.
+Supabase migrations: Manual application pending.
+Research-agent changes: Preserve.
+
+We are continuing the existing project, not starting over.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ git status --short
+ M .gitignore
+ M app/(dashboard)/calendar/page.tsx
+ M app/(dashboard)/conversations/page.tsx
+ M app/(dashboard)/emails/page.tsx
+ M app/(dashboard)/prospects/[id]/page.tsx
+ M app/(dashboard)/prospects/import/actions.ts
+ M app/(dashboard)/prospects/import/page.tsx
+ M app/(dashboard)/prospects/page.tsx
+ M components/ScoreBreakdown.tsx
+ M docs/SCOPE.md
+ M lib/import-schema.ts
+ M lib/scoring/score.ts
+ M next.config.ts
+ M package.json
+ M tests/import-schema.test.ts
+?? app/(dashboard)/calendar/actions.ts
+?? app/(dashboard)/conversations/[id]/
+?? app/(dashboard)/conversations/actions.ts
+?? app/(dashboard)/emails/[id]/
+?? app/(dashboard)/emails/actions.ts
+?? app/(dashboard)/prospects/review/
+?? app/(dashboard)/prospects/source-actions.ts
+?? components/calendar/
+?? components/conversations/
+?? components/emails/
+?? components/prospects/
+?? docs/GOOGLE_CALENDAR.md
+?? docs/MIGRATION_INSTRUCTIONS.md
+?? docs/SECURITY.md
+?? docs/research-input.txt
+?? "docs/research-template copy.csv"
+?? lib/calendar/
+?? lib/conversations/
+?? lib/email/
+?? lib/research/
+?? lib/server/
+?? lib/sources/
+?? lib/suppression.ts
+?? lib/validation.ts
+?? scripts/research.ts
+?? supabase/
+?? tests/calendar-time.test.ts
+?? tests/conversation-classify.test.ts
+?? tests/conversation-reply.test.ts
+?? tests/email-draft.test.ts
+?? tests/google-calendar.test.ts
+?? tests/research-extract.test.ts
+?? tests/research-output.test.ts
+?? tests/research-pages.test.ts
+?? tests/research-runner.test.ts
+?? tests/research-verify.test.ts
+?? tests/source-verification.test.ts
+?? tests/suppression.test.ts
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ git diff --stat
+ .gitignore                                  |   3 ++
+ app/(dashboard)/calendar/page.tsx           | 295 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ app/(dashboard)/conversations/page.tsx      | 170 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ app/(dashboard)/emails/page.tsx             | 208 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++--
+ app/(dashboard)/prospects/[id]/page.tsx     |  27 +++++++++-
+ app/(dashboard)/prospects/import/actions.ts |   4 +-
+ app/(dashboard)/prospects/import/page.tsx   |   5 ++
+ app/(dashboard)/prospects/page.tsx          |  35 ++++++++----
+ components/ScoreBreakdown.tsx               |  28 +++++++---
+ docs/SCOPE.md                               |  18 +++++--
+ lib/import-schema.ts                        |   7 ++-
+ lib/scoring/score.ts                        |   3 ++
+ next.config.ts                              |   8 ++-
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ git diff --check
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$
+
+
+ChatGPT:
+Excellent. This is actually much better news than I expected.
+Your repository contains substantial implementation work already. Nothing in this output suggests that we need to start over.
+I can see that OpenCode created or modified files for all the major areas:
+
+Email drafting and review.
+Conversation handling and individual conversation pages.
+Calendar pages and booking actions.
+Source verification and review.
+Google Calendar documentation.
+Security and migration instructions.
+New tests for email, conversations, calendar, Google Calendar, and source verification.
+
+Your git diff --check also produced no errors.
+What your Git output tells us
+Changes preserved
+
+
+
+Area
+Evidence in repository
+
+
+
+Email
+lib/email/, email actions and detail pages
+
+
+Conversations
+lib/conversations/, conversation actions and detail pages
+
+
+Calendar
+lib/calendar/, calendar actions and components
+
+
+Source verification
+lib/sources/, review page and source actions
+
+
+Google Calendar
+tests/google-calendar.test.ts, docs/GOOGLE_CALENDAR.md
+
+
+Database
+supabase/
+
+
+Security
+lib/server/, lib/suppression.ts, docs/SECURITY.md
+
+
+One important distinction: the presence of files proves that code was written, not that every feature works. We need to test the implementation.
+
+
+ChatGPT:
+Excellent. This is actually much better news than I expected.
+Your repository contains substantial implementation work already. Nothing in this output suggests that we need to start over.
+I can see that OpenCode created or modified files for all the major areas:
+
+Email drafting and review.
+Conversation handling and individual conversation pages.
+Calendar pages and booking actions.
+Source verification and review.
+Google Calendar documentation.
+Security and migration instructions.
+New tests for email, conversations, calendar, Google Calendar, and source verification.
+
+Your git diff --check also produced no errors.
+What your Git output tells us
+Changes preserved
+
+
+
+Area
+Evidence in repository
+
+
+
+Email
+lib/email/, email actions and detail pages
+
+
+Conversations
+lib/conversations/, conversation actions and detail pages
+
+
+Calendar
+lib/calendar/, calendar actions and components
+
+
+Source verification
+lib/sources/, review page and source actions
+
+
+Google Calendar
+tests/google-calendar.test.ts, docs/GOOGLE_CALENDAR.md
+
+
+Database
+supabase/
+
+
+Security
+lib/server/, lib/suppression.ts, docs/SECURITY.md
+
+
+One important distinction: the presence of files proves that code was written, not that every feature works. We need to test the implementation.
+This is a good checkpoint. We have enough implementation in the repository to move into a proper verification pass.
+There are two things I want to point out:
+
+The untracked files are important. Your git diff --stat only reports tracked-file modifications. It does not include the many newly created implementation files. So the actual amount of work is considerably larger than that summary suggests.
+No errors from git diff --check is good, but it isn't a functional test. We still need to verify that the new features work.
+
+Next step: run the full verification
+Please run these commands from your current project directory, in this order:
+
+echo "===== FULL TEST SUITE ====="
+npm test
+
+echo "===== TYPESCRIPT ====="
+npx tsc --noEmit
+echo "===== LINT ====="
+npm run lint
+echo "===== PRODUCTION BUILD ====="
+npm run build
+echo "===== PATCH WHITESPACE CHECK ====="
+git diff --check
+echo "===== MIGRATION FILES ====="
+find supabase/migrations -maxdepth 1 -type f -print 2>/dev/null
+echo "===== FINAL GIT STATUS ====="
+git status --short
+
+Let each command finish before proceeding. If one fails, don't hide the error or continue as though it passed.
+What we're checking
+
+
+
+Check
+What it tells us
+
+
+
+npm test
+Whether automated tests pass
+
+
+TypeScript
+Whether types are consistent
+
+
+Lint
+Whether code-quality checks pass
+
+
+Production build
+Whether Next.js can compile the application
+
+
+Migration listing
+Whether the required SQL files exist
+
+
+Git status
+Whether all work remains preserved
+
+
+One important limitation: even if all these checks pass, we still need to verify the database migrations and actual Supabase workflows manually.
+Ledgerwise status
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phase 5: Substantial email implementation present; needs verification.
+Phase 6: Conversation implementation files present; needs verification.
+Phase 7: Calendar implementation files present; needs verification.
+Google Calendar: Integration code and tests present; real OAuth not verified.
+Supabase migrations: Present in repository; application status still pending.
+Research-agent changes: Preserved.
+Git diff check: Clean.
+
+Paste the complete command output here. I'll use the actual results to determine whether we can move on to migration review or whether we need to fix something first.
+
+
+ChatGPT:
+This is a good checkpoint. We have enough implementation in the repository to move into a proper verification pass.
+There are two things I want to point out:
+
+The untracked files are important. Your git diff --stat only reports tracked-file modifications. It does not include the many newly created implementation files. So the actual amount of work is considerably larger than that summary suggests.
+No errors from git diff --check is good, but it isn't a functional test. We still need to verify that the new features work.
+
+Next step: run the full verification
+Please run these commands from your current project directory, in this order:
+
+echo "===== FULL TEST SUITE ====="
+npm test
+
+echo "===== TYPESCRIPT ====="
+npx tsc --noEmit
+echo "===== LINT ====="
+npm run lint
+echo "===== PRODUCTION BUILD ====="
+npm run build
+echo "===== PATCH WHITESPACE CHECK ====="
+git diff --check
+echo "===== MIGRATION FILES ====="
+find supabase/migrations -maxdepth 1 -type f -print 2>/dev/null
+echo "===== FINAL GIT STATUS ====="
+git status --short
+
+Let each command finish before proceeding. If one fails, don't hide the error or continue as though it passed.
+What we're checking
+
+
+
+Check
+What it tells us
+
+
+
+npm test
+Whether automated tests pass
+
+
+TypeScript
+Whether types are consistent
+
+
+Lint
+Whether code-quality checks pass
+
+
+Production build
+Whether Next.js can compile the application
+
+
+Migration listing
+Whether the required SQL files exist
+
+
+Git status
+Whether all work remains preserved
+
+
+One important limitation: even if all these checks pass, we still need to verify the database migrations and actual Supabase workflows manually.
+Ledgerwise status
+
+Phases 1–3: Implemented.
+Phase 4: Postponed.
+Phase 5: Substantial email implementation present; needs verification.
+Phase 6: Conversation implementation files present; needs verification.
+Phase 7: Calendar implementation files present; needs verification.
+Google Calendar: Integration code and tests present; real OAuth not verified.
+Supabase migrations: Present in repository; application status still pending.
+Research-agent changes: Preserved.
+Git diff check: Clean.
+
+Paste the complete command output here. I'll use the actual results to determine whether we can move on to migration review or whether we need to fix something first.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ >....                                                                                                                                                 
+echo "===== PRODUCTION BUILD ====="
+npm run build
+echo "===== PATCH WHITESPACE CHECK ====="
+git diff --check
+echo "===== MIGRATION FILES ====="
+find supabase/migrations -maxdepth 1 -type f -print 2>/dev/null
+echo "===== FINAL GIT STATUS ====="
+git status --short
+===== FULL TEST SUITE =====
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (67.31728ms)
+✔ falls through to the next provider on a 429 (2.17295ms)
+✔ a rate-limited model is skipped on the next call (1.349836ms)
+✔ a model is retried after its cooldown expires (2.115388ms)
+✔ a Retry-After header sets the cooldown (2.960479ms)
+✔ repeated 429s escalate the cooldown (1.573738ms)
+✔ a success resets the escalation (1.463506ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.564345ms)
+✔ truncated output tries the next model without cooling the first (1.383981ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (0.884407ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.496082ms)
+✔ oversized input is never sent to Groq (0.506724ms)
+✔ when every model is cooling down it throws without any network call (0.608017ms)
+✔ nothing configured throws and makes no network call (0.258367ms)
+✔ consecutive calls to one provider are spaced out (0.531051ms)
+✔ extractJson strips code fences (2.204896ms)
+✔ extractJson throws on garbage (0.374509ms)
+✔ a valid 30-minute business-hours slot passes (23.54331ms)
+✔ slot durations are limited to 15–120 minutes (6.664691ms)
+✔ slots must fit inside 9:00–17:00 local time (4.878686ms)
+✔ slots must be in the future and use a valid timezone (2.554814ms)
+✔ zoned conversion handles standard and daylight time (2.622651ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.275988ms)
+✔ booking input requires a name, a valid email, and a timezone (0.403462ms)
+✔ slot range formatting includes the timezone (0.53807ms)
+✔ opt-out requests suppress and stop all replies (1.597435ms)
+✔ opt-out wins over a pricing question in the same message (0.166833ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.403789ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.001779ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.444189ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.221672ms)
+✔ bot disclosure is explicit and safe (2.320586ms)
+✔ general fallback is safe and contains no invented facts (2.50771ms)
+✔ reply validation blocks pricing and human claims (0.840267ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.651567ms)
+✔ parseReply accepts JSON and rejects empty output (3.116186ms)
+✔ selectEmailSources keeps only human-verified, usable sources (4.390506ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.562113ms)
+✔ the fallback draft uses verified claims and passes guardrails (1.879822ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (2.124314ms)
+✔ draft validation rejects placeholders and unsafe content (0.509624ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (1.02944ms)
+✔ the prompt carries only supplied facts and the revision note (0.675111ms)
+✔ contact first name handles unknown contacts (0.206371ms)
+✔ Google status never claims operational without explicit verification (1.50151ms)
+✔ sync is a no-op unless explicitly enabled (0.318935ms)
+✔ access token exchange sends a refresh-token grant (57.436932ms)
+✔ sync creates a Google event and returns its id (3.334267ms)
+✔ Google HTTP failures are reported without claiming success (0.969656ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.212412ms)
+✔ events can be updated with PATCH using the new slot details (1.478831ms)
+✔ deletion treats an already-removed event as success (1.086671ms)
+✔ update and delete are no-ops unless sync is enabled (0.513277ms)
+✔ claim types are exactly the closed set of seven (4.010264ms)
+✔ accepts us_ecommerce (1.095165ms)
+✔ accepts category (0.518831ms)
+✔ accepts size_fit (0.178702ms)
+✔ accepts growth_signal (0.184175ms)
+✔ accepts pain_signal (0.164085ms)
+✔ accepts disqualifier (0.306493ms)
+✔ accepts contact (0.235524ms)
+✔ rejects claim_type "size" (0.634026ms)
+✔ rejects claim_type "other" (0.738558ms)
+✔ rejects claim_type "pain_sigal" (0.190774ms)
+✔ rejects claim_type "" (0.119769ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.184693ms)
+✔ disqualifier rows still need a source (0.156517ms)
+✔ retrieved_at must be a real calendar date (0.196009ms)
+✔ contact must be Name | Role (0.156954ms)
+✔ extracts claims and attaches the actual fetched page URL (7.024589ms)
+✔ ignores any source URL supplied by the AI (0.583288ms)
+✔ returns an empty array when the AI finds no supported claims (5.175492ms)
+✔ rejects malformed JSON (0.74597ms)
+✔ rejects a response without a claims array (0.84731ms)
+✔ rejects malformed claim objects (0.365007ms)
+✔ splits long pages into overlapping chunks (0.445512ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.538748ms)
+✔ CSV output uses the exact importer columns and preserves values (7.437064ms)
+✔ CSV output includes headers when no claims were accepted (0.450523ms)
+✔ report includes totals, sources, rejected claims, and errors (0.650184ms)
+✔ parses a Jina Reader response and preserves the original source URL (7.749313ms)
+✔ uses a fallback title when Reader provides no title (2.1749ms)
+✔ rejects an empty Reader response (0.780149ms)
+✔ discovers same-site links and prioritizes useful pages (3.75992ms)
+✔ ignores duplicate links and removes tracking query strings (0.363339ms)
+✔ rejects non-HTTP and private/local URLs (0.321816ms)
+✔ fetches through Jina Reader and returns the original page URL (60.345138ms)
+✔ reports Reader HTTP errors clearly (0.486417ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.447741ms)
+✔ rejects local hostnames with a trailing dot (0.51778ms)
+✔ parses company names, homepages, and optional same-site pages (11.018754ms)
+✔ rejects invalid URLs and extra pages from another website (0.987278ms)
+✔ rejects empty research input (0.247693ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (2.666153ms)
+✔ continues to the next company when one homepage cannot be fetched (1.306874ms)
+✔ records an extraction failure without losing the company report (0.506307ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.544034ms)
+✔ runResearch rejects extra pages from another hostname (0.570879ms)
+✔ accepts a claim when its evidence appears on the fetched page (2.940709ms)
+✔ matches evidence despite case and whitespace differences (0.391097ms)
+✔ rejects evidence that does not appear on the page (0.598208ms)
+✔ rejects unsupported claim types (0.234889ms)
+✔ rejects a source URL that was not fetched (0.233916ms)
+✔ rejects evidence outside the permitted length (0.225309ms)
+✔ accepts a contact only when name and role appear in the evidence (0.709747ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.296229ms)
+✔ rejects a contact email that is not on the page (0.646999ms)
+✔ rejects duplicate claims (0.827252ms)
+✔ accepts no more than three claims of the same type (0.474231ms)
+✔ shipped config has no weights set yet (1.231938ms)
+✔ blank weights: criteria evaluated, no points, no total (0.942896ms)
+✔ partial weights: still no total (0.444942ms)
+✔ full weights: total sums points of met criteria (0.172059ms)
+✔ unmet criterion says unknown and carries no sources (0.261776ms)
+✔ every met criterion is traceable to at least one source (0.143802ms)
+✔ disqualifiers are surfaced and never count as criterion evidence (0.237878ms)
+✔ newly imported sources are pending review and are not human-verified (1.245ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.341742ms)
+✔ rejection requires a non-empty note (0.632031ms)
+✔ status transition guards (0.257093ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.919648ms)
+✔ structural validation does not imply human verification (0.161606ms)
+✔ a recipient email needs a verified contact source containing it (0.575945ms)
+✔ status labels are explicit (0.277835ms)
+✔ email normalization trims and lowercases (1.05984ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.251802ms)
+✔ trimText enforces required text and maximum length (0.150671ms)
+ℹ tests 127
+ℹ suites 0
+ℹ pass 127
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1438.162466
+===== TYPESCRIPT =====
+===== LINT =====
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+===== PRODUCTION BUILD =====
+
+ledgerwise-prototype@0.1.0 build
+next build
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Environments: .env.local
+✓ Running next.config.ts took 26ms
+
+Experiments (use with caution):
+· serverActions
+Creating an optimized production build ...
+
+
+✓ Compiled successfully in 725ms
+  Running TypeScript ...
+  Finished TypeScript in 1789ms ...
+  Collecting page data using 7 workers ...
+✓ Collecting page data using 7 workers in 917ms
+  Generating static pages using 7 workers (0/12) ...
+  Generating static pages using 7 workers (3/12)
+  Generating static pages using 7 workers (6/12)
+  Generating static pages using 7 workers (9/12)
+✓ Generating static pages using 7 workers (12/12) in 349ms
+  Finalizing page optimization ...
+✓ Finalizing page optimization in 8ms
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /auth/signout
+├ ƒ /calendar
+├ ƒ /conversations
+├ ƒ /conversations/[id]
+├ ƒ /emails
+├ ƒ /emails/[id]
+├ ○ /login
+├ ƒ /prospects
+├ ƒ /prospects/[id]
+├ ƒ /prospects/import
+└ ƒ /prospects/review
+ƒ Proxy (Middleware)
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+===== PATCH WHITESPACE CHECK =====
+===== MIGRATION FILES =====
+supabase/migrations/20261114_01_source_verification_and_security.sql
+supabase/migrations/20261114_03_google_calendar.sql
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+===== FINAL GIT STATUS =====
+ M .gitignore
+ M app/(dashboard)/calendar/page.tsx
+ M app/(dashboard)/conversations/page.tsx
+ M app/(dashboard)/emails/page.tsx
+ M app/(dashboard)/prospects/[id]/page.tsx
+ M app/(dashboard)/prospects/import/actions.ts
+ M app/(dashboard)/prospects/import/page.tsx
+ M app/(dashboard)/prospects/page.tsx
+ M components/ScoreBreakdown.tsx
+ M docs/SCOPE.md
+ M lib/import-schema.ts
+ M lib/scoring/score.ts
+ M next.config.ts
+ M package.json
+ M tests/import-schema.test.ts
+?? app/(dashboard)/calendar/actions.ts
+?? app/(dashboard)/conversations/[id]/
+?? app/(dashboard)/conversations/actions.ts
+?? app/(dashboard)/emails/[id]/
+?? app/(dashboard)/emails/actions.ts
+?? app/(dashboard)/prospects/review/
+?? app/(dashboard)/prospects/source-actions.ts
+?? components/calendar/
+?? components/conversations/
+?? components/emails/
+?? components/prospects/
+?? docs/GOOGLE_CALENDAR.md
+?? docs/MIGRATION_INSTRUCTIONS.md
+?? docs/SECURITY.md
+?? docs/research-input.txt
+?? "docs/research-template copy.csv"
+?? lib/calendar/
+?? lib/conversations/
+?? lib/email/
+?? lib/research/
+?? lib/server/
+?? lib/sources/
+?? lib/suppression.ts
+?? lib/validation.ts
+?? scripts/research.ts
+?? supabase/
+?? tests/calendar-time.test.ts
+?? tests/conversation-classify.test.ts
+?? tests/conversation-reply.test.ts
+?? tests/email-draft.test.ts
+?? tests/google-calendar.test.ts
+?? tests/research-extract.test.ts
+?? tests/research-output.test.ts
+?? tests/research-pages.test.ts
+?? tests/research-runner.test.ts
+?? tests/research-verify.test.ts
+?? tests/source-verification.test.ts
+?? tests/suppression.test.ts
+
+
+ChatGPT:
+Excellent. This is our strongest verification result so far.
+127 / 127 tests passing Production build successful
+All five checks completed successfully:
+
+
+
+Check
+Result
+
+
+
+npm test
+127 passed, 0 failed
+
+
+npx tsc --noEmit
+Clean
+
+
+npm run lint
+Clean
+
+
+npm run build
+Successful
+
+
+git diff --check
+Clean
+
+
+The production build also confirms that Next.js recognizes the new routes:
+
+/emails and /emails/[id]
+/conversations and /conversations/[id]
+/calendar
+/prospects/review
+
+And all three planned migration files exist:
+
+20261114_01_source_verification_and_security.sql
+20261114_02_calendar_source_and_booking.sql
+20261114_03_google_calendar.sql
+
+That's substantial progress. We have a compiling application with a passing automated test suite.
+
+
+ChatGPT:
+Excellent. This is our strongest verification result so far.
+127 / 127 tests passing Production build successful
+All five checks completed successfully:
+
+
+
+Check
+Result
+
+
+
+npm test
+127 passed, 0 failed
+
+
+npx tsc --noEmit
+Clean
+
+
+npm run lint
+Clean
+
+
+npm run build
+Successful
+
+
+git diff --check
+Clean
+
+
+The production build also confirms that Next.js recognizes the new routes:
+
+/emails and /emails/[id]
+/conversations and /conversations/[id]
+/calendar
+/prospects/review
+
+And all three planned migration files exist:
+
+20261114_01_source_verification_and_security.sql
+20261114_02_calendar_source_and_booking.sql
+20261114_03_google_calendar.sql
+
+That's substantial progress. We have a compiling application with a passing automated test suite.
+What we should do next: review the SQL before touching Supabase
+I would not immediately apply the migrations.
+The automated tests are mostly application-level tests. They do not prove that:
+
+The SQL migrations execute successfully against your actual Supabase schema.
+RLS policies enforce the intended permissions.
+Database booking transactions prevent simultaneous bookings.
+Google OAuth and actual calendar event synchronization work.
+
+We should review the three migrations first, especially because migration 01 changes security policies and migration 02 introduces transactional booking logic.
+Run this command
+for f in supabase/migrations/*.sql; do
+  echo ""
+  echo "=========================================="
+  echo "$f"
+  echo "=========================================="
+  cat "$f"
+done
+
+Paste the output here. If it's too long, send one migration at a time, starting with 20261114_01_source_verification_and_security.sql.
+I'll review:
+
+Whether the migrations match the actual schema we established.
+Whether they are safe to apply and rerun.
+Whether RLS and suppression are correctly enforced.
+Whether concurrent booking and cancellation logic is transaction-safe.
+Whether Google Calendar token storage and security are adequate.
+
+Do not execute the migrations in Supabase yet.
+Updated Ledgerwise status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4
+Postponed
+
+
+Phase 5 — Email
+Code present; automated checks passing
+
+
+Phase 6 — Conversations
+Code present; automated checks passing
+
+
+Phase 7 — Internal calendar
+Code present; automated checks passing
+
+
+Google Calendar
+Code and tests present; external OAuth unverified
+
+
+Automated verification
+127/127 passing
+
+
+Production build
+Successful
+
+
+SQL migrations
+Awaiting review
+
+
+Supabase deployment
+Not started
+
+
+Git changes
+Preserved; nothing committed
+
+
+We're no longer at the point of wondering whether the application compiles. We are now moving into database security review and integration verification.
+
+
+ChatGPT:
+What we should do next: review the SQL before touching Supabase
+I would not immediately apply the migrations.
+The automated tests are mostly application-level tests. They do not prove that:
+
+The SQL migrations execute successfully against your actual Supabase schema.
+RLS policies enforce the intended permissions.
+Database booking transactions prevent simultaneous bookings.
+Google OAuth and actual calendar event synchronization work.
+
+We should review the three migrations first, especially because migration 01 changes security policies and migration 02 introduces transactional booking logic.
+Run this command
+for f in supabase/migrations/*.sql; do
+  echo ""
+  echo "=========================================="
+  echo "$f"
+  echo "=========================================="
+  cat "$f"
+done
+
+Paste the output here. If it's too long, send one migration at a time, starting with 20261114_01_source_verification_and_security.sql.
+I'll review:
+
+Whether the migrations match the actual schema we established.
+Whether they are safe to apply and rerun.
+Whether RLS and suppression are correctly enforced.
+Whether concurrent booking and cancellation logic is transaction-safe.
+Whether Google Calendar token storage and security are adequate.
+
+Do not execute the migrations in Supabase yet.
+Updated Ledgerwise status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4
+Postponed
+
+
+Phase 5 — Email
+Code present; automated checks passing
+
+
+Phase 6 — Conversations
+Code present; automated checks passing
+
+
+Phase 7 — Internal calendar
+Code present; automated checks passing
+
+
+Google Calendar
+Code and tests present; external OAuth unverified
+
+
+Automated verification
+127/127 passing
+
+
+Production build
+Successful
+
+
+SQL migrations
+Awaiting review
+
+
+Supabase deployment
+Not started
+
+
+Git changes
+Preserved; nothing committed
+
+
+We're no longer at the point of wondering whether the application compiles. We are now moving into database security review and integration verification.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ for f in supabase/migrations/*.sql; do
+  echo ""
+  echo "=========================================="
+  echo "$f"
+  echo "=========================================="
+  cat "$f"
+done
+==========================================
+supabase/migrations/20261114_01_source_verification_and_security.sql
+-- Ledgerwise prototype — migration 01
+-- Source verification, RLS hardening, append-only protection, suppression RPCs.
+-- IMPORTANT
+-- 1. Export existing policies and constraints first. See docs/MIGRATION_INSTRUCTIONS.md.
+-- 2. This migration replaces policies on the listed tables with authenticated-only
+--    policies. It does NOT provide per-user or tenant isolation. It is for the
+--    single-team prototype assumption described in docs/SECURITY.md.
+-- 3. Run this file manually in the Supabase SQL Editor. It is not executed by the app.
+
+-- 1. Source verification columns and one-time backfill
+
+do $$
+declare
+  fresh_columns boolean;
+begin
+  select not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'company_sources'
+      and column_name = 'verification_status'
+  ) into fresh_columns;
+  alter table public.company_sources
+    add column if not exists imported_by uuid references public.users(id);
+  alter table public.company_sources
+    add column if not exists verification_status text not null default 'pending_review';
+  alter table public.company_sources
+    add column if not exists reviewed_by uuid references public.users(id);
+  alter table public.company_sources
+    add column if not exists reviewed_at timestamptz;
+  alter table public.company_sources
+    add column if not exists verification_note text;
+  if fresh_columns then
+    -- The old verified_by value was stamped automatically by the importer and
+    -- cannot be treated as human verification. Preserve it as import attribution,
+    -- then clear it and put every existing source back into the review queue.
+    update public.company_sources
+    set imported_by = verified_by,
+        verified_by = null,
+        verification_status = 'pending_review',
+        reviewed_by = null,
+        reviewed_at = null,
+        verification_note = null;
+  end if;
+end $$;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'company_sources_verification_status_check'
+      and conrelid = 'public.company_sources'::regclass
+  ) then
+    alter table public.company_sources
+      add constraint company_sources_verification_status_check
+      check (verification_status in ('pending_review', 'verified', 'rejected'));
+  end if;
+end $$;
+alter table public.conversations
+  add column if not exists ai_processing_at timestamptz;
+create index if not exists company_sources_company_id_idx
+  on public.company_sources (company_id);
+create index if not exists company_sources_verification_status_idx
+  on public.company_sources (verification_status);
+create index if not exists company_sources_company_verification_idx
+  on public.company_sources (company_id, verification_status);
+create index if not exists qualification_scores_company_id_idx
+  on public.qualification_scores (company_id);
+create index if not exists email_drafts_company_status_idx
+  on public.email_drafts (company_id, status);
+create index if not exists email_events_draft_created_idx
+  on public.email_events (draft_id, created_at);
+create index if not exists conversations_company_status_idx
+  on public.conversations (company_id, status);
+create index if not exists messages_conversation_created_idx
+  on public.messages (conversation_id, created_at);
+create index if not exists audit_logs_entity_idx
+  on public.audit_logs (entity_type, entity_id);
+
+-- 2. Suppression unique index
+
+-- A duplicate index on the same expression is harmless and keeps ON CONFLICT
+-- (lower(email)) reliable even if an earlier index had a different name.
+create unique index if not exists suppressed_contacts_email_lower_idx
+  on public.suppressed_contacts (lower(email));
+
+-- 3. RLS replacement — authenticated-only single-team policies
+
+alter table public.companies enable row level security;
+alter table public.company_sources enable row level security;
+alter table public.qualification_scores enable row level security;
+alter table public.email_drafts enable row level security;
+alter table public.email_events enable row level security;
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+alter table public.calendar_slots enable row level security;
+alter table public.bookings enable row level security;
+alter table public.suppressed_contacts enable row level security;
+alter table public.audit_logs enable row level security;
+do $$
+declare
+  r record;
+begin
+  for r in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = any (array[
+        'companies',
+        'company_sources',
+        'qualification_scores',
+        'email_drafts',
+        'email_events',
+        'conversations',
+        'messages',
+        'calendar_slots',
+        'bookings',
+        'suppressed_contacts',
+        'audit_logs'
+      ])
+  loop
+    execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
+  end loop;
+end $$;
+-- Companies
+create policy auth_select_companies on public.companies
+  for select to authenticated using (true);
+create policy auth_insert_companies on public.companies
+  for insert to authenticated with check (true);
+create policy auth_update_companies on public.companies
+  for update to authenticated using (true) with check (true);
+-- Company sources
+create policy auth_select_company_sources on public.company_sources
+  for select to authenticated using (true);
+create policy auth_insert_company_sources on public.company_sources
+  for insert to authenticated with check (true);
+create policy auth_update_company_sources on public.company_sources
+  for update to authenticated using (true) with check (true);
+-- Qualification scores
+create policy auth_select_qualification_scores on public.qualification_scores
+  for select to authenticated using (true);
+create policy auth_insert_qualification_scores on public.qualification_scores
+  for insert to authenticated with check (true);
+create policy auth_update_qualification_scores on public.qualification_scores
+  for update to authenticated using (true) with check (true);
+-- Email drafts
+create policy auth_select_email_drafts on public.email_drafts
+  for select to authenticated using (true);
+create policy auth_insert_email_drafts on public.email_drafts
+  for insert to authenticated with check (true);
+create policy auth_update_email_drafts on public.email_drafts
+  for update to authenticated using (true) with check (true);
+-- Email events: append-only in normal operation
+create policy auth_select_email_events on public.email_events
+  for select to authenticated using (true);
+create policy auth_insert_email_events on public.email_events
+  for insert to authenticated with check (true);
+-- Conversations
+create policy auth_select_conversations on public.conversations
+  for select to authenticated using (true);
+create policy auth_insert_conversations on public.conversations
+  for insert to authenticated with check (true);
+create policy auth_update_conversations on public.conversations
+  for update to authenticated using (true) with check (true);
+-- Messages
+create policy auth_select_messages on public.messages
+  for select to authenticated using (true);
+create policy auth_insert_messages on public.messages
+  for insert to authenticated with check (true);
+create policy auth_update_messages on public.messages
+  for update to authenticated using (true) with check (true);
+-- Calendar slots
+create policy auth_select_calendar_slots on public.calendar_slots
+  for select to authenticated using (true);
+create policy auth_insert_calendar_slots on public.calendar_slots
+  for insert to authenticated with check (true);
+create policy auth_update_calendar_slots on public.calendar_slots
+  for update to authenticated using (true) with check (true);
+create policy auth_delete_calendar_slots on public.calendar_slots
+  for delete to authenticated using (true);
+-- Bookings: no direct delete; cancellation is the supported path
+create policy auth_select_bookings on public.bookings
+  for select to authenticated using (true);
+create policy auth_insert_bookings on public.bookings
+  for insert to authenticated with check (true);
+create policy auth_update_bookings on public.bookings
+  for update to authenticated using (true) with check (true);
+-- Suppression: read and insert only
+create policy auth_select_suppressed_contacts on public.suppressed_contacts
+  for select to authenticated using (true);
+create policy auth_insert_suppressed_contacts on public.suppressed_contacts
+  for insert to authenticated with check (true);
+-- Audit: read and insert only
+create policy auth_select_audit_logs on public.audit_logs
+  for select to authenticated using (true);
+create policy auth_insert_audit_logs on public.audit_logs
+  for insert to authenticated with check (true);
+
+-- 4. Append-only triggers for suppression and audit
+
+create or replace function public.reject_append_only_mutation()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'This table is append-only; % is not allowed on %', tg_op, tg_table_name;
+end;
+$$;
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'suppressed_contacts_append_only'
+      and tgrelid = 'public.suppressed_contacts'::regclass
+  ) then
+    create trigger suppressed_contacts_append_only
+      before update or delete on public.suppressed_contacts
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'audit_logs_append_only'
+      and tgrelid = 'public.audit_logs'::regclass
+  ) then
+    create trigger audit_logs_append_only
+      before update or delete on public.audit_logs
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+end $$;
+
+-- 5. Suppression RPCs
+
+create or replace function public.is_suppressed(p_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.suppressed_contacts
+    where lower(email) = lower(trim(coalesce(p_email, '')))
+  );
+$$;
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+  if v_email = '' or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+.[^@[:space:]]+$' then
+    raise exception 'invalid_email';
+  end if;
+  insert into public.suppressed_contacts (email, reason, source_message_id)
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+  if v_row.id is null then
+    select * into v_row
+    from public.suppressed_contacts
+    where lower(email) = v_email;
+    return v_row;
+  end if;
+  insert into public.audit_logs (actor_id, action, entity_type, entity_id, detail)
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+  return v_row;
+end;
+$$;
+revoke all on function public.is_suppressed(text) from public;
+revoke all on function public.suppress_contact(text, text, uuid) from public;
+grant execute on function public.is_suppressed(text) to authenticated;
+grant execute on function public.suppress_contact(text, text, uuid) to authenticated;
+notify pgrst, 'reload schema';
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+-- Ledgerwise prototype — migration 02
+-- Internal calendar source, conversation booking flag, and slot occupancy guarantee.
+-- Apply after migration 01. Run manually in the Supabase SQL Editor.
+-- Conversations carry an explicit booking-request flag. A booking request is a
+-- needs_human conversation plus this flag; it does not create or hold a booking.
+alter table public.conversations
+  add column if not exists booking_request boolean not null default false;
+-- Replace the old calendar source check so internal slots are allowed.
+do $$
+declare
+  c record;
+begin
+  for c in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.calendar_slots'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%source%'
+  loop
+    execute format('alter table public.calendar_slots drop constraint %I', c.conname);
+  end loop;
+end $$;
+alter table public.calendar_slots
+  add constraint calendar_slots_source_check
+  check (source in ('calcom', 'demo', 'internal'));
+alter table public.calendar_slots
+  alter column source set default 'internal';
+-- Before this index can be created, check for existing conflicts:
+-- select slot_id, count()
+-- from public.bookings
+-- where slot_id is not null
+--   and status in ('pending', 'confirmed', 'needs_human')
+-- group by slot_id
+-- having count() > 1;
+-- If that query returns rows, resolve the duplicates first. Then run this file.
+create unique index if not exists bookings_active_slot_unique
+  on public.bookings (slot_id)
+  where slot_id is not null
+    and status in ('pending', 'confirmed', 'needs_human');
+create index if not exists bookings_slot_status_idx
+  on public.bookings (slot_id, status);
+create index if not exists bookings_conversation_idx
+  on public.bookings (conversation_id);
+create index if not exists bookings_company_idx
+  on public.bookings (company_id);
+create index if not exists conversations_booking_request_idx
+  on public.conversations (booking_request)
+  where booking_request = true;
+notify pgrst, 'reload schema';
+supabase/migrations/20261114_03_google_calendar.sql
+-- Ledgerwise prototype — migration 03
+-- Optional Google Calendar sync metadata. The internal calendar works without this.
+-- Apply after migration 02. Run manually in the Supabase SQL Editor.
+alter table public.bookings
+  add column if not exists google_event_id text;
+alter table public.bookings
+  add column if not exists calendar_sync_status text not null default 'not_configured';
+alter table public.bookings
+  add column if not exists calendar_synced_at timestamptz;
+alter table public.calendar_slots
+  add column if not exists google_calendar_id text;
+-- Keep this constraint idempotent so an earlier draft can be re-applied safely.
+alter table public.bookings
+  drop constraint if exists bookings_calendar_sync_status_check;
+alter table public.bookings
+  add constraint bookings_calendar_sync_status_check
+  check (
+    calendar_sync_status in (
+      'not_configured',
+      'pending',
+      'synced',
+      'failed',
+      'deleted'
+    )
+  );
+notify pgrst, 'reload schema';
+
+
+ChatGPT:
+I've reviewed all three migrations. There is some good work here, but I found two significant gaps between the approved architecture and the SQL actually written.
+Do not apply these migrations yet
+The files exist and are reasonably structured, but I would not consider the database implementation ready.
+Migration review
+1. Migration 01 — Source verification and security
+Mostly aligned
+What's good:
+
+Adds the human verification fields.
+Backfills existing sources as pending_review.
+Clears the old automatically assigned verified_by.
+Adds authenticated-only policies for the listed tables.
+Adds append-only protections for suppression and audit logs.
+Adds suppression RPCs and a normalized-email unique index.
+
+Things to investigate:
+
+The migration does not replace policies on public.users. We need to establish whether its existing policies are appropriate.
+The is_suppressed function is SECURITY DEFINER; its permissions and behavior should be tested under actual authenticated and unauthenticated sessions.
+The migration assumes the existing schema and verified_by column match our earlier inspection.
+
+2. Migration 02 — Internal calendar and booking
+Major missing functionality
+This is the biggest problem.
+The approved plan explicitly required three transactional database functions:
+
+book_slot
+cancel_booking
+reschedule_booking
+
+They were supposed to:
+
+Lock affected slots.
+Validate availability inside the transaction.
+Prevent two people from booking the same slot.
+Update bookings and slot availability atomically.
+Write audit events within the transaction.
+
+None of these functions appears in migration 02.
+The partial unique index is useful, but it is not a replacement for the transactional booking functions.
+3. Migration 03 — Google Calendar
+Incomplete relative to plan
+It adds:
+
+Google event ID.
+Calendar synchronization status.
+Synchronization timestamp.
+Google Calendar ID on slots.
+
+However, it does not create secure storage for encrypted OAuth tokens or establish token access policies.
+There's also a discrepancy: the approved status list included cancelled, whereas this migration uses deleted.
+That needs to be reconciled with the TypeScript implementation.
+
+What I want to check before changing anything
+We need to compare the migration SQL against the actual server implementation. Otherwise, we risk writing database functions that don't match what the application calls.
+Please run these commands:
+
+echo "===== DATABASE RPC CALLS ====="
+rg -n -C 3 '\.rpc\(' app lib
+
+echo "===== BOOKING FUNCTIONS ====="
+rg -n 'book_slot|cancel_booking|reschedule_booking|createBooking|cancelBooking|rescheduleBooking' app lib supabase
+echo "===== GOOGLE TOKEN STORAGE ====="
+rg -n -i 'oauth|refresh_token|access_token|token_encryption|google_calendar|calendar_sync_status' app lib supabase docs
+echo "===== MIGRATION DOCUMENTATION ====="
+cat docs/MIGRATION_INSTRUCTIONS.md
+
+This will tell us exactly which database functions the application expects, whether OAuth token encryption is implemented, and what the migration instructions currently promise.
+Current assessment
+
+
+
+Component
+Assessment
+
+
+
+Migration 01
+Mostly aligned; needs security review
+
+
+Migration 02
+Missing required transactional RPCs
+
+
+Migration 03
+Missing planned token storage
+
+
+Application tests
+127/127 passing
+
+
+Production build
+Successful
+
+
+Supabase readiness
+Not ready
+
+
+My recommendation: don't let these gaps discourage you. The application code and automated checks are in good shape. We just need to close the database integration gap before deployment.
+Send me the command output, and we'll prepare precise corrections rather than rewriting the migrations blindly.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$
+echo "===== DATABASE RPC CALLS ====="
+rg -n -C 3 '.rpc(' app lib
+echo "===== BOOKING FUNCTIONS ====="
+rg -n 'book_slot|cancel_booking|reschedule_booking|createBooking|cancelBooking|rescheduleBooking' app lib supabase
+echo "===== GOOGLE TOKEN STORAGE ====="
+rg -n -i 'oauth|refresh_token|access_token|token_encryption|google_calendar|calendar_sync_status' app lib supabase docs
+echo "===== MIGRATION DOCUMENTATION ====="
+cat docs/MIGRATION_INSTRUCTIONS.md
+===== DATABASE RPC CALLS =====
+lib/suppression.ts
+31-  const normalized = normalizeEmail(email);
+32-  if (!normalized) return false;
+33-
+34:  const { data, error } = await supabase.rpc("is_suppressed", {
+35-    p_email: normalized,
+36-  });
+37-  if (error) throw new Error(Suppression check failed: ${error.message});
+51-    return { ok: false, error: suppressionErrorMessage("invalid_email") };
+52-  }
+53-
+54:  const { data, error } = await supabase.rpc("suppress_contact", {
+55-    p_email: email,
+56-    p_reason: input.reason,
+57-    p_source_message_id: input.sourceMessageId ?? null,
+===== BOOKING FUNCTIONS =====
+app/(dashboard)/calendar/actions.ts
+510:export async function cancelBooking(
+588:export async function rescheduleBooking(
+===== GOOGLE TOKEN STORAGE =====
+supabase/migrations/20261114_03_google_calendar.sql
+9:  add column if not exists calendar_sync_status text not null default 'not_configured';
+13:  add column if not exists google_calendar_id text;
+17:  drop constraint if exists bookings_calendar_sync_status_check;
+19:  add constraint bookings_calendar_sync_status_check
+21:    calendar_sync_status in (
+docs/GOOGLE_CALENDAR.md
+11:- credentials present but GOOGLE_CALENDAR_VERIFIED is not 1 → not verified;
+12:- verified but GOOGLE_CALENDAR_SYNC is not 1 → sync disabled;
+15:Do not describe Google Calendar as operational until a real OAuth connection,
+23:GOOGLE_REFRESH_TOKEN=
+24:GOOGLE_CALENDAR_ID=
+25:GOOGLE_CALENDAR_VERIFIED=0
+26:GOOGLE_CALENDAR_SYNC=0
+29:Set GOOGLE_CALENDAR_VERIFIED=1 only after you have tested OAuth, event
+30:creation, update, and deletion externally. Set GOOGLE_CALENDAR_SYNC=1 only when
+38:  google_event_id, calendar_sync_status, and calendar_synced_at;
+42:  calendar_sync_status = 'deleted';
+55:- No OAuth connect/callback flow is included. Use a refresh token you created
+lib/calendar/google.ts
+33:  "GOOGLE_REFRESH_TOKEN",
+34:  "GOOGLE_CALENDAR_ID",
+40:  const verified = env.GOOGLE_CALENDAR_VERIFIED === "1";
+41:  const syncEnabled = env.GOOGLE_CALENDAR_SYNC === "1";
+52:      "Google Calendar is verified but sync is disabled. Set GOOGLE_CALENDAR_SYNC=1 to enable it.";
+76:    refresh_token: env.GOOGLE_REFRESH_TOKEN ?? "",
+77:    grant_type: "refresh_token",
+79:  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
+88:  const data = (await response.json()) as { access_token?: string };
+89:  if (!data.access_token) throw new Error("Google did not return an access token.");
+90:  return data.access_token;
+106:    const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID!);
+137:  const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID ?? "");
+app/(dashboard)/calendar/actions.ts
+48:  calendar_sync_status: string;
+77:      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+119:              calendar_sync_status: "deleted",
+124:              calendar_sync_status: "synced",
+133:    .update({ calendar_sync_status: "failed" })
+554:        .update({ calendar_sync_status: "failed" })
+667:      .update({ calendar_sync_status: "failed" })
+docs/MIGRATION_INSTRUCTIONS.md
+160:supabase/migrations/20261114_03_google_calendar.sql
+188:- bookings.calendar_sync_status (not_configured | pending | synced | failed | deleted);
+190:- calendar_slots.google_calendar_id.
+192:Google Calendar is optional. Read docs/GOOGLE_CALENDAR.md before enabling sync.
+docs/SCOPE.md
+32:- Google Calendar is optional and is not claimed operational until real OAuth,
+app/(dashboard)/calendar/page.tsx
+31:  calendar_sync_status: string;
+87:        "id,slot_id,status,prospect_name,prospect_email,timezone,created_at,company_id,conversation_id,google_event_id,calendar_sync_status,companies(name)"
+151:          The prototype does not claim Google Calendar is working until real OAuth and
+269:                        Google: {booking.calendar_sync_status}
+===== MIGRATION DOCUMENTATION =====
+Database migration instructions
+These migrations are not executed by the application. Apply them manually in
+the Supabase SQL Editor, in order. Do not run them against production until you
+have reviewed them.
+They are additive migrations for the existing prototype schema. The base tables
+(companies, company_sources, email_drafts, conversations, messages,
+calendar_slots, bookings, suppressed_contacts, audit_logs, and the rest)
+must already exist. Do not run them against an empty database.
+The application is a single-team prototype. The policies created here are
+authenticated-only policies. They do not provide per-user or tenant isolation.
+See docs/SECURITY.md.
+1. Before applying anything
+In the Supabase SQL Editor, run and save the output of these queries.
+Existing policies
+select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check
+from pg_policies
+where schemaname = 'public'
+  and tablename in (
+    'companies', 'company_sources', 'qualification_scores',
+    'email_drafts', 'email_events', 'conversations', 'messages',
+    'calendar_slots', 'bookings', 'suppressed_contacts', 'audit_logs'
+  )
+order by tablename, policyname;
+
+Existing constraints
+select
+  conrelid::regclass as table_name,
+  conname,
+  pg_get_constraintdef(oid) as definition
+from pg_constraint
+where connamespace = 'public'::regnamespace
+  and conrelid::regclass::text in (
+    'company_sources', 'calendar_slots', 'bookings', 'conversations'
+  )
+order by 1, 2;
+
+Existing triggers
+select
+  event_object_table,
+  trigger_name,
+  action_timing,
+  event_manipulation,
+  action_statement
+from information_schema.triggers
+where trigger_schema = 'public'
+order by 1, 2;
+
+Current source verification state
+select
+  count(*) filter (where verification_status is null) as null_status,
+  count(*) filter (where verification_status = 'pending_review') as pending_review,
+  count(*) filter (where verification_status = 'verified') as verified,
+  count(*) filter (where verification_status = 'rejected') as rejected,
+  count(*) as total
+from public.company_sources;
+
+Before migration 01, verification_status may not exist yet. That is expected.
+Duplicate suppression rows
+Migration 01 adds a unique index on lower(email). Check for existing duplicates
+first:
+select lower(email) as normalized_email, count(*)
+from public.suppressed_contacts
+group by lower(email)
+having count(*) > 1;
+
+If that returns rows, resolve them before applying migration 01. Do not simply
+delete rows: after migration 01 the append-only trigger rejects deletes. Export
+the rows and have the data owner decide which record is authoritative.
+2. Apply migration 01
+Open:
+supabase/migrations/20261114_01_source_verification_and_security.sql
+
+Paste the entire file into the Supabase SQL Editor and run it once.
+What it does:
+
+Adds imported_by, verification_status, reviewed_by, reviewed_at, and
+verification_note to company_sources.
+Copies the old verified_by value into imported_by.
+Sets every existing source to pending_review, clears the old verified_by,
+and leaves all claims, URLs, titles, dates, and evidence untouched.
+Adds verification_status validation and indexes.
+Adds conversations.ai_processing_at.
+Replaces policies on the listed tables with authenticated-only policies.
+Adds append-only triggers on suppressed_contacts and audit_logs.
+Adds the is_suppressed and suppress_contact RPCs.
+Ensures a unique index exists on lower(email) for suppressed_contacts.
+
+The one-time source backfill only runs when verification_status does not yet
+exist. Re-running the file does not erase later human review decisions.
+3. Verify migration 01
+select verification_status, count(*)
+from public.company_sources
+group by verification_status
+order by 1;
+
+select count(*) as sources_with_old_verified_by
+from public.company_sources
+where verified_by is not null;
+
+select column_name, data_type, is_nullable
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'company_sources'
+  and column_name in (
+    'imported_by', 'verification_status', 'reviewed_by',
+    'reviewed_at', 'verification_note', 'verified_by'
+  )
+order by column_name;
+
+select proname
+from pg_proc
+where proname in ('is_suppressed', 'suppress_contact');
+
+Expected:
+
+Every existing source is pending_review.
+sources_with_old_verified_by is 0 after the one-time backfill.
+Both RPCs exist.
+Claims, URLs, titles, retrieval dates, and evidence are unchanged.
+
+4. Apply migrations 02 and 03
+After migration 01 is verified, run these files in order in the SQL Editor:
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+supabase/migrations/20261114_03_google_calendar.sql
+
+Migration 02:
+
+adds conversations.booking_request;
+replaces the calendar source check with calcom | demo | internal;
+changes the default source to internal;
+creates the partial unique index
+bookings(slot_id) WHERE slot_id IS NOT NULL AND status IN ('pending','confirmed','needs_human');
+adds booking indexes.
+
+Before running migration 02, check for existing slot conflicts:
+select slot_id, count(*)
+from public.bookings
+where slot_id is not null
+  and status in ('pending', 'confirmed', 'needs_human')
+group by slot_id
+having count(*) > 1;
+
+If that returns rows, resolve the duplicates before creating the unique index.
+Migration 03 adds optional Google Calendar metadata:
+
+bookings.google_event_id;
+bookings.calendar_sync_status (not_configured | pending | synced | failed | deleted);
+bookings.calendar_synced_at;
+calendar_slots.google_calendar_id.
+
+Google Calendar is optional. Read docs/GOOGLE_CALENDAR.md before enabling sync.
+Migration 03 drops and re-adds its status check constraint, so it is safe to
+re-run after an earlier draft that did not include deleted.
+Verify the occupancy rules:
+select slot_id, status, count(*)
+from public.bookings
+where slot_id is not null
+group by slot_id, status
+order by slot_id;
+
+select indexname, indexdef
+from pg_indexes
+where schemaname = 'public'
+  and tablename = 'bookings';
+
+Expected: no slot has more than one booking in pending, confirmed, or
+needs_human.
+5. Rollback notes
+There is no automatic rollback runner. If you need to undo migration 01:
+
+restore the saved policies from step 1;
+drop the functions public.is_suppressed(text) and
+public.suppress_contact(text, text, uuid);
+drop the triggers suppressed_contacts_append_only and
+audit_logs_append_only;
+drop the added indexes;
+drop the added columns only if you are certain you do not need the verification
+history. Dropping the columns loses review decisions.
+
+Do not drop or recreate company_sources; it contains the research data.
+6. Important consequence
+After migration 01, no source is eligible for email personalization until a human
+opens /prospects/review and marks it verified. This is intentional. Importing a
+structurally valid row is not the same as verifying that the claim is true.
+
+
+ChatGPT:
+This output reveals something important: the migrations, application code, and approved Phase 5–7 architecture have diverged. We need to reconcile them before touching Supabase.
+I also need to correct one point from my previous review: the application does not call book_slot, cancel_booking, or reschedule_booking through Supabase RPCs. The booking actions appear to implement their logic directly in TypeScript. So the missing SQL functions are not currently missing dependencies that the application calls; they're missing safeguards from the architecture we approved.
+What we've established
+1. Booking concurrency is not yet proven safe
+Your application has cancelBooking and rescheduleBooking, but the search results show no transactional RPC calls for booking operations.
+Migration 02 provides a partial unique index, which is a useful final safeguard against duplicate active bookings. However, it does not provide the planned row-locking transactions.
+That means the tests passing does not establish that simultaneous booking requests are handled correctly against the real database.
+2. Google Calendar is a simpler implementation than we approved
+This is particularly important:
+
+There is no OAuth connect/callback flow.
+The application uses a manually supplied GOOGLE_REFRESH_TOKEN.
+The documentation explicitly says no encrypted token storage or OAuth flow is included.
+Google sync is gated behind environment variables.
+The migration adds metadata, not secure OAuth credential storage.
+
+This can still be a valid optional integration for the prototype, but we must describe it honestly. We should not claim that the previously approved encrypted OAuth architecture was implemented.
+3. Migration documentation needs updating
+docs/MIGRATION_INSTRUCTIONS.md describes the current migrations, but it doesn't explain the missing transactional booking safeguards. We should update it after resolving the implementation.
+
+Next: inspect the actual booking and Google code
+Please run these commands. They only read files; they will not modify anything.
+
+echo "===== BOOKING ACTIONS: CREATE ====="
+sed -n '1,220p' 'app/(dashboard)/calendar/actions.ts'
+
+echo "===== BOOKING ACTIONS: CANCEL AND RESCHEDULE ====="
+sed -n '450,730p' 'app/(dashboard)/calendar/actions.ts'
+echo "===== GOOGLE CALENDAR IMPLEMENTATION ====="
+cat lib/calendar/google.ts
+echo "===== GOOGLE CALENDAR DOCUMENTATION ====="
+cat docs/GOOGLE_CALENDAR.md
+
+I want to inspect the actual order of database operations, especially:
+
+Whether a slot is checked and reserved atomically.
+Whether cancellation releases the slot reliably.
+Whether rescheduling can leave two bookings or lose the original booking.
+Whether Google sync failures are handled without corrupting internal booking state.
+
+Current project status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed, unchanged
+
+
+Phase 5 email
+Implemented; automated tests pass
+
+
+Phase 6 conversations
+Implemented; automated tests pass
+
+
+Phase 7 internal calendar
+Implemented; concurrency needs verification
+
+
+Google Calendar
+Basic optional refresh-token integration; not OAuth flow
+
+
+Migrations
+Reviewed; not applied
+
+
+Automated tests
+127 passed
+
+
+TypeScript / lint / build
+Passed
+
+
+Git changes
+Preserved; not committed
+
+
+No migrations have been applied, and we won't apply them until this review is complete. After inspecting these files, we'll decide whether to strengthen the database transactions, retain the simpler Google integration with accurate documentation, or revise the implementation.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$
+echo "===== BOOKING ACTIONS: CREATE ====="
+sed -n '1,220p' 'app/(dashboard)/calendar/actions.ts'
+echo "===== BOOKING ACTIONS: CANCEL AND RESCHEDULE ====="
+sed -n '450,730p' 'app/(dashboard)/calendar/actions.ts'
+echo "===== GOOGLE CALENDAR IMPLEMENTATION ====="
+cat lib/calendar/google.ts
+echo "===== GOOGLE CALENDAR DOCUMENTATION ====="
+cat docs/GOOGLE_CALENDAR.md
+===== BOOKING ACTIONS: CREATE =====
+"use server";
+import { revalidatePath } from "next/cache";
+import { createClient } from "@/lib/supabase/server";
+import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { writeAudit } from "@/lib/server/audit";
+import { isSuppressed } from "@/lib/suppression";
+import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+import {
+  OCCUPYING_BOOKING_STATUSES,
+  validateBookingInput,
+  validateSlotInput,
+} from "@/lib/calendar/time";
+import {
+  deleteGoogleEvent,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+  type GoogleEventInput,
+} from "@/lib/calendar/google";
+export type CalendarActionResult = {
+  ok: boolean;
+  error?: string;
+  message?: string;
+  slotId?: string;
+  bookingId?: string;
+};
+type SlotRow = {
+  id: string;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  source: string;
+  is_available: boolean;
+};
+type BookingRow = {
+  id: string;
+  company_id: string | null;
+  conversation_id: string | null;
+  slot_id: string | null;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  status: string;
+  google_event_id: string | null;
+  calendar_sync_status: string;
+};
+function revalidateCalendar() {
+  revalidatePath("/calendar");
+  revalidatePath("/conversations");
+}
+async function loadSlot(
+  supabase: ServerSupabase,
+  slotId: string
+): Promise<{ slot?: SlotRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .select("id,start_time,end_time,timezone,source,is_available")
+    .eq("id", slotId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Slot not found." };
+  return { slot: data as SlotRow };
+}
+async function loadBooking(
+  supabase: ServerSupabase,
+  bookingId: string
+): Promise<{ booking?: BookingRow; error?: string }> {
+  const { data, error } = await supabase
+    .from("bookings")
+    .select(
+      "id,company_id,conversation_id,slot_id,prospect_name,prospect_email,timezone,status,google_event_id,calendar_sync_status"
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: "Booking not found." };
+  return { booking: data as BookingRow };
+}
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: Ledgerwise call: ${booking.prospect_name || booking.prospect_email},
+    description: [
+      Prospect: ${booking.prospect_name || "unknown"},
+      Email: ${booking.prospect_email},
+      Company: ${booking.company_id ?? "unknown"},
+      "Managed from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+async function recordGoogleSync(
+  supabase: ServerSupabase,
+  bookingId: string,
+  result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
+  deleted = false
+): Promise {
+  if (result.status === "not_configured") return;
+  if (result.status === "synced") {
+    await supabase
+      .from("bookings")
+      .update(
+        deleted
+          ? {
+              google_event_id: null,
+              calendar_sync_status: "deleted",
+              calendar_synced_at: new Date().toISOString(),
+            }
+          : {
+              ...(result.eventId ? { google_event_id: result.eventId } : {}),
+              calendar_sync_status: "synced",
+              calendar_synced_at: new Date().toISOString(),
+            }
+      )
+      .eq("id", bookingId);
+    return;
+  }
+  await supabase
+    .from("bookings")
+    .update({ calendar_sync_status: "failed" })
+    .eq("id", bookingId);
+}
+async function checkSuppressed(
+  supabase: ServerSupabase,
+  email: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    if (await isSuppressed(supabase, email)) {
+      return {
+        ok: false,
+        error: "This contact is on the permanent suppression list. A booking cannot be created or confirmed.",
+      };
+    }
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : "The suppression check failed. Apply the database migrations first.",
+    };
+  }
+}
+async function checkSlotFree(
+  supabase: ServerSupabase,
+  slot: SlotRow,
+  ignoreBookingId?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: overlappingSlots, error: slotError } = await supabase
+    .from("calendar_slots")
+    .select("id")
+    .lt("start_time", slot.end_time)
+    .gt("end_time", slot.start_time);
+  if (slotError) return { ok: false, error: slotError.message };
+  const slotIds = Array.from(
+    new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
+  );
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .in("slot_id", slotIds)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES]);
+  if (error) return { ok: false, error: error.message };
+  const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+  if (conflict) {
+    return { ok: false, error: "That time is already held by another booking." };
+  }
+  return { ok: true };
+}
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const validation = validateSlotInput(input);
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .insert({
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+      external_id: null,
+      is_available: true,
+      fetched_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      error:
+        error?.message ??
+        "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+    };
+  }
+===== BOOKING ACTIONS: CANCEL AND RESCHEDULE =====
+    return { ok: false, error: "Only a pending or needs-human booking can be confirmed." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "confirmed" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were confirming it. Refresh and try again.",
+    };
+  }
+  let syncNote = "";
+  let syncStatus = "not_attempted";
+  if (!booking.google_event_id && booking.slot_id) {
+    const loadedSlot = await loadSlot(supabase, booking.slot_id);
+    if (loadedSlot.slot) {
+      const google = await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+      syncStatus = google.status;
+      await recordGoogleSync(supabase, bookingId, google);
+      syncNote =
+        google.status === "synced"
+          ? " Google Calendar event created."
+          : google.status === "failed"
+            ? " Google Calendar sync failed; the internal booking is still confirmed."
+            : "";
+    }
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_confirmed",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      previous_status: booking.status,
+      slot_id: booking.slot_id,
+      google_sync_status: booking.google_event_id ? "already_linked" : syncStatus,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, bookingId, message: Booking confirmed.${syncNote} };
+}
+export async function cancelBooking(
+  bookingId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) return { ok: false, error: "A cancellation reason is required." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return { ok: false, error: "This booking is already cancelled or rescheduled." };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "cancelled" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were cancelling it. Refresh and try again.",
+    };
+  }
+  let syncNote = "";
+  if (booking.google_event_id) {
+    const google = await deleteGoogleEvent(booking.google_event_id);
+    if (google.status === "not_configured") {
+      await supabase
+        .from("bookings")
+        .update({ calendar_sync_status: "failed" })
+        .eq("id", bookingId);
+      syncNote =
+        " The internal booking is cancelled, but the Google event could not be removed because sync is not operational.";
+    } else {
+      await recordGoogleSync(supabase, bookingId, google, true);
+      syncNote =
+        google.status === "synced"
+          ? " The Google Calendar event was removed."
+          : " The internal booking is cancelled, but Google Calendar deletion failed.";
+    }
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_cancelled",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      previous_status: booking.status,
+      slot_id: booking.slot_id,
+      reason: cleanReason,
+      google_event_id: booking.google_event_id,
+    },
+  });
+  revalidateCalendar();
+  return {
+    ok: true,
+    bookingId,
+    message: Booking cancelled. The slot is free.${syncNote},
+  };
+}
+export async function rescheduleBooking(
+  bookingId: string,
+  newSlotId: string,
+  reason: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId) || !isUuid(newSlotId)) {
+    return { ok: false, error: "Invalid booking or slot ID." };
+  }
+  const cleanReason = trimText(reason, 500);
+  if (!cleanReason) return { ok: false, error: "A reschedule reason is required." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (
+    booking.status !== "pending" &&
+    booking.status !== "confirmed" &&
+    booking.status !== "needs_human"
+  ) {
+    return { ok: false, error: "Only an active booking can be rescheduled." };
+  }
+  if (booking.slot_id === newSlotId) {
+    return { ok: false, error: "Choose a different slot." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const loadedSlot = await loadSlot(supabase, newSlotId);
+  if (!loadedSlot.slot) return { ok: false, error: loadedSlot.error };
+  if (!loadedSlot.slot.is_available) {
+    return { ok: false, error: "The new slot is marked unavailable." };
+  }
+  if (Date.parse(loadedSlot.slot.end_time) <= Date.now()) {
+    return { ok: false, error: "The new slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, loadedSlot.slot, bookingId);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ slot_id: newSlotId, status: "pending" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error.message };
+  }
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The booking changed while you were rescheduling it. Refresh and try again.",
+    };
+  }
+  const google = booking.google_event_id
+    ? await updateGoogleEvent(
+        booking.google_event_id,
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      )
+    : await syncBookingToGoogle(
+        bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+      );
+  if (google.status === "not_configured" && booking.google_event_id) {
+    await supabase
+      .from("bookings")
+      .update({ calendar_sync_status: "failed" })
+      .eq("id", bookingId);
+  } else {
+    await recordGoogleSync(supabase, bookingId, google);
+  }
+  const syncNote =
+    google.status === "synced"
+      ? " Google Calendar was updated."
+      : google.status === "failed"
+        ? " Google Calendar sync failed; the internal booking is authoritative."
+        : booking.google_event_id
+          ? " The Google event was not updated because sync is not operational."
+          : "";
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_rescheduled",
+    entityType: "bookings",
+    entityId: bookingId,
+    detail: {
+      old_slot_id: booking.slot_id,
+      new_slot_id: newSlotId,
+      previous_status: booking.status,
+      reason: cleanReason,
+      google_sync: google.status,
+    },
+  });
+  revalidateCalendar();
+  return {
+    ok: true,
+    bookingId,
+    slotId: newSlotId,
+    message: Booking rescheduled. The old slot is free and the new slot is held.${syncNote},
+  };
+}===== GOOGLE CALENDAR IMPLEMENTATION =====
+type Env = Record<string, string | undefined>;
+type FetchLike = (input: string, init?: RequestInit) => Promise;
+export type GoogleCalendarStatus = {
+  configured: boolean;
+  verified: boolean;
+  syncEnabled: boolean;
+  operational: boolean;
+  reason: string;
+};
+export type GoogleEventInput = {
+  summary: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+export type GoogleSyncResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced"; eventId: string }
+  | { status: "failed"; error: string };
+export type GoogleMutationResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced" }
+  | { status: "failed"; error: string };
+const REQUIRED = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+] as const;
+export function googleCalendarStatus(env: Env = process.env): GoogleCalendarStatus {
+  const missing = REQUIRED.filter((key) => !env[key]);
+  const configured = missing.length === 0;
+  const verified = env.GOOGLE_CALENDAR_VERIFIED === "1";
+  const syncEnabled = env.GOOGLE_CALENDAR_SYNC === "1";
+  const operational = configured && verified && syncEnabled;
+  let reason: string;
+  if (!configured) {
+    reason = Not configured (missing ${missing.join(", ")}). The internal calendar is the source of truth.;
+  } else if (!verified) {
+    reason =
+      "Credentials are present, but Google Calendar has not been verified end-to-end. The internal calendar is the source of truth.";
+  } else if (!syncEnabled) {
+    reason =
+      "Google Calendar is verified but sync is disabled. Set GOOGLE_CALENDAR_SYNC=1 to enable it.";
+  } else {
+    reason = "Google Calendar sync is explicitly enabled and reported as verified.";
+  }
+  return { configured, verified, syncEnabled, operational, reason };
+}
+export function buildGoogleEvent(input: GoogleEventInput) {
+  return {
+    summary: input.summary,
+    description: input.description,
+    start: { dateTime: input.startTime, timeZone: input.timezone },
+    end: { dateTime: input.endTime, timeZone: input.timezone },
+  };
+}
+export async function getGoogleAccessToken(
+  env: Env = process.env,
+  fetchImpl: FetchLike = fetch
+): Promise {
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID ?? "",
+    client_secret: env.GOOGLE_CLIENT_SECRET ?? "",
+    refresh_token: env.GOOGLE_REFRESH_TOKEN ?? "",
+    grant_type: "refresh_token",
+  });
+  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    throw new Error(Google token request failed with HTTP ${response.status}.);
+  }
+  const data = (await response.json()) as { access_token?: string };
+  if (!data.access_token) throw new Error("Google did not return an access token.");
+  return data.access_token;
+}
+export async function syncBookingToGoogle(
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID!);
+    const response = await fetchImpl(
+      https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events,
+      {
+        method: "POST",
+        headers: {
+          Authorization: Bearer ${token},
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildGoogleEvent(input)),
+        signal: AbortSignal.timeout(20_000),
+      }
+    );
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event creation failed with HTTP ${response.status}.,
+      };
+    }
+    const data = (await response.json()) as { id?: string };
+    if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    return { status: "synced", eventId: data.id };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
+}
+function googleEventsUrl(env: Env, eventId?: string): string {
+  const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID ?? "");
+  const base = https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events;
+  return eventId ? ${base}/${encodeURIComponent(eventId)} : base;
+}
+async function googleMutation(
+  input: GoogleEventInput | null,
+  eventId: string,
+  method: "PATCH" | "DELETE",
+  env: Env,
+  deps: { fetch?: FetchLike }
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const response = await fetchImpl(googleEventsUrl(env, eventId), {
+      method,
+      headers: {
+        Authorization: Bearer ${token},
+        ...(method === "PATCH" ? { "Content-Type": "application/json" } : {}),
+      },
+      body:
+        method === "PATCH" && input
+          ? JSON.stringify(buildGoogleEvent(input))
+          : undefined,
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (method === "DELETE" && (response.status === 404 || response.status === 410)) {
+      return { status: "synced" };
+    }
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event ${method === "PATCH" ? "update" : "deletion"} failed with HTTP ${response.status}.,
+      };
+    }
+    if (method === "PATCH") {
+      const data = (await response.json()) as { id?: string };
+      if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    }
+    return { status: "synced" };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
+}
+export async function updateGoogleEvent(
+  eventId: string,
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  return googleMutation(input, eventId, "PATCH", env, deps);
+}
+export async function deleteGoogleEvent(
+  eventId: string,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  return googleMutation(null, eventId, "DELETE", env, deps);
+}
+===== GOOGLE CALENDAR DOCUMENTATION =====
+Optional Google Calendar
+The prototype does not depend on Google Calendar. Internal slots and bookings
+work with no Google credentials.
+Status shown in the app
+The Calendar page calls googleCalendarStatus() and reports one of these states:
+
+credentials missing → not configured;
+credentials present but GOOGLE_CALENDAR_VERIFIED is not 1 → not verified;
+verified but GOOGLE_CALENDAR_SYNC is not 1 → sync disabled;
+all three conditions met → sync enabled and reported as verified by the operator.
+
+Do not describe Google Calendar as operational until a real OAuth connection,
+event creation, and an external check have been performed.
+Optional environment variables
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
+GOOGLE_CALENDAR_ID=
+GOOGLE_CALENDAR_VERIFIED=0
+GOOGLE_CALENDAR_SYNC=0
+
+Set GOOGLE_CALENDAR_VERIFIED=1 only after you have tested OAuth, event
+creation, update, and deletion externally. Set GOOGLE_CALENDAR_SYNC=1 only when
+you want booking changes to sync to Google.
+What sync does
+When both flags are enabled:
+
+bookSlot calls syncBookingToGoogle() to create an event and store
+google_event_id, calendar_sync_status, and calendar_synced_at;
+rescheduleBooking calls updateGoogleEvent() for the linked event (or tries
+to create one if the earlier creation failed);
+cancelBooking calls deleteGoogleEvent() and records
+calendar_sync_status = 'deleted';
+confirmBooking retries event creation when a pending booking has no linked
+event yet.
+
+Each call exchanges the refresh token for an access token first. A Google 404
+or 410 during deletion is treated as success because the event is already gone.
+If sync fails, the internal booking remains. The booking is not rolled back. The
+sync status is marked failed and the booking continues to work internally. The
+internal calendar is always authoritative.
+Limits
+
+No OAuth connect/callback flow is included. Use a refresh token you created
+yourself.
+A reschedule requires an existing linked event or a successful create attempt;
+if Google sync is disabled, the internal booking still changes and the app
+reports that the external event was not updated.
+Apply migration 03 before enabling sync. The migration adds the deleted
+sync status and is safe to re-run.
+
+
+
+ChatGPT:
+This confirms that we need to strengthen the calendar implementation before applying the migrations. I found a more serious issue than the missing RPC functions: the current availability check can be bypassed by concurrent requests, even if migration 02 is applied.
+Let's separate what is already working from what still needs fixing.
+1. Internal booking: concurrency weakness confirmed
+In checkSlotFree(), the application:
+
+Queries overlapping calendar slots.
+Checks whether any of those slots have active bookings.
+Returns whether the requested time appears free.
+
+The booking action then performs a separate database update.
+Those operations are not one transaction. Two requests can both check the same availability before either writes its booking.
+Migration 02's unique index only prevents two active bookings from using the same slot_id. It does not prevent bookings on two different slot records whose time ranges overlap.
+There is another weakness: checking is_available before the booking write does not guarantee that the slot remains available when the write happens.
+Conclusion: we need database-level transactional booking operations, with conflict checks covering overlapping time ranges, not just identical slot IDs.
+2. Cancellation and rescheduling
+There are some good safeguards already:
+
+Cancellation checks the previous status before updating.
+Rescheduling checks the previous status before updating.
+The booking's slot and status are changed together in one database update.
+Google sync happens after the internal booking operation.
+
+However, rescheduling still relies on a non-atomic availability check. It also needs to coordinate overlapping slots and concurrent changes.
+3. Google Calendar: actual implementation clarified
+The code confirms this is a manual refresh-token integration, not the OAuth integration we originally planned.
+It does:
+
+Exchange a configured refresh token for an access token.
+Create, update and delete Google Calendar events.
+Keep internal bookings authoritative when external sync fails.
+Track sync status in the database.
+
+It does not:
+
+Provide an OAuth connect/callback flow.
+Encrypt and store refresh tokens in Supabase.
+Implement the originally planned per-user OAuth credential model.
+
+I also spotted a reliability issue: recordGoogleSync() does not check whether its database update failed. An external Google event could be created successfully while the corresponding event ID fails to persist, potentially causing duplicate events on a later retry.
+We should address that rather than treating the sync as reliable merely because the API request succeeded.
+
+
+ChatGPT:
+This confirms that we need to strengthen the calendar implementation before applying the migrations. I found a more serious issue than the missing RPC functions: the current availability check can be bypassed by concurrent requests, even if migration 02 is applied.
+Let's separate what is already working from what still needs fixing.
+1. Internal booking: concurrency weakness confirmed
+In checkSlotFree(), the application:
+
+Queries overlapping calendar slots.
+Checks whether any of those slots have active bookings.
+Returns whether the requested time appears free.
+
+The booking action then performs a separate database update.
+Those operations are not one transaction. Two requests can both check the same availability before either writes its booking.
+Migration 02's unique index only prevents two active bookings from using the same slot_id. It does not prevent bookings on two different slot records whose time ranges overlap.
+There is another weakness: checking is_available before the booking write does not guarantee that the slot remains available when the write happens.
+Conclusion: we need database-level transactional booking operations, with conflict checks covering overlapping time ranges, not just identical slot IDs.
+2. Cancellation and rescheduling
+There are some good safeguards already:
+
+Cancellation checks the previous status before updating.
+Rescheduling checks the previous status before updating.
+The booking's slot and status are changed together in one database update.
+Google sync happens after the internal booking operation.
+
+However, rescheduling still relies on a non-atomic availability check. It also needs to coordinate overlapping slots and concurrent changes.
+3. Google Calendar: actual implementation clarified
+The code confirms this is a manual refresh-token integration, not the OAuth integration we originally planned.
+It does:
+
+Exchange a configured refresh token for an access token.
+Create, update and delete Google Calendar events.
+Keep internal bookings authoritative when external sync fails.
+Track sync status in the database.
+
+It does not:
+
+Provide an OAuth connect/callback flow.
+Encrypt and store refresh tokens in Supabase.
+Implement the originally planned per-user OAuth credential model.
+
+I also spotted a reliability issue: recordGoogleSync() does not check whether its database update failed. An external Google event could be created successfully while the corresponding event ID fails to persist, potentially causing duplicate events on a later retry.
+We should address that rather than treating the sync as reliable merely because the API request succeeded.
+4. One more inspection before we design the fix
+The output omitted the middle of actions.ts, including the complete booking-creation flow. I don't want to prescribe a database transaction without first seeing exactly how the current code creates and confirms bookings.
+Please run:
+
+echo "===== BOOKING CREATION AND CONFIRMATION ====="
+sed -n '180,470p' 'app/(dashboard)/calendar/actions.ts'
+
+echo "===== CALENDAR TIME VALIDATION ====="
+cat lib/calendar/time.ts
+echo "===== GOOGLE CALENDAR TESTS ====="
+cat tests/google-calendar.test.ts
+
+Then we'll have enough information to prepare a targeted correction.
+Updated project status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4
+Research postponed
+
+
+Phase 5
+Email workflow implemented
+
+
+Phase 6
+Conversation workflow implemented
+
+
+Phase 7
+Calendar implemented; concurrency hardening required
+
+
+Google Calendar
+Manual refresh-token sync; no in-app OAuth
+
+
+Migration 01
+Reviewed; further security checks needed
+
+
+Migration 02
+Needs transactional booking safeguards
+
+
+Migration 03
+Metadata migration; matches current manual-token approach
+
+
+Tests
+127 passed
+
+
+TypeScript, lint, build
+Passed
+
+
+Supabase migrations
+Not applied
+
+
+Git changes
+Preserved; no commit or push
+
+
+Important: we are reviewing and correcting the existing implementation, not starting over. We will preserve the research-agent work and all other uncommitted changes.
+
+
+ChatGPT:
+4. One more inspection before we design the fix
+The output omitted the middle of actions.ts, including the complete booking-creation flow. I don't want to prescribe a database transaction without first seeing exactly how the current code creates and confirms bookings.
+Please run:
+
+echo "===== BOOKING CREATION AND CONFIRMATION ====="
+sed -n '180,470p' 'app/(dashboard)/calendar/actions.ts'
+
+echo "===== CALENDAR TIME VALIDATION ====="
+cat lib/calendar/time.ts
+echo "===== GOOGLE CALENDAR TESTS ====="
+cat tests/google-calendar.test.ts
+
+Then we'll have enough information to prepare a targeted correction.
+Updated project status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4
+Research postponed
+
+
+Phase 5
+Email workflow implemented
+
+
+Phase 6
+Conversation workflow implemented
+
+
+Phase 7
+Calendar implemented; concurrency hardening required
+
+
+Google Calendar
+Manual refresh-token sync; no in-app OAuth
+
+
+Migration 01
+Reviewed; further security checks needed
+
+
+Migration 02
+Needs transactional booking safeguards
+
+
+Migration 03
+Metadata migration; matches current manual-token approach
+
+
+Tests
+127 passed
+
+
+TypeScript, lint, build
+Passed
+
+
+Supabase migrations
+Not applied
+
+
+Git changes
+Preserved; no commit or push
+
+
+Important: we are reviewing and correcting the existing implementation, not starting over. We will preserve the research-agent work and all other uncommitted changes.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$
+echo "===== BOOKING CREATION AND CONFIRMATION ====="
+sed -n '180,470p' 'app/(dashboard)/calendar/actions.ts'
+echo "===== CALENDAR TIME VALIDATION ====="
+cat lib/calendar/time.ts
+echo "===== GOOGLE CALENDAR TESTS ====="
+cat tests/google-calendar.test.ts
+===== BOOKING CREATION AND CONFIRMATION =====
+  if (error) return { ok: false, error: error.message };
+  const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+  if (conflict) {
+    return { ok: false, error: "That time is already held by another booking." };
+  }
+  return { ok: true };
+}
+export async function createSlot(input: {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  const validation = validateSlotInput(input);
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const { data, error } = await supabase
+    .from("calendar_slots")
+    .insert({
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+      external_id: null,
+      is_available: true,
+      fetched_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (error || !data) {
+    return {
+      ok: false,
+      error:
+        error?.message ??
+        "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+    };
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_created",
+    entityType: "calendar_slots",
+    entityId: data.id,
+    detail: {
+      start_time: input.startTime,
+      end_time: input.endTime,
+      timezone: input.timezone,
+      source: "internal",
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId: data.id, message: "Internal slot created." };
+}
+export async function deleteSlot(slotId: string): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
+  const loaded = await loadSlot(supabase, slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { data: active, error } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("slot_id", slotId)
+    .in("status", [...OCCUPYING_BOOKING_STATUSES])
+    .limit(1);
+  if (error) return { ok: false, error: error.message };
+  if ((active ?? []).length > 0) {
+    return {
+      ok: false,
+      error: "Cancel or reschedule the active booking before deleting this slot.",
+    };
+  }
+  const { error: deleteError } = await supabase
+    .from("calendar_slots")
+    .delete()
+    .eq("id", slotId);
+  if (deleteError) return { ok: false, error: deleteError.message };
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "calendar_slot_deleted",
+    entityType: "calendar_slots",
+    entityId: slotId,
+    detail: {
+      start_time: loaded.slot.start_time,
+      end_time: loaded.slot.end_time,
+    },
+  });
+  revalidateCalendar();
+  return { ok: true, slotId, message: "Slot deleted." };
+}
+export async function bookSlot(input: {
+  slotId: string;
+  companyId?: string | null;
+  conversationId?: string | null;
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+  let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
+  const conversationId =
+    input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+  let prospectName = input.prospectName;
+  let prospectEmail = normalizeEmail(input.prospectEmail);
+  if (conversationId) {
+    const { data: conversation } = await supabase
+      .from("conversations")
+      .select("id,company_id,contact_email,status")
+      .eq("id", conversationId)
+      .maybeSingle();
+    if (!conversation) return { ok: false, error: "Conversation not found." };
+    if (conversation.status === "suppressed") {
+      return {
+        ok: false,
+        error: "This contact is suppressed. A booking cannot be created.",
+      };
+    }
+    companyId = companyId ?? conversation.company_id;
+    if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
+  }
+  if (companyId) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("name,contact_name,contact_email")
+      .eq("id", companyId)
+      .maybeSingle();
+    if (company) {
+      if (!prospectName.trim() && company.contact_name !== "unknown") {
+        prospectName = company.contact_name;
+      }
+      if (!prospectEmail && company.contact_email) {
+        prospectEmail = normalizeEmail(company.contact_email);
+      }
+    }
+  }
+  if (!isValidEmail(prospectEmail)) {
+    return { ok: false, error: "A valid prospect email is required." };
+  }
+  const suppression = await checkSuppressed(supabase, prospectEmail);
+  if (!suppression.ok) return { ok: false, error: suppression.error };
+  const cleanProspectName = trimText(prospectName, 200);
+  if (!cleanProspectName) {
+    return { ok: false, error: "A prospect name is required." };
+  }
+  const validation = validateBookingInput({
+    prospectName: cleanProspectName,
+    prospectEmail,
+    timezone: input.timezone,
+  });
+  if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+  const loaded = await loadSlot(supabase, input.slotId);
+  if (!loaded.slot) return { ok: false, error: loaded.error };
+  const { slot } = loaded;
+  if (!slot.is_available) {
+    return { ok: false, error: "That slot is marked unavailable." };
+  }
+  if (Date.parse(slot.end_time) <= Date.now()) {
+    return { ok: false, error: "That slot is in the past." };
+  }
+  const free = await checkSlotFree(supabase, slot);
+  if (!free.ok) return { ok: false, error: free.error };
+  const { data: inserted, error } = await supabase
+    .from("bookings")
+    .insert({
+      company_id: companyId,
+      conversation_id: conversationId,
+      slot_id: input.slotId,
+      prospect_name: cleanProspectName,
+      prospect_email: prospectEmail,
+      timezone: input.timezone,
+      status: "pending",
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) {
+    if (error?.code === "23505") {
+      return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+    }
+    return { ok: false, error: error?.message ?? "The booking could not be created." };
+  }
+  if (conversationId) {
+    await supabase
+      .from("conversations")
+      .update({ status: "human_takeover", booking_request: false })
+      .eq("id", conversationId);
+  }
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "booking_created",
+    entityType: "bookings",
+    entityId: inserted.id,
+    detail: {
+      slot_id: input.slotId,
+      company_id: companyId,
+      conversation_id: conversationId,
+      prospect_email: prospectEmail,
+      status: "pending",
+    },
+  });
+  const google = await syncBookingToGoogle({
+    summary: Ledgerwise call: ${cleanProspectName},
+    description: [
+      Prospect: ${cleanProspectName},
+      Email: ${prospectEmail},
+      Company: ${companyId ?? "unknown"},
+      "Created from the Ledgerwise prototype.",
+    ].join("\n"),
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone: slot.timezone,
+  });
+  await recordGoogleSync(supabase, inserted.id, google);
+  revalidateCalendar();
+  revalidatePath(/conversations/${conversationId ?? ""});
+  return {
+    ok: true,
+    bookingId: inserted.id,
+    slotId: input.slotId,
+    message:
+      google.status === "synced"
+        ? "Booking created and synced to Google Calendar."
+        : google.status === "failed"
+          ? "Booking created on the internal calendar. Google Calendar sync failed."
+          : "Booking created on the internal calendar.",
+  };
+}
+export async function confirmBooking(
+  bookingId: string
+): Promise {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
+  const loaded = await loadBooking(supabase, bookingId);
+  if (!loaded.booking) return { ok: false, error: loaded.error };
+  const { booking } = loaded;
+  if (booking.status !== "pending" && booking.status !== "needs_human") {
+    return { ok: false, error: "Only a pending or needs-human booking can be confirmed." };
+  }
+  const suppression = await checkSuppressed(supabase, booking.prospect_email);
+  if (!suppression.ok) {
+    return {
+      ok: false,
+      error: ${suppression.error} Cancel the booking instead.,
+    };
+  }
+  const { data: updated, error } = await supabase
+    .from("bookings")
+    .update({ status: "confirmed" })
+    .eq("id", bookingId)
+    .eq("status", booking.status)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!updated) {
+    return {
+      ok: false,
+===== CALENDAR TIME VALIDATION =====
+export const DEFAULT_TIMEZONE = "America/New_York";
+export const MIN_SLOT_MINUTES = 15;
+export const MAX_SLOT_MINUTES = 120;
+export const DEFAULT_SLOT_MINUTES = 30;
+export const WORK_START_HOUR = 9;
+export const WORK_END_HOUR = 17;
+export const TIMEZONE_OPTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "UTC",
+  "Europe/London",
+] as const;
+export const OCCUPYING_BOOKING_STATUSES = [
+  "pending",
+  "confirmed",
+  "needs_human",
+] as const;
+export type OccupyingBookingStatus = (typeof OCCUPYING_BOOKING_STATUSES)[number];
+export function isOccupyingBooking(status: string): status is OccupyingBookingStatus {
+  return (OCCUPYING_BOOKING_STATUSES as readonly string[]).includes(status);
+}
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+type LocalParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+};
+function localParts(date: Date, timeZone: string): LocalParts {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const map: Record<string, string> = {};
+  for (const part of parts) {
+    if (part.type !== "literal") map[part.type] = part.value;
+  }
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+  };
+}
+export function localDateKey(date: Date, timeZone: string): string {
+  const p = localParts(date, timeZone);
+  return ${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")};
+}
+export function localMinutes(date: Date, timeZone: string): number {
+  const p = localParts(date, timeZone);
+  return p.hour * 60 + p.minute;
+}
+export function formatSlotRange(
+  startIso: string,
+  endIso: string,
+  timeZone: string
+): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return ${startIso} – ${endIso};
+  }
+  const date = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(start);
+  const time = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return ${date}, ${time.format(start)} – ${time.format(end)} (${timeZone});
+}
+export function slotDurationMinutes(startIso: string, endIso: string): number | null {
+  const start = Date.parse(startIso);
+  const end = Date.parse(endIso);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return Math.round((end - start) / 60_000);
+}
+export type SlotInput = {
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+function offsetMs(date: Date, timeZone: string): number {
+  const p = localParts(date, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
+  return asUtc - date.getTime();
+}
+// Converts a datetime-local value such as 2026-11-15T09:00 into a UTC instant
+// interpreted in the chosen IANA timezone.
+export function zonedDateTimeToIso(
+  localDateTime: string,
+  timeZone: string
+): string | null {
+  if (!isValidTimeZone(timeZone)) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(localDateTime);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const desired = Date.UTC(year, month - 1, day, hour, minute);
+  let guess = new Date(desired);
+  for (let i = 0; i < 3; i++) {
+    guess = new Date(desired - offsetMs(guess, timeZone));
+  }
+  return Number.isNaN(guess.getTime()) ? null : guess.toISOString();
+}
+export function defaultLocalSlot(date: Date = new Date()): {
+  start: string;
+  end: string;
+} {
+  const next = new Date(date.getTime() + 24 * 60 * 60 * 1_000);
+  const y = next.getFullYear();
+  const m = String(next.getMonth() + 1).padStart(2, "0");
+  const d = String(next.getDate()).padStart(2, "0");
+  return { start: ${y}-${m}-${d}T09:00, end: ${y}-${m}-${d}T09:30 };
+}
+export type ValidationResult = { ok: boolean; errors: string[] };
+export function validateSlotInput(
+  input: SlotInput,
+  now: Date = new Date()
+): ValidationResult {
+  const errors: string[] = [];
+  const start = Date.parse(input.startTime);
+  const end = Date.parse(input.endTime);
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return { ok: false, errors: ["Start and end must be valid date-times."] };
+  }
+  if (!isValidTimeZone(input.timezone)) {
+    errors.push("Choose a valid IANA timezone.");
+    return { ok: false, errors };
+  }
+  if (end <= start) errors.push("The end time must be after the start time.");
+  const duration = Math.round((end - start) / 60_000);
+  if (duration < MIN_SLOT_MINUTES || duration > MAX_SLOT_MINUTES) {
+    errors.push(
+      Slot length must be between ${MIN_SLOT_MINUTES} and ${MAX_SLOT_MINUTES} minutes.
+    );
+  }
+  if (start <= now.getTime()) errors.push("The slot must start in the future.");
+  const startDate = localDateKey(new Date(start), input.timezone);
+  const endDate = localDateKey(new Date(end), input.timezone);
+  if (startDate !== endDate) {
+    errors.push("A slot must start and end on the same local day.");
+  }
+  const startMinutes = localMinutes(new Date(start), input.timezone);
+  const endMinutes = localMinutes(new Date(end), input.timezone);
+  if (startMinutes < WORK_START_HOUR * 60 || endMinutes > WORK_END_HOUR * 60) {
+    errors.push(
+      Slots must fit between ${WORK_START_HOUR}:00 and ${WORK_END_HOUR}:00 local time.
+    );
+  }
+  return { ok: errors.length === 0, errors };
+}
+export function validateBookingInput(input: {
+  prospectName: string;
+  prospectEmail: string;
+  timezone: string;
+}): ValidationResult {
+  const errors: string[] = [];
+  if (!input.prospectName.trim()) errors.push("A prospect name is required.");
+  if (!/^\S+@\S+.\S+$/.test(input.prospectEmail.trim())) {
+    errors.push("A valid prospect email is required.");
+  }
+  if (!isValidTimeZone(input.timezone)) errors.push("Choose a valid IANA timezone.");
+  return { ok: errors.length === 0, errors };
+}
+export function activeBookingForSlot<T extends { slot_id: string | null; status: string }>(
+  bookings: T[],
+  slotId: string
+): T | null {
+  return (
+    bookings.find(
+      (booking) =>
+        booking.slot_id === slotId && isOccupyingBooking(booking.status)
+    ) ?? null
+  );
+}
+export function canDeleteSlot(
+  bookings: { slot_id: string | null; status: string }[],
+  slotId: string
+): boolean {
+  return activeBookingForSlot(bookings, slotId) === null;
+}===== GOOGLE CALENDAR TESTS =====
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  buildGoogleEvent,
+  deleteGoogleEvent,
+  getGoogleAccessToken,
+  googleCalendarStatus,
+  syncBookingToGoogle,
+  updateGoogleEvent,
+} from "../lib/calendar/google";
+const configuredEnv = {
+  GOOGLE_CLIENT_ID: "client-id",
+  GOOGLE_CLIENT_SECRET: "client-secret",
+  GOOGLE_REFRESH_TOKEN: "refresh-token",
+  GOOGLE_CALENDAR_ID: "calendar@example.com",
+};
+const eventInput = {
+  summary: "Ledgerwise call: Jane Doe",
+  description: "Prospect: Jane Doe",
+  startTime: "2026-11-15T14:00:00.000Z",
+  endTime: "2026-11-15T14:30:00.000Z",
+  timezone: "America/New_York",
+};
+test("Google status never claims operational without explicit verification", () => {
+  const missing = googleCalendarStatus({});
+  assert.equal(missing.configured, false);
+  assert.equal(missing.operational, false);
+  assert.match(missing.reason, /internal calendar/i);
+  const unverified = googleCalendarStatus(configuredEnv);
+  assert.equal(unverified.configured, true);
+  assert.equal(unverified.verified, false);
+  assert.equal(unverified.operational, false);
+  const disabled = googleCalendarStatus({
+    ...configuredEnv,
+    GOOGLE_CALENDAR_VERIFIED: "1",
+  });
+  assert.equal(disabled.operational, false);
+  assert.match(disabled.reason, /sync is disabled/);
+  const enabled = googleCalendarStatus({
+    ...configuredEnv,
+    GOOGLE_CALENDAR_VERIFIED: "1",
+    GOOGLE_CALENDAR_SYNC: "1",
+  });
+  assert.equal(enabled.operational, true);
+});
+test("sync is a no-op unless explicitly enabled", async () => {
+  let calls = 0;
+  const result = await syncBookingToGoogle(eventInput, {}, {
+    fetch: async () => {
+      calls++;
+      return new Response("{}");
+    },
+  });
+  assert.equal(result.status, "not_configured");
+  assert.equal(calls, 0);
+});
+test("access token exchange sends a refresh-token grant", async () => {
+  let body: BodyInit | null | undefined;
+  const token = await getGoogleAccessToken(configuredEnv, async (_url, init) => {
+    body = init?.body;
+    return new Response(JSON.stringify({ access_token: "token-1" }), { status: 200 });
+  });
+  assert.equal(token, "token-1");
+  assert.match(String(body), /grant_type=refresh_token/);
+});
+test("sync creates a Google event and returns its id", async () => {
+  const requests: string[] = [];
+  const result = await syncBookingToGoogle(
+    eventInput,
+    {
+      ...configuredEnv,
+      GOOGLE_CALENDAR_VERIFIED: "1",
+      GOOGLE_CALENDAR_SYNC: "1",
+    },
+    {
+      fetch: async (url, init) => {
+        requests.push(url);
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify({ access_token: "token-1" }), {
+            status: 200,
+          });
+        }
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.summary, eventInput.summary);
+        assert.equal(body.start.timeZone, "America/New_York");
+        return new Response(JSON.stringify({ id: "event-1" }), { status: 200 });
+      },
+    }
+  );
+  assert.deepEqual(result, { status: "synced", eventId: "event-1" });
+  assert.equal(requests.length, 2);
+  assert.match(requests[1], /calendars/calendar%40example.com/events/);
+});
+test("Google HTTP failures are reported without claiming success", async () => {
+  const result = await syncBookingToGoogle(
+    eventInput,
+    {
+      ...configuredEnv,
+      GOOGLE_CALENDAR_VERIFIED: "1",
+      GOOGLE_CALENDAR_SYNC: "1",
+    },
+    {
+      fetch: async (url) => {
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify({ access_token: "token-1" }), {
+            status: 200,
+          });
+        }
+        return new Response("nope", { status: 500 });
+      },
+    }
+  );
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.match(result.error, /HTTP 500/);
+  }
+});
+test("buildGoogleEvent uses the slot times and timezone", () => {
+  const event = buildGoogleEvent(eventInput);
+  assert.equal(event.start.dateTime, eventInput.startTime);
+  assert.equal(event.end.timeZone, "America/New_York");
+});
+test("events can be updated with PATCH using the new slot details", async () => {
+  const requests: { url: string; init?: RequestInit }[] = [];
+  const result = await updateGoogleEvent(
+    "event-1",
+    { ...eventInput, startTime: "2026-11-16T15:00:00.000Z" },
+    {
+      ...configuredEnv,
+      GOOGLE_CALENDAR_VERIFIED: "1",
+      GOOGLE_CALENDAR_SYNC: "1",
+    },
+    {
+      fetch: async (url, init) => {
+        requests.push({ url, init });
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify({ access_token: "token-1" }), {
+            status: 200,
+          });
+        }
+        const body = JSON.parse(String(init?.body));
+        assert.equal(body.start.dateTime, "2026-11-16T15:00:00.000Z");
+        return new Response(JSON.stringify({ id: "event-1" }), { status: 200 });
+      },
+    }
+  );
+  assert.deepEqual(result, { status: "synced" });
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].init?.method, "PATCH");
+  assert.match(requests[1].url, /events/event-1$/);
+});
+test("deletion treats an already-removed event as success", async () => {
+  const result = await deleteGoogleEvent(
+    "event-1",
+    {
+      ...configuredEnv,
+      GOOGLE_CALENDAR_VERIFIED: "1",
+      GOOGLE_CALENDAR_SYNC: "1",
+    },
+    {
+      fetch: async (url, init) => {
+        if (url.includes("oauth2.googleapis.com")) {
+          return new Response(JSON.stringify({ access_token: "token-1" }), {
+            status: 200,
+          });
+        }
+        assert.equal(init?.method, "DELETE");
+        return new Response(null, { status: 404 });
+      },
+    }
+  );
+  assert.deepEqual(result, { status: "synced" });
+});
+test("update and delete are no-ops unless sync is enabled", async () => {
+  let calls = 0;
+  const fetch = async () => {
+    calls++;
+    return new Response("{}");
+  };
+  assert.equal(
+    (await updateGoogleEvent("event-1", eventInput, {}, { fetch })).status,
+    "not_configured"
+  );
+  assert.equal(
+    (await deleteGoogleEvent("event-1", {}, { fetch })).status,
+    "not_configured"
+  );
+  assert.equal(calls, 0);
+});
+
+
+ChatGPT:
+Excellent. We now have enough evidence to define the corrections. The main issue is not the calendar UI or the time-validation tests; it is ensuring that the database enforces the same rules as the application.
+1. Findings from the latest inspection
+A. Booking creation is vulnerable to race conditions
+The current sequence in bookSlot() is:
+
+Load the slot.
+Check is_available.
+Query overlapping slots.
+Check active bookings.
+Insert a booking.
+Update the conversation.
+Write the audit event.
+Synchronize Google Calendar.
+
+Steps 1–5 are separate database operations. Two requests can pass the availability checks simultaneously.
+There is also a consistency issue: booking insertion, conversation takeover, and audit logging are separate operations. A failure partway through can leave only some of those changes persisted.
+B. Rescheduling has the same concurrency problem
+rescheduleBooking() checks availability before updating the booking.
+The partial unique index protects against duplicate slot_id values, but two different slot records can represent overlapping times.
+We need to check actual time-range overlap inside a database transaction.
+C. Slot deletion has a race condition too
+deleteSlot() checks for active bookings and then separately deletes the slot.
+A booking could be created between those operations. A database-level deletion safeguard is needed.
+D. Google Calendar synchronization needs stronger failure handling
+I found two issues:
+
+recordGoogleSync() ignores errors from its Supabase updates.
+A Google event can be created successfully, but its event ID might not be saved. A later retry could create a duplicate event.
+
+There is also a possible race between cancellation and event creation: cancellation might happen before the event ID is saved, leaving an external event behind.
+E. Time-zone validation needs another correction
+zonedDateTimeToIso() iteratively calculates a UTC instant, but it does not verify that the resulting instant converts back to the requested local time.
+Consequently, daylight-saving transitions can produce ambiguous or nonexistent local times without being reliably rejected.
+This contradicts our original time-handling requirement.
+
+2. The corrections I recommend
+I would make the following changes, preserving the existing UI and application structure.
+
+
+
+Component
+Required correction
+
+
+
+Booking creation
+Transactional database operation
+
+
+Cancellation
+Transactional database operation
+
+
+Rescheduling
+Transactional operation with overlap checks
+
+
+Slot deletion
+Database-level active-booking protection
+
+
+Booking uniqueness
+Prevent overlapping active bookings, not just identical slot IDs
+
+
+Audit logging
+Include booking changes in the same transaction
+
+
+Conversation takeover
+Keep consistent with booking creation
+
+
+Google synchronization
+Check persistence errors and prevent duplicate event creation
+
+
+Time-zone conversion
+Reject ambiguous and nonexistent DST times
+
+
+Important implementation detail: the transaction must serialize competing booking operations, including operations involving different but overlapping slot records. Merely adding more indexes or repeating the availability check won't solve this.
+We should also prevent ordinary application requests from bypassing the transactional booking functions.
+3. Google Calendar: retain the simpler implementation for now?
+There are two possible approaches:
+
+Current approach: manually configured Google refresh token in environment variables. No OAuth interface or database token storage.
+Originally approved approach: OAuth connect/callback, encrypted token storage, server-side credential access and optional synchronization.
+
+My recommendation is to implement the originally approved OAuth architecture if we still intend to deliver the complete Phase 7 design. The current integration is a useful prototype, but it is not equivalent.
+We should not silently downgrade the approved scope and then describe the feature as complete.
+4. Implementation sequence
+I'd use this order:
+
+Correct DST conversion and add regression tests.
+Implement transactional booking operations in migration 02.
+Update bookSlot, cancelBooking, rescheduleBooking, and deleteSlot to use those safeguards.
+Add concurrency and failure-handling tests.
+Harden Google synchronization and its persistence behavior.
+Implement the originally approved OAuth architecture, or explicitly revise that scope.
+Update migrations and documentation.
+Rerun all tests, TypeScript, lint and production build.
+Review the final SQL before you manually apply anything in Supabase.
+
+No dependencies are needed for the core transactional work.
+Current project status
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 internal calendar
+Needs database hardening
+
+
+Google Calendar
+Basic refresh-token integration; approved OAuth design incomplete
+
+
+Migration 01
+Review substantially complete
+
+
+Migration 02
+Requires transactional operations
+
+
+Migration 03
+Matches current metadata-based integration
+
+
+Automated tests
+127 passing before these corrections
+
+
+TypeScript / lint / build
+Previously passed
+
+
+Supabase
+No migrations applied
+
+
+Git
+All existing changes preserved
+
+
+One decision before we change the Google implementation: should we preserve the original approved OAuth design, including encrypted token storage and the connect/callback flow, rather than keeping the simpler manually configured refresh-token approach?
+
+
+You:
+Hmmmm for you suggestion, explain to me, what would be the pros and cons of each approached decision regarding the OAuth Design ?
+
+
+ChatGPT:
+The main decision is whether Google Calendar should be integrated through a proper OAuth connection flow (the architecture we originally approved), or through the manual refresh-token configuration that the current code implements.
+Both can work, but they solve different problems. The key distinction is who manages the Google credentials and how safely the app can connect to a calendar.
+1. Proper OAuth connection flow
+Original approved design
+The user connects their Google account through a familiar “Connect Google Calendar” button:
+
+Ledgerwise redirects the user to Google's authorization page.
+The user signs in and grants the requested calendar permissions.
+Google redirects back to Ledgerwise through an OAuth callback.
+Ledgerwise securely stores the resulting credentials.
+The application uses those credentials to read availability and create, update, or cancel calendar events.
+
+
+🖼️
+Generated image
+Google OAuth 2.0 authorization consent screen connect Google account calendar permissions illustration
+
+Pros
+
+Better user experience: no one needs to manually obtain or copy refresh tokens.
+More secure credential management: tokens can be encrypted at rest, stored server-side, and isolated by account.
+Supports multiple users: each team member can connect their own Google account, provided we implement the corresponding ownership and access controls.
+Revocable access: users can disconnect their Google account through the app or Google account settings.
+More maintainable: it follows Google's intended authorization workflow rather than relying on manually configured credentials.
+Better foundation for production: we can add calendar selection, token refresh, permission handling, and connection status.
+
+Cons
+
+More implementation work: OAuth start and callback routes, state validation, token exchange, error handling, and secure storage all need to be implemented.
+More security responsibilities: we must protect OAuth state, encrypt tokens, prevent unauthorized access, and handle token revocation.
+Google Cloud configuration: we need a configured OAuth client, authorized redirect URIs, and potentially Google's consent-screen verification depending on the scopes and distribution model.
+More testing: mocked tests alone aren't enough; we need to test the real connection and event lifecycle.
+Potentially more deployment configuration: production callback URLs and secrets must be configured correctly.
+
+
+
+ChatGPT:
+The main decision is whether Google Calendar should be integrated through a proper OAuth connection flow (the architecture we originally approved), or through the manual refresh-token configuration that the current code implements.
+Both can work, but they solve different problems. The key distinction is who manages the Google credentials and how safely the app can connect to a calendar.
+1. Proper OAuth connection flow
+Original approved design
+The user connects their Google account through a familiar “Connect Google Calendar” button:
+
+Ledgerwise redirects the user to Google's authorization page.
+The user signs in and grants the requested calendar permissions.
+Google redirects back to Ledgerwise through an OAuth callback.
+Ledgerwise securely stores the resulting credentials.
+The application uses those credentials to read availability and create, update, or cancel calendar events.
+
+
+🖼️
+Generated image
+Google OAuth 2.0 authorization consent screen connect Google account calendar permissions illustration
+
+Pros
+
+Better user experience: no one needs to manually obtain or copy refresh tokens.
+More secure credential management: tokens can be encrypted at rest, stored server-side, and isolated by account.
+Supports multiple users: each team member can connect their own Google account, provided we implement the corresponding ownership and access controls.
+Revocable access: users can disconnect their Google account through the app or Google account settings.
+More maintainable: it follows Google's intended authorization workflow rather than relying on manually configured credentials.
+Better foundation for production: we can add calendar selection, token refresh, permission handling, and connection status.
+
+Cons
+
+More implementation work: OAuth start and callback routes, state validation, token exchange, error handling, and secure storage all need to be implemented.
+More security responsibilities: we must protect OAuth state, encrypt tokens, prevent unauthorized access, and handle token revocation.
+Google Cloud configuration: we need a configured OAuth client, authorized redirect URIs, and potentially Google's consent-screen verification depending on the scopes and distribution model.
+More testing: mocked tests alone aren't enough; we need to test the real connection and event lifecycle.
+Potentially more deployment configuration: production callback URLs and secrets must be configured correctly.
+
+2. Manual refresh-token configuration
+What the current code implements
+An administrator creates a Google OAuth client and manually obtains a refresh token outside Ledgerwise. They then configure these environment variables:
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REFRESH_TOKEN=...
+GOOGLE_CALENDAR_ID=...
+
+Ledgerwise uses that refresh token to obtain access tokens and communicate with Google Calendar.
+Pros
+
+Simpler implementation: fewer application routes and less OAuth infrastructure.
+Faster to get running: one administrator can configure a Google account without building a connection interface.
+No token database required: credentials can remain in server-side environment variables.
+Suitable for a controlled demonstration: one preconfigured calendar can be enough to demonstrate event synchronization.
+Fewer moving parts: no per-user connection records or account-selection UI.
+
+Cons
+
+Poor user experience: someone must obtain and configure the refresh token manually.
+Limited scalability: the configuration naturally revolves around one Google account/calendar.
+Operational inconvenience: changing accounts or calendars requires changing environment variables and potentially redeploying.
+Credential risk: a refresh token stored in environment configuration is powerful and must be protected carefully.
+No proper account lifecycle: Ledgerwise doesn't provide a normal connect, disconnect, reconnect, or connection-management experience.
+Doesn't meet the original architecture: no encrypted per-user token storage, OAuth callback workflow, or per-user access controls.
+Availability limitations: the current implementation doesn't establish a complete Google Calendar free/busy workflow.
+
+3. Side-by-side comparison
+
+
+
+Consideration
+Proper OAuth
+Manual refresh token
+
+
+
+Initial development
+More work
+Less work
+
+
+User experience
+Excellent
+Technical/manual
+
+
+Credential management
+Encrypted database storage
+Environment variables
+
+
+Multiple accounts
+Supported with implementation
+Awkward
+
+
+Account disconnection
+Built-in workflow
+Manual configuration
+
+
+Calendar selection
+Can be implemented in UI
+Environment configuration
+
+
+Production scalability
+Better
+Limited
+
+
+Security architecture
+Stronger when correctly implemented
+Simpler, but concentrated credentials
+
+
+Demonstration speed
+Slower
+Faster
+
+
+Long-term maintainability
+Better
+More operational work
+
+
+4. What I recommend for Ledgerwise
+I'd preserve the proper OAuth architecture we originally approved.
+Here's why:
+Ledgerwise is supposed to demonstrate an AI SDR product, not merely a script that can create Google Calendar events. A proper connection flow demonstrates that the application can integrate with an external business service in a way that a real customer could use.
+It also gives us a much cleaner architecture:
+
+  **Recommended Google Calendar architecture**
+
+  
+    **Ledgerwise dashboard**
+
+<text color="secondary" size="xs">User clicks Connect Google Calendar</text>
+
+  
+  
+    
+  
+  
+    **Google OAuth authorization**
+
+<text color="secondary" size="xs">User grants calendar permissions</text>
+
+  
+  
+    
+  
+  
+    **Secure token storage**
+
+<text color="secondary" size="xs">Encrypted refresh tokens, server-side only</text>
+
+  
+  
+    
+  
+  
+    **Calendar integration service**
+
+<text color="secondary" size="xs">Availability checks and event synchronization</text>
+
+  
+  
+    
+  
+  
+    **Ledgerwise internal calendar**
+
+<text color="secondary" size="xs">Booking remains authoritative; Google mirrors its events</text>
+
+  
+
+
+I'd also preserve an important design decision: the internal Ledgerwise calendar must continue working even when Google Calendar is disconnected or unavailable. Google should be optional, not a dependency for booking.
+One important nuance
+OAuth by itself doesn't make calendar synchronization reliable. We should also implement:
+
+Free/busy checks before offering external calendar availability.
+Deterministic event IDs or another idempotency strategy.
+Retry and reconciliation for failed synchronization.
+Protection against duplicate or orphaned events.
+Secure token encryption and account-level access restrictions.
+
+These are separate engineering requirements, not automatic benefits of OAuth.
+5. My proposed decision
+I recommend:
+
+Keep the original proper OAuth design.
+Do not treat the current manual refresh-token implementation as the finished Google integration.
+Keep Google Calendar optional.
+Finish the database-side transactional booking protections first.
+Implement OAuth and synchronization after the internal booking system is reliable.
+
+The manual implementation isn't useless. Its API request code and mocked tests may be reusable, but its credential architecture should not dictate the final design.
+
+Ledgerwise project status
+
+
+
+Area
+Current status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated sending only
+
+
+Phase 6 conversations
+Implemented; no real email provider
+
+
+Phase 7 internal calendar
+Implemented, but transactional concurrency protections need correction
+
+
+Google Calendar
+Manual refresh-token prototype; proper OAuth not implemented
+
+
+Database migrations
+Written, unapplied, awaiting SQL review
+
+
+Automated verification
+127 tests passed; TypeScript, lint, build and diff checks clean
+
+
+Git / deployment
+Changes preserved; no commit, push or deployment
+
+
+My recommendation is to stick with the original OAuth scope, rather than quietly reducing it to manual token configuration. We can take the extra implementation time and build the integration properly.
+
+
+ChatGPT:
+2. Manual refresh-token configuration
+What the current code implements
+An administrator creates a Google OAuth client and manually obtains a refresh token outside Ledgerwise. They then configure these environment variables:
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_REFRESH_TOKEN=...
+GOOGLE_CALENDAR_ID=...
+
+Ledgerwise uses that refresh token to obtain access tokens and communicate with Google Calendar.
+Pros
+
+Simpler implementation: fewer application routes and less OAuth infrastructure.
+Faster to get running: one administrator can configure a Google account without building a connection interface.
+No token database required: credentials can remain in server-side environment variables.
+Suitable for a controlled demonstration: one preconfigured calendar can be enough to demonstrate event synchronization.
+Fewer moving parts: no per-user connection records or account-selection UI.
+
+Cons
+
+Poor user experience: someone must obtain and configure the refresh token manually.
+Limited scalability: the configuration naturally revolves around one Google account/calendar.
+Operational inconvenience: changing accounts or calendars requires changing environment variables and potentially redeploying.
+Credential risk: a refresh token stored in environment configuration is powerful and must be protected carefully.
+No proper account lifecycle: Ledgerwise doesn't provide a normal connect, disconnect, reconnect, or connection-management experience.
+Doesn't meet the original architecture: no encrypted per-user token storage, OAuth callback workflow, or per-user access controls.
+Availability limitations: the current implementation doesn't establish a complete Google Calendar free/busy workflow.
+
+3. Side-by-side comparison
+
+
+
+Consideration
+Proper OAuth
+Manual refresh token
+
+
+
+Initial development
+More work
+Less work
+
+
+User experience
+Excellent
+Technical/manual
+
+
+Credential management
+Encrypted database storage
+Environment variables
+
+
+Multiple accounts
+Supported with implementation
+Awkward
+
+
+Account disconnection
+Built-in workflow
+Manual configuration
+
+
+Calendar selection
+Can be implemented in UI
+Environment configuration
+
+
+Production scalability
+Better
+Limited
+
+
+Security architecture
+Stronger when correctly implemented
+Simpler, but concentrated credentials
+
+
+Demonstration speed
+Slower
+Faster
+
+
+Long-term maintainability
+Better
+More operational work
+
+
+4. What I recommend for Ledgerwise
+I'd preserve the proper OAuth architecture we originally approved.
+Here's why:
+Ledgerwise is supposed to demonstrate an AI SDR product, not merely a script that can create Google Calendar events. A proper connection flow demonstrates that the application can integrate with an external business service in a way that a real customer could use.
+It also gives us a much cleaner architecture:
+
+  **Recommended Google Calendar architecture**
+
+  
+    **Ledgerwise dashboard**
+
+<text color="secondary" size="xs">User clicks Connect Google Calendar</text>
+
+  
+  
+    
+  
+  
+    **Google OAuth authorization**
+
+<text color="secondary" size="xs">User grants calendar permissions</text>
+
+  
+  
+    
+  
+  
+    **Secure token storage**
+
+<text color="secondary" size="xs">Encrypted refresh tokens, server-side only</text>
+
+  
+  
+    
+  
+  
+    **Calendar integration service**
+
+<text color="secondary" size="xs">Availability checks and event synchronization</text>
+
+  
+  
+    
+  
+  
+    **Ledgerwise internal calendar**
+
+<text color="secondary" size="xs">Booking remains authoritative; Google mirrors its events</text>
+
+  
+
+
+I'd also preserve an important design decision: the internal Ledgerwise calendar must continue working even when Google Calendar is disconnected or unavailable. Google should be optional, not a dependency for booking.
+One important nuance
+OAuth by itself doesn't make calendar synchronization reliable. We should also implement:
+
+Free/busy checks before offering external calendar availability.
+Deterministic event IDs or another idempotency strategy.
+Retry and reconciliation for failed synchronization.
+Protection against duplicate or orphaned events.
+Secure token encryption and account-level access restrictions.
+
+These are separate engineering requirements, not automatic benefits of OAuth.
+5. My proposed decision
+I recommend:
+
+Keep the original proper OAuth design.
+Do not treat the current manual refresh-token implementation as the finished Google integration.
+Keep Google Calendar optional.
+Finish the database-side transactional booking protections first.
+Implement OAuth and synchronization after the internal booking system is reliable.
+
+The manual implementation isn't useless. Its API request code and mocked tests may be reusable, but its credential architecture should not dictate the final design.
+
+Ledgerwise project status
+
+
+
+Area
+Current status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated sending only
+
+
+Phase 6 conversations
+Implemented; no real email provider
+
+
+Phase 7 internal calendar
+Implemented, but transactional concurrency protections need correction
+
+
+Google Calendar
+Manual refresh-token prototype; proper OAuth not implemented
+
+
+Database migrations
+Written, unapplied, awaiting SQL review
+
+
+Automated verification
+127 tests passed; TypeScript, lint, build and diff checks clean
+
+
+Git / deployment
+Changes preserved; no commit, push or deployment
+
+
+My recommendation is to stick with the original OAuth scope, rather than quietly reducing it to manual token configuration. We can take the extra implementation time and build the integration properly.
+
+
+You:
+Ok then let's proceed with your recommendation
+
+
+ChatGPT:
+This code was redacted.
+
+
+ChatGPT:
+Excellent. We'll preserve the proper OAuth architecture as the final target. We won't downgrade the approved design to manual refresh-token configuration.
+I'll treat the following as our implementation decisions:
+Locked decisions
+
+Internal calendar first: Ledgerwise's own database remains the authoritative booking system.
+Transactional booking: booking, cancellation, rescheduling, slot availability and audit records must be protected by database transactions.
+Proper Google OAuth: connect and disconnect through the application, with OAuth start/callback routes.
+Secure credentials: encrypted refresh-token storage, server-side access only, and account-level access restrictions.
+Calendar availability: check Google free/busy before offering external calendar availability.
+Reliable synchronization: idempotent event creation, updates, cancellation, retries and reconciliation.
+Optional integration: Ledgerwise must continue functioning when Google is disconnected or unavailable.
+Real-world verification: we won't call Google Calendar operational until we test authorization and actual event creation, updating and deletion.
+
+Implementation order
+
+
+
+Step
+Work
+Priority
+
+
+
+1
+Review migrations 01–03 against the actual code and schema
+First
+
+
+2
+Correct transactional booking architecture
+Critical
+
+
+3
+Complete timezone and DST validation
+High
+
+
+4
+Implement proper OAuth and encrypted token storage
+High
+
+
+5
+Implement availability and event synchronization
+High
+
+
+6
+Add retry/reconciliation and security tests
+High
+
+
+7
+Run full regression suite and prepare deployment
+Final
+
+
+We won't apply migrations, commit, push or deploy without your authorization.
+First step: inspect the SQL migrations
+Before changing database-dependent code, I want to inspect exactly what the three migration files contain and check whether they match the implementation.
+From your project directory, run:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+for f in supabase/migrations/*.sql; do
+  printf '\n===== %s =====\n' "$f"
+  cat "$f"
+done
+
+Paste the output here. Don't include credentials or secrets.
+Project status
+
+Phases 1–3: implemented.
+Phase 4 research: postponed.
+Phase 5 email: implemented; simulated sending only.
+Phase 6 conversations: implemented.
+Phase 7 internal calendar: implemented, transactional protections still need work.
+Google Calendar: manual-token prototype; proper OAuth is our approved target.
+Tests: 127 passed.
+TypeScript, lint, build and diff checks: clean.
+Migrations: written but not applied.
+Git changes: preserved; no commit, push or deployment.
+
+Our immediate objective is to make the internal booking system genuinely reliable before building the proper Google integration on top of it.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$
+for f in supabase/migrations/*.sql; do
+  printf '\n===== %s =====\n' "$f"
+  cat "$f"
+done
+===== supabase/migrations/20261114_01_source_verification_and_security.sql =====
+-- Ledgerwise prototype — migration 01
+-- Source verification, RLS hardening, append-only protection, suppression RPCs.
+-- IMPORTANT
+-- 1. Export existing policies and constraints first. See docs/MIGRATION_INSTRUCTIONS.md.
+-- 2. This migration replaces policies on the listed tables with authenticated-only
+--    policies. It does NOT provide per-user or tenant isolation. It is for the
+--    single-team prototype assumption described in docs/SECURITY.md.
+-- 3. Run this file manually in the Supabase SQL Editor. It is not executed by the app.
+
+-- 1. Source verification columns and one-time backfill
+
+do $$
+declare
+  fresh_columns boolean;
+begin
+  select not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'company_sources'
+      and column_name = 'verification_status'
+  ) into fresh_columns;
+  alter table public.company_sources
+    add column if not exists imported_by uuid references public.users(id);
+  alter table public.company_sources
+    add column if not exists verification_status text not null default 'pending_review';
+  alter table public.company_sources
+    add column if not exists reviewed_by uuid references public.users(id);
+  alter table public.company_sources
+    add column if not exists reviewed_at timestamptz;
+  alter table public.company_sources
+    add column if not exists verification_note text;
+  if fresh_columns then
+    -- The old verified_by value was stamped automatically by the importer and
+    -- cannot be treated as human verification. Preserve it as import attribution,
+    -- then clear it and put every existing source back into the review queue.
+    update public.company_sources
+    set imported_by = verified_by,
+        verified_by = null,
+        verification_status = 'pending_review',
+        reviewed_by = null,
+        reviewed_at = null,
+        verification_note = null;
+  end if;
+end $$;
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'company_sources_verification_status_check'
+      and conrelid = 'public.company_sources'::regclass
+  ) then
+    alter table public.company_sources
+      add constraint company_sources_verification_status_check
+      check (verification_status in ('pending_review', 'verified', 'rejected'));
+  end if;
+end $$;
+alter table public.conversations
+  add column if not exists ai_processing_at timestamptz;
+create index if not exists company_sources_company_id_idx
+  on public.company_sources (company_id);
+create index if not exists company_sources_verification_status_idx
+  on public.company_sources (verification_status);
+create index if not exists company_sources_company_verification_idx
+  on public.company_sources (company_id, verification_status);
+create index if not exists qualification_scores_company_id_idx
+  on public.qualification_scores (company_id);
+create index if not exists email_drafts_company_status_idx
+  on public.email_drafts (company_id, status);
+create index if not exists email_events_draft_created_idx
+  on public.email_events (draft_id, created_at);
+create index if not exists conversations_company_status_idx
+  on public.conversations (company_id, status);
+create index if not exists messages_conversation_created_idx
+  on public.messages (conversation_id, created_at);
+create index if not exists audit_logs_entity_idx
+  on public.audit_logs (entity_type, entity_id);
+
+-- 2. Suppression unique index
+
+-- A duplicate index on the same expression is harmless and keeps ON CONFLICT
+-- (lower(email)) reliable even if an earlier index had a different name.
+create unique index if not exists suppressed_contacts_email_lower_idx
+  on public.suppressed_contacts (lower(email));
+
+-- 3. RLS replacement — authenticated-only single-team policies
+
+alter table public.companies enable row level security;
+alter table public.company_sources enable row level security;
+alter table public.qualification_scores enable row level security;
+alter table public.email_drafts enable row level security;
+alter table public.email_events enable row level security;
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+alter table public.calendar_slots enable row level security;
+alter table public.bookings enable row level security;
+alter table public.suppressed_contacts enable row level security;
+alter table public.audit_logs enable row level security;
+do $$
+declare
+  r record;
+begin
+  for r in
+    select policyname, tablename
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = any (array[
+        'companies',
+        'company_sources',
+        'qualification_scores',
+        'email_drafts',
+        'email_events',
+        'conversations',
+        'messages',
+        'calendar_slots',
+        'bookings',
+        'suppressed_contacts',
+        'audit_logs'
+      ])
+  loop
+    execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
+  end loop;
+end $$;
+-- Companies
+create policy auth_select_companies on public.companies
+  for select to authenticated using (true);
+create policy auth_insert_companies on public.companies
+  for insert to authenticated with check (true);
+create policy auth_update_companies on public.companies
+  for update to authenticated using (true) with check (true);
+-- Company sources
+create policy auth_select_company_sources on public.company_sources
+  for select to authenticated using (true);
+create policy auth_insert_company_sources on public.company_sources
+  for insert to authenticated with check (true);
+create policy auth_update_company_sources on public.company_sources
+  for update to authenticated using (true) with check (true);
+-- Qualification scores
+create policy auth_select_qualification_scores on public.qualification_scores
+  for select to authenticated using (true);
+create policy auth_insert_qualification_scores on public.qualification_scores
+  for insert to authenticated with check (true);
+create policy auth_update_qualification_scores on public.qualification_scores
+  for update to authenticated using (true) with check (true);
+-- Email drafts
+create policy auth_select_email_drafts on public.email_drafts
+  for select to authenticated using (true);
+create policy auth_insert_email_drafts on public.email_drafts
+  for insert to authenticated with check (true);
+create policy auth_update_email_drafts on public.email_drafts
+  for update to authenticated using (true) with check (true);
+-- Email events: append-only in normal operation
+create policy auth_select_email_events on public.email_events
+  for select to authenticated using (true);
+create policy auth_insert_email_events on public.email_events
+  for insert to authenticated with check (true);
+-- Conversations
+create policy auth_select_conversations on public.conversations
+  for select to authenticated using (true);
+create policy auth_insert_conversations on public.conversations
+  for insert to authenticated with check (true);
+create policy auth_update_conversations on public.conversations
+  for update to authenticated using (true) with check (true);
+-- Messages
+create policy auth_select_messages on public.messages
+  for select to authenticated using (true);
+create policy auth_insert_messages on public.messages
+  for insert to authenticated with check (true);
+create policy auth_update_messages on public.messages
+  for update to authenticated using (true) with check (true);
+-- Calendar slots
+create policy auth_select_calendar_slots on public.calendar_slots
+  for select to authenticated using (true);
+create policy auth_insert_calendar_slots on public.calendar_slots
+  for insert to authenticated with check (true);
+create policy auth_update_calendar_slots on public.calendar_slots
+  for update to authenticated using (true) with check (true);
+create policy auth_delete_calendar_slots on public.calendar_slots
+  for delete to authenticated using (true);
+-- Bookings: no direct delete; cancellation is the supported path
+create policy auth_select_bookings on public.bookings
+  for select to authenticated using (true);
+create policy auth_insert_bookings on public.bookings
+  for insert to authenticated with check (true);
+create policy auth_update_bookings on public.bookings
+  for update to authenticated using (true) with check (true);
+-- Suppression: read and insert only
+create policy auth_select_suppressed_contacts on public.suppressed_contacts
+  for select to authenticated using (true);
+create policy auth_insert_suppressed_contacts on public.suppressed_contacts
+  for insert to authenticated with check (true);
+-- Audit: read and insert only
+create policy auth_select_audit_logs on public.audit_logs
+  for select to authenticated using (true);
+create policy auth_insert_audit_logs on public.audit_logs
+  for insert to authenticated with check (true);
+
+-- 4. Append-only triggers for suppression and audit
+
+create or replace function public.reject_append_only_mutation()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  raise exception 'This table is append-only; % is not allowed on %', tg_op, tg_table_name;
+end;
+$$;
+do $$
+begin
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'suppressed_contacts_append_only'
+      and tgrelid = 'public.suppressed_contacts'::regclass
+  ) then
+    create trigger suppressed_contacts_append_only
+      before update or delete on public.suppressed_contacts
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+  if not exists (
+    select 1 from pg_trigger
+    where tgname = 'audit_logs_append_only'
+      and tgrelid = 'public.audit_logs'::regclass
+  ) then
+    create trigger audit_logs_append_only
+      before update or delete on public.audit_logs
+      for each row execute function public.reject_append_only_mutation();
+  end if;
+end $$;
+
+-- 5. Suppression RPCs
+
+create or replace function public.is_suppressed(p_email text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.suppressed_contacts
+    where lower(email) = lower(trim(coalesce(p_email, '')))
+  );
+$$;
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+  if v_email = '' or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+.[^@[:space:]]+$' then
+    raise exception 'invalid_email';
+  end if;
+  insert into public.suppressed_contacts (email, reason, source_message_id)
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+  if v_row.id is null then
+    select * into v_row
+    from public.suppressed_contacts
+    where lower(email) = v_email;
+    return v_row;
+  end if;
+  insert into public.audit_logs (actor_id, action, entity_type, entity_id, detail)
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+  return v_row;
+end;
+$$;
+revoke all on function public.is_suppressed(text) from public;
+revoke all on function public.suppress_contact(text, text, uuid) from public;
+grant execute on function public.is_suppressed(text) to authenticated;
+grant execute on function public.suppress_contact(text, text, uuid) to authenticated;
+notify pgrst, 'reload schema';
+===== supabase/migrations/20261114_02_calendar_source_and_booking.sql =====
+-- Ledgerwise prototype — migration 02
+-- Internal calendar source, conversation booking flag, and slot occupancy guarantee.
+-- Apply after migration 01. Run manually in the Supabase SQL Editor.
+-- Conversations carry an explicit booking-request flag. A booking request is a
+-- needs_human conversation plus this flag; it does not create or hold a booking.
+alter table public.conversations
+  add column if not exists booking_request boolean not null default false;
+-- Replace the old calendar source check so internal slots are allowed.
+do $$
+declare
+  c record;
+begin
+  for c in
+    select conname
+    from pg_constraint
+    where conrelid = 'public.calendar_slots'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) ilike '%source%'
+  loop
+    execute format('alter table public.calendar_slots drop constraint %I', c.conname);
+  end loop;
+end $$;
+alter table public.calendar_slots
+  add constraint calendar_slots_source_check
+  check (source in ('calcom', 'demo', 'internal'));
+alter table public.calendar_slots
+  alter column source set default 'internal';
+-- Before this index can be created, check for existing conflicts:
+-- select slot_id, count()
+-- from public.bookings
+-- where slot_id is not null
+--   and status in ('pending', 'confirmed', 'needs_human')
+-- group by slot_id
+-- having count() > 1;
+-- If that query returns rows, resolve the duplicates first. Then run this file.
+create unique index if not exists bookings_active_slot_unique
+  on public.bookings (slot_id)
+  where slot_id is not null
+    and status in ('pending', 'confirmed', 'needs_human');
+create index if not exists bookings_slot_status_idx
+  on public.bookings (slot_id, status);
+create index if not exists bookings_conversation_idx
+  on public.bookings (conversation_id);
+create index if not exists bookings_company_idx
+  on public.bookings (company_id);
+create index if not exists conversations_booking_request_idx
+  on public.conversations (booking_request)
+  where booking_request = true;
+notify pgrst, 'reload schema';
+===== supabase/migrations/20261114_03_google_calendar.sql =====
+-- Ledgerwise prototype — migration 03
+-- Optional Google Calendar sync metadata. The internal calendar works without this.
+-- Apply after migration 02. Run manually in the Supabase SQL Editor.
+alter table public.bookings
+  add column if not exists google_event_id text;
+alter table public.bookings
+  add column if not exists calendar_sync_status text not null default 'not_configured';
+alter table public.bookings
+  add column if not exists calendar_synced_at timestamptz;
+alter table public.calendar_slots
+  add column if not exists google_calendar_id text;
+-- Keep this constraint idempotent so an earlier draft can be re-applied safely.
+alter table public.bookings
+  drop constraint if exists bookings_calendar_sync_status_check;
+alter table public.bookings
+  add constraint bookings_calendar_sync_status_check
+  check (
+    calendar_sync_status in (
+      'not_configured',
+      'pending',
+      'synced',
+      'failed',
+      'deleted'
+    )
+  );
+notify pgrst, 'reload schema';
+
+
+ChatGPT:
+Thanks. I've reviewed all three migration files. This gives us a much clearer picture of what is implemented versus what the database actually guarantees.
+My conclusion: the migrations are a useful starting point, but we should not apply them yet. There are several important gaps between the approved architecture and the current SQL.
+1. Migration 01 — Source verification and security
+Mostly aligned
+This migration implements several things correctly:
+
+Adds explicit source verification statuses: pending_review, verified, and rejected.
+Preserves old verified_by values as import attribution during the initial backfill.
+Adds indexes for source verification and common queries.
+Replaces existing policies with authenticated-only policies.
+Makes suppression records and audit logs append-only.
+Adds database functions for checking and recording suppressed contacts.
+
+However, there are things to review:
+A. Single-team security is not user isolation.
+The policies allow every authenticated user to read and modify shared business records. This is consistent with the documented single-team assumption, but it is not suitable for multiple independent customers.
+B. Direct database permissions remain important.
+The migration creates authenticated insert/update policies for bookings and other tables. If we introduce transactional booking RPCs, we must ensure users cannot bypass them through direct table writes.
+C. Suppression uniqueness needs a preflight check.
+The unique index on lower(email) can fail if duplicate suppressed contacts already exist. The migration instructions mention this, which is good. We must actually run that check before applying it.
+D. Backfill deserves a small correction.
+The backfill assumes that existing verified_by values are importer attribution. That matches our known previous implementation, but we should ensure the migration does not overwrite existing imported_by values if that column already exists independently.
+2. Migration 02 — Internal calendar and booking
+Critical gap
+This is the most important finding.
+The migration currently adds:
+
+booking_request to conversations.
+The internal calendar source.
+A unique partial index preventing multiple active bookings against the same slot ID.
+Supporting indexes.
+
+But it does not implement the transactional booking architecture we approved.
+Specifically, it has no:
+
+book_slot RPC.
+cancel_booking RPC.
+reschedule_booking RPC.
+Database-side overlapping-slot protection.
+Atomic booking and audit operations.
+Transactional slot deletion guard.
+Database-side validation of slot availability and booking state.
+
+The unique index is useful, but it only prevents two active bookings from referencing the exact same slot_id.
+For example:
+
+  **Example: overlapping slots**
+
+  Same day, same calendar
+  
+    
+      Slot A
+      10:00–10:30
+    
+    
+    
+      Slot B
+      10:15–10:45
+    
+    
+  
+  Overlapping bookings possible
+  Both slots have different IDs. The unique index permits one booking on each, even though their times overlap.
+
+The application currently checks for overlapping bookings before inserting. But two concurrent requests can both pass that check before either inserts.
+We need to move that protection into the database transaction.
+My proposed correction is to implement the three RPCs, add the necessary locking and validation, and ensure direct writes cannot bypass the transactional path.
+3. Migration 03 — Google Calendar metadata
+Incomplete for approved OAuth design
+This migration adds:
+
+google_event_id
+calendar_sync_status
+calendar_synced_at
+google_calendar_id
+
+Those fields are useful for tracking event synchronization.
+However, they do not implement OAuth.
+Our approved design additionally requires secure storage for Google account connections, including:
+
+Google account identification.
+Encrypted refresh tokens.
+Connection and disconnection state.
+Selected calendar information.
+Access restrictions so credentials cannot be read by other users.
+Token refresh and revocation handling.
+
+I recommend a separate additive migration for this connection infrastructure rather than trying to squeeze everything into migration 03.
+Also, the current sync status constraint does not include every state in our original design. We should define the final states consistently across the database and application.
+
+4. What I propose changing
+We should preserve the useful work rather than discard the migrations.
+
+
+
+Migration
+Proposed treatment
+
+
+
+01 — Source verification
+Keep, with small corrections and security review
+
+
+02 — Calendar and booking
+Expand substantially with transactional RPCs and database protections
+
+
+03 — Google metadata
+Keep useful fields, align status definitions
+
+
+04 — Google OAuth infrastructure
+Add encrypted connection storage and access restrictions
+
+
+The application code must then be updated to call the database RPCs instead of performing booking operations through separate client-side database calls.
+5. Implementation sequence
+I recommend this order:
+
+  
+    **Finalize migration 01**
+
+Correct and verify the source verification backfill, suppression uniqueness, and RLS assumptions.
+
+  
+  
+    **Design the transactional calendar migration**
+
+Implement booking, cancellation, rescheduling, overlap protection, slot deletion protection, and atomic auditing.
+
+  
+  
+    **Update calendar server actions**
+
+Replace direct booking mutations with RPC calls and handle database errors correctly.
+
+  
+  
+    **Harden timezone handling**
+
+Reject ambiguous and nonexistent DST times and correct the default-slot timezone behavior.
+
+  
+  
+    **Build proper Google OAuth**
+
+Implement authorization, encrypted token storage, calendar selection, availability checks, and event synchronization.
+
+  
+  
+    **Regression and integration testing**
+
+Verify concurrency, authorization, real Google account connections, and actual event lifecycle operations.
+
+  
+
+
+We will preserve all existing research-agent changes and avoid destructive Git operations.
+Ledgerwise status board
+
+
+
+Area
+Status
+
+
+
+Phases 1–3
+Implemented
+
+
+Phase 4 research
+Postponed
+
+
+Phase 5 email
+Implemented; simulated only
+
+
+Phase 6 conversations
+Implemented
+
+
+Phase 7 calendar UI/actions
+Implemented; database safety incomplete
+
+
+Google OAuth
+Approved design; not implemented
+
+
+Migrations
+Reviewed; not approved for application
+
+
+Automated tests
+127 passed
+
+
+TypeScript / lint / build
+All previously clean
+
+
+Git / deployment
+No commit, push or deployment
+
+
+Next, I recommend correcting the database architecture before touching Google OAuth. The internal booking system is the foundation: Google synchronization should never be able to create an inconsistent booking or compromise an otherwise valid reservation.

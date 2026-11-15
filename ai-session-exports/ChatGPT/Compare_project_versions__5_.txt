@@ -1,0 +1,1427 @@
+Compare project versions (5)
+============================
+
+ChatGPT:
+Great. We'll configure Google Calendar step by step and verify the connection before enabling synchronization in Ledgerwise.
+Your integration uses OAuth 2.0 with a refresh token and a single Google Calendar ID. It does not currently have an in-app Google sign-in flow, so we'll configure the OAuth credentials manually.
+We'll do this in four stages:
+
+Configure Google Cloud and enable the Calendar API.
+Create an OAuth client and obtain a refresh token.
+Add the credentials to Ledgerwise's .env.local.
+Verify that Ledgerwise can actually access Google Calendar.
+
+Important: Never paste your client secret or refresh token into this chat. I'll show you where to enter them locally.
+Stage 1 — Google Cloud setup
+Open the Google Cloud Console.
+1. Create a Google Cloud project
+If you don't already have a dedicated project for this integration:
+
+Open the project selector at the top.
+Click New Project.
+Name it Ledgerwise Calendar.
+Click Create and select the new project.
+
+2. Enable Google Calendar API
+
+🖼️
+Generated image
+Google Cloud Console API Library Google Calendar API enable button screenshot
+
+
+Open Google Calendar API.
+Make sure Ledgerwise Calendar is selected.
+Click Enable.
+
+Google requires the Calendar API to be enabled in the Cloud project before the application can call it. 
+3. Configure the OAuth consent screen
+Open Google Auth Platform — Branding.
+If prompted to configure the platform, click Get Started.
+Use these settings:
+
+
+
+Setting
+Value
+
+
+
+App name
+Ledgerwise
+
+
+User support email
+Your Google account
+
+
+Audience
+External
+
+
+Developer contact email
+Your Google account
+
+
+Your screenshot shows a Gmail address. If that's the account you'll authorize, External is the appropriate audience for a personal Gmail account.
+Next:
+
+Save the branding details.
+Open Audience.
+Under Test users, add the Google account whose calendar Ledgerwise will manage.
+Save.
+
+4. Configure the Calendar permission
+Open Data Access.
+Click Add or remove scopes and add this exact scope:
+https://www.googleapis.com/auth/calendar.events
+
+This grants Ledgerwise permission to view and modify calendar events, which matches the current integration's create, update and delete operations. 
+Important An External app left in Testing issues refresh tokens that expire after seven days for these scopes. We'll account for that when deciding the final publishing status. 
+
+Stop here for now.
+Tell me once you've:
+
+Created or selected the Google Cloud project.
+Enabled Google Calendar API.
+Configured the OAuth consent screen.
+Added your Google account as a test user.
+Added the Calendar events scope.
+
+Then we'll create the OAuth client and generate the refresh token using your own credentials.
+
+
+You:
+OK I added the calendar.events scope, now what ?
+
+
+ChatGPT:
+Perfect. The next step is to create the OAuth client that Ledgerwise will use to authenticate with Google.
+Stage 2 — Create OAuth credentials
+1. Create an OAuth client
+Open the Google Auth Platform — Clients.
+
+Click Create Client.
+For Application type, select Web application.
+Set the name to Ledgerwise Local.
+Under Authorized redirect URIs, add:
+
+https://developers.google.com/oauthplayground
+
+
+Click Create.
+
+
+🖼️
+Generated image
+Google Cloud Google Auth Platform create OAuth client web application authorized redirect URIs screen
+
+2. Save your client credentials
+Google will display:
+
+Client ID
+Client Secret
+
+Keep these private. You'll need both shortly.
+3. Generate the refresh token
+Open Google OAuth 2.0 Playground.
+
+🖼️
+Generated image
+Google OAuth 2.0 Playground step 1 input your own OAuth credentials settings screenshot
+
+Follow these steps:
+
+Click the settings gear in the upper-right corner.
+Enable Use your own OAuth credentials.
+Enter your Google OAuth Client ID and Client Secret.
+Close settings.
+In Step 1, enter this scope:
+
+https://www.googleapis.com/auth/calendar.events
+
+
+Click Authorize APIs.
+Sign in using the Google account whose calendar Ledgerwise will manage.
+Approve the requested permission.
+
+4. Exchange the authorization code
+In Step 2:
+
+Click Exchange authorization code for tokens.
+You should receive an access token and a refresh token.
+
+What we need The refresh token.
+Copy it somewhere private. Do not send it here.
+Important: If Google does not return a refresh token, stop and tell me. Don't proceed by substituting the access token.
+
+Before we continue
+Once you have the OAuth client ID, client secret and refresh token, we'll put them directly into .env.local, retrieve your Google Calendar ID, and test authentication.
+One thing: keep the OAuth app in Testing for now. We can decide whether to publish it after confirming that the integration works.
+
+
+You:
+OK I will put them in env now
+
+
+ChatGPT:
+Sounds good. Add the credentials to your project's .env.local file.
+Your entries should look like this:
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_REFRESH_TOKEN=your_refresh_token
+GOOGLE_CALENDAR_ID=your_calendar_id
+
+GOOGLE_CALENDAR_VERIFIED=0
+GOOGLE_CALENDAR_SYNC=0
+
+Keep both switches at 0 for now. We haven't verified the connection yet.
+Where to get the Calendar ID
+
+Open Google Calendar.
+Find the calendar you want Ledgerwise to use.
+Click its three-dot menu → Settings and sharing.
+Scroll to Integrate calendar.
+Copy the Calendar ID.
+
+For your primary calendar, this is often your Google account email address.
+After saving .env.local
+Restart your development server:
+# Stop the running server with Ctrl+C
+npm run dev
+
+Then tell me when you've finished.
+Don't paste your .env.local contents here. Next we'll verify the OAuth connection safely, then enable synchronization.
+
+
+You:
+Calendar / Bookings
+The internal calendar is the source of truth. Defaults are America/New_York, 30-minute slots, 9:00–17:00 local time, with durations from 15 to 120 minutes. Only pending, confirmed, and needs-human bookings hold a slot.
+Google Calendar: not operational
+Credentials are present, but Google Calendar has not been verified end-to-end. The internal calendar is the source of truth.
+The prototype does not claim Google Calendar is working until real OAuth and sync have been tested. Internal slots and bookings work without it.
+
+
+ChatGPT:
+Good — this is actually useful information. It means Ledgerwise now detects the Google credentials, but the integration is deliberately reporting not operational because we haven't completed end-to-end verification.
+That's expected at this stage. We should not manually set GOOGLE_CALENDAR_VERIFIED=1 yet.
+Next: verify OAuth and Google Calendar access
+Before changing anything else, let's inspect how your current implementation handles verification.
+From your Ledgerwise project root, run:
+rg -n "GOOGLE_CALENDAR_VERIFIED|GOOGLE_CALENDAR_SYNC|syncBookingToGoogle|googleMutation|access_token|oauth2" lib app scripts
+
+Then show me the output.
+I want to establish whether your project already has a verification script or whether we need to create one.
+Our verification will test:
+
+Google accepts your client ID, client secret and refresh token.
+Ledgerwise can obtain an access token.
+Ledgerwise can create a temporary Google Calendar event.
+Ledgerwise can update that event.
+Ledgerwise can delete it.
+
+Only after all five succeed will we enable:
+GOOGLE_CALENDAR_VERIFIED=1
+GOOGLE_CALENDAR_SYNC=1
+
+We'll keep the internal calendar as the source of truth throughout.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ rg -n "GOOGLE_CALENDAR_VERIFIED|GOOGLE_CALENDAR_SYNC|syncBookingToGoogle|googleMutation|access_token|oauth2" lib app scripts
+lib/calendar/google.ts
+40:  const verified = env.GOOGLE_CALENDAR_VERIFIED === "1";
+41:  const syncEnabled = env.GOOGLE_CALENDAR_SYNC === "1";
+52:      "Google Calendar is verified but sync is disabled. Set GOOGLE_CALENDAR_SYNC=1 to enable it.";
+79:  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
+88:  const data = (await response.json()) as { access_token?: string };
+89:  if (!data.access_token) throw new Error("Google did not return an access token.");
+90:  return data.access_token;
+93:export async function syncBookingToGoogle(
+142:async function googleMutation(
+197:  return googleMutation(input, eventId, "PATCH", env, deps);
+205:  return googleMutation(null, eventId, "DELETE", env, deps);
+app/(dashboard)/calendar/actions.ts
+14:  syncBookingToGoogle,
+292:  const google = await syncBookingToGoogle({
+353:      const google = await syncBookingToGoogle(
+482:    : await syncBookingToGoogle(
+app/(dashboard)/settings/integrations/page.tsx
+56:    process.env.GOOGLE_CALENDAR_VERIFIED === "1" &&
+57:    process.env.GOOGLE_CALENDAR_SYNC === "1"
+75:        <IntegrationCard name="Google Calendar" description="Optional event synchronization. The internal Ledgerwise calendar remains the source of truth." configured={googleReady} variables={["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN", "GOOGLE_CALENDAR_ID", "GOOGLE_CALENDAR_VERIFIED=1", "GOOGLE_CALENDAR_SYNC=1"]} endpoint="https://console.cloud.google.com/apis/credentials" />
+
+
+ChatGPT:
+Excellent. Your search confirms that Ledgerwise already has the core OAuth token-exchange logic in lib/calendar/google.ts, but there is no separate verification script showing up in scripts.
+The important distinction is that credentials being present is not proof that Google accepts them. We need to test the token exchange and event operations without enabling normal booking synchronization prematurely.
+Let's inspect the existing implementation before adding anything.
+
+
+ChatGPT:
+Excellent. Your search confirms that Ledgerwise already has the core OAuth token-exchange logic in lib/calendar/google.ts, but there is no separate verification script showing up in scripts.
+The important distinction is that credentials being present is not proof that Google accepts them. We need to test the token exchange and event operations without enabling normal booking synchronization prematurely.
+Let's inspect the existing implementation before adding anything.
+Run these two commands:
+sed -n '1,240p' lib/calendar/google.ts
+
+Then:
+sed -n '1,130p' lib/calendar/google.ts
+
+(The second is redundant if you send the complete first output, so the first alone is sufficient.)
+Send me the output. I'll use the existing functions rather than introduce a separate implementation that might behave differently from Ledgerwise's actual booking flow.
+
+
+ChatGPT:
+Run these two commands:
+sed -n '1,240p' lib/calendar/google.ts
+
+Then:
+sed -n '1,130p' lib/calendar/google.ts
+
+(The second is redundant if you send the complete first output, so the first alone is sufficient.)
+Send me the output. I'll use the existing functions rather than introduce a separate implementation that might behave differently from Ledgerwise's actual booking flow.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,240p' lib/calendar/google.ts
+type Env = Record<string, string | undefined>;
+type FetchLike = (input: string, init?: RequestInit) => Promise;
+export type GoogleCalendarStatus = {
+  configured: boolean;
+  verified: boolean;
+  syncEnabled: boolean;
+  operational: boolean;
+  reason: string;
+};
+export type GoogleEventInput = {
+  summary: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+export type GoogleSyncResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced"; eventId: string }
+  | { status: "failed"; error: string };
+export type GoogleMutationResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced" }
+  | { status: "failed"; error: string };
+const REQUIRED = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+] as const;
+export function googleCalendarStatus(env: Env = process.env): GoogleCalendarStatus {
+  const missing = REQUIRED.filter((key) => !env[key]);
+  const configured = missing.length === 0;
+  const verified = env.GOOGLE_CALENDAR_VERIFIED === "1";
+  const syncEnabled = env.GOOGLE_CALENDAR_SYNC === "1";
+  const operational = configured && verified && syncEnabled;
+  let reason: string;
+  if (!configured) {
+    reason = Not configured (missing ${missing.join(", ")}). The internal calendar is the source of truth.;
+  } else if (!verified) {
+    reason =
+      "Credentials are present, but Google Calendar has not been verified end-to-end. The internal calendar is the source of truth.";
+  } else if (!syncEnabled) {
+    reason =
+      "Google Calendar is verified but sync is disabled. Set GOOGLE_CALENDAR_SYNC=1 to enable it.";
+  } else {
+    reason = "Google Calendar sync is explicitly enabled and reported as verified.";
+  }
+  return { configured, verified, syncEnabled, operational, reason };
+}
+export function buildGoogleEvent(input: GoogleEventInput) {
+  return {
+    summary: input.summary,
+    description: input.description,
+    start: { dateTime: input.startTime, timeZone: input.timezone },
+    end: { dateTime: input.endTime, timeZone: input.timezone },
+  };
+}
+export async function getGoogleAccessToken(
+  env: Env = process.env,
+  fetchImpl: FetchLike = fetch
+): Promise {
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID ?? "",
+    client_secret: env.GOOGLE_CLIENT_SECRET ?? "",
+    refresh_token: env.GOOGLE_REFRESH_TOKEN ?? "",
+    grant_type: "refresh_token",
+  });
+  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    throw new Error(Google token request failed with HTTP ${response.status}.);
+  }
+  const data = (await response.json()) as { access_token?: string };
+  if (!data.access_token) throw new Error("Google did not return an access token.");
+  return data.access_token;
+}
+export async function syncBookingToGoogle(
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID!);
+    const response = await fetchImpl(
+      https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events,
+      {
+        method: "POST",
+        headers: {
+          Authorization: Bearer ${token},
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildGoogleEvent(input)),
+        signal: AbortSignal.timeout(20_000),
+      }
+    );
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event creation failed with HTTP ${response.status}.,
+      };
+    }
+    const data = (await response.json()) as { id?: string };
+    if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    return { status: "synced", eventId: data.id };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
+}
+function googleEventsUrl(env: Env, eventId?: string): string {
+  const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID ?? "");
+  const base = https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events;
+  return eventId ? ${base}/${encodeURIComponent(eventId)} : base;
+}
+async function googleMutation(
+  input: GoogleEventInput | null,
+  eventId: string,
+  method: "PATCH" | "DELETE",
+  env: Env,
+  deps: { fetch?: FetchLike }
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const response = await fetchImpl(googleEventsUrl(env, eventId), {
+      method,
+      headers: {
+        Authorization: Bearer ${token},
+        ...(method === "PATCH" ? { "Content-Type": "application/json" } : {}),
+      },
+      body:
+        method === "PATCH" && input
+          ? JSON.stringify(buildGoogleEvent(input))
+          : undefined,
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (method === "DELETE" && (response.status === 404 || response.status === 410)) {
+      return { status: "synced" };
+    }
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event ${method === "PATCH" ? "update" : "deletion"} failed with HTTP ${response.status}.,
+      };
+    }
+    if (method === "PATCH") {
+      const data = (await response.json()) as { id?: string };
+      if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    }
+    return { status: "synced" };
+  } catch (error) {
+    return {
+      status: "failed",
+      error: error instanceof Error ? error.message : "Google Calendar sync failed.",
+    };
+  }
+}
+export async function updateGoogleEvent(
+  eventId: string,
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  return googleMutation(input, eventId, "PATCH", env, deps);
+}
+export async function deleteGoogleEvent(
+  eventId: string,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  return googleMutation(null, eventId, "DELETE", env, deps);
+}
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '1,130p' lib/calendar/google.ts
+type Env = Record<string, string | undefined>;
+type FetchLike = (input: string, init?: RequestInit) => Promise;
+export type GoogleCalendarStatus = {
+  configured: boolean;
+  verified: boolean;
+  syncEnabled: boolean;
+  operational: boolean;
+  reason: string;
+};
+export type GoogleEventInput = {
+  summary: string;
+  description: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+};
+export type GoogleSyncResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced"; eventId: string }
+  | { status: "failed"; error: string };
+export type GoogleMutationResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced" }
+  | { status: "failed"; error: string };
+const REQUIRED = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+] as const;
+export function googleCalendarStatus(env: Env = process.env): GoogleCalendarStatus {
+  const missing = REQUIRED.filter((key) => !env[key]);
+  const configured = missing.length === 0;
+  const verified = env.GOOGLE_CALENDAR_VERIFIED === "1";
+  const syncEnabled = env.GOOGLE_CALENDAR_SYNC === "1";
+  const operational = configured && verified && syncEnabled;
+  let reason: string;
+  if (!configured) {
+    reason = Not configured (missing ${missing.join(", ")}). The internal calendar is the source of truth.;
+  } else if (!verified) {
+    reason =
+      "Credentials are present, but Google Calendar has not been verified end-to-end. The internal calendar is the source of truth.";
+  } else if (!syncEnabled) {
+    reason =
+      "Google Calendar is verified but sync is disabled. Set GOOGLE_CALENDAR_SYNC=1 to enable it.";
+  } else {
+    reason = "Google Calendar sync is explicitly enabled and reported as verified.";
+  }
+  return { configured, verified, syncEnabled, operational, reason };
+}
+export function buildGoogleEvent(input: GoogleEventInput) {
+  return {
+    summary: input.summary,
+    description: input.description,
+    start: { dateTime: input.startTime, timeZone: input.timezone },
+    end: { dateTime: input.endTime, timeZone: input.timezone },
+  };
+}
+export async function getGoogleAccessToken(
+  env: Env = process.env,
+  fetchImpl: FetchLike = fetch
+): Promise {
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID ?? "",
+    client_secret: env.GOOGLE_CLIENT_SECRET ?? "",
+    refresh_token: env.GOOGLE_REFRESH_TOKEN ?? "",
+    grant_type: "refresh_token",
+  });
+  const response = await fetchImpl("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    throw new Error(Google token request failed with HTTP ${response.status}.);
+  }
+  const data = (await response.json()) as { access_token?: string };
+  if (!data.access_token) throw new Error("Google did not return an access token.");
+  return data.access_token;
+}
+export async function syncBookingToGoogle(
+  input: GoogleEventInput,
+  env: Env = process.env,
+  deps: { fetch?: FetchLike } = {}
+): Promise {
+  const status = googleCalendarStatus(env);
+  if (!status.operational) {
+    return { status: "not_configured", error: status.reason };
+  }
+  const fetchImpl = deps.fetch ?? fetch;
+  try {
+    const token = await getGoogleAccessToken(env, fetchImpl);
+    const calendarId = encodeURIComponent(env.GOOGLE_CALENDAR_ID!);
+    const response = await fetchImpl(
+      https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events,
+      {
+        method: "POST",
+        headers: {
+          Authorization: Bearer ${token},
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildGoogleEvent(input)),
+        signal: AbortSignal.timeout(20_000),
+      }
+    );
+    if (!response.ok) {
+      return {
+        status: "failed",
+        error: Google event creation failed with HTTP ${response.status}.,
+      };
+    }
+    const data = (await response.json()) as { id?: string };
+    if (!data.id) return { status: "failed", error: "Google returned no event ID." };
+    return { status: "synced", eventId: data.id };
+  } catch (error) {
+    return {
+      status: "failed",
+Let's be quick, time to insert
+
+
+ChatGPT:
+Perfect. We have enough information. Let's move quickly.
+Your existing getGoogleAccessToken() already handles refresh-token exchange. We'll use it directly to verify authentication.
+First, don't change either verification switch yet.
+Step 1 — Create a temporary OAuth verification script
+Run this command from your project root:
+mkdir -p scripts
+cat > scripts/verify-google-calendar.mjs <<'EOF'
+const required = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+];
+
+for (const key of required) {
+  if (!process.env[key]) {
+    console.error(`Missing environment variable: ${key}`);
+    process.exit(1);
+  }
+}
+
+async function main() {
+  console.log("1. Requesting Google access token...");
+
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!tokenResponse.ok) {
+    throw new Error(`OAuth failed: HTTP ${tokenResponse.status}`);
+  }
+
+  const { access_token } = await tokenResponse.json();
+  if (!access_token) throw new Error("No access token returned.");
+
+  console.log("OAuth successful.");
+
+  const base =
+    `https://www.googleapis.com/calendar/v3/calendars/` +
+    `${encodeURIComponent(process.env.GOOGLE_CALENDAR_ID)}/events`;
+
+  const headers = {
+    Authorization: `Bearer ${access_token}`,
+    "Content-Type": "application/json",
+  };
+
+  let eventId;
+
+  try {
+    console.log("2. Creating temporary calendar event...");
+
+    const create = await fetch(base, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        summary: "Ledgerwise integration verification",
+        description: "Temporary test event. Safe to delete.",
+        start: {
+          dateTime: "2026-11-16T10:00:00-05:00",
+          timeZone: "America/New_York",
+        },
+        end: {
+          dateTime: "2026-11-16T10:15:00-05:00",
+          timeZone: "America/New_York",
+        },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!create.ok) throw new Error(`Create failed: HTTP ${create.status}`);
+
+    const created = await create.json();
+    eventId = created.id;
+    if (!eventId) throw new Error("Google returned no event ID.");
+
+    console.log("Event created.");
+
+    console.log("3. Updating temporary event...");
+
+    const update = await fetch(`${base}/${encodeURIComponent(eventId)}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({
+        summary: "Ledgerwise integration verification (updated)",
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!update.ok) throw new Error(`Update failed: HTTP ${update.status}`);
+
+    console.log("Event updated.");
+
+    console.log("4. Deleting temporary event...");
+
+    const deletion = await fetch(`${base}/${encodeURIComponent(eventId)}`, {
+      method: "DELETE",
+      headers,
+      signal: AbortSignal.timeout(20000),
+    });
+
+    if (!deletion.ok && deletion.status !== 404 && deletion.status !== 410) {
+      throw new Error(`Delete failed: HTTP ${deletion.status}`);
+    }
+
+    eventId = undefined;
+    console.log("Event deleted.");
+    console.log("\nSUCCESS: OAuth and Google Calendar create/update/delete verified.");
+  } finally {
+    if (eventId) {
+      console.error(
+        "WARNING: Test did not finish. A temporary event may remain. Event ID:",
+        eventId
+      );
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error("VERIFICATION FAILED:", error.message);
+  process.exitCode = 1;
+});
+EOF
+
+Step 2 — Run the verification
+Node needs to load your .env.local file. Run:
+node --env-file=.env.local scripts/verify-google-calendar.mjs
+
+Expected result
+OAuth successful.
+Event created.
+Event updated.
+Event deleted.
+
+SUCCESS: OAuth and Google Calendar create/update/delete verified.
+
+The script creates a temporary event on November 16, 2026, at 10:00 AM New York time, updates it, and deletes it.
+Important: It does not print your credentials or access token. If a test fails, it warns you if an event may remain.
+Send me the terminal output. If all four operations succeed, we'll enable Google Calendar in Ledgerwise.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ node --env-file=.env.local scripts/verify-google-calendar.mjs
+
+Requesting Google access token...
+OAuth successful.
+Creating temporary calendar event...
+VERIFICATION FAILED: Create failed: HTTP 404
+
+
+
+ChatGPT:
+Good news: OAuth authentication is working. Google accepted your client ID, client secret and refresh token and returned an access token.
+The failure is happening at the next stage:
+OAuth successful Event creation failed — HTTP 404
+This points us toward the Calendar API request, particularly the GOOGLE_CALENDAR_ID.
+The most likely causes are:
+
+The Calendar ID is incorrect.
+The calendar belongs to another Google account and hasn't been shared with the authorized account.
+The API request cannot access that particular calendar.
+
+We should identify which one before changing credentials.
+
+
+ChatGPT:
+Good news: OAuth authentication is working. Google accepted your client ID, client secret and refresh token and returned an access token.
+The failure is happening at the next stage:
+OAuth successful Event creation failed — HTTP 404
+This points us toward the Calendar API request, particularly the GOOGLE_CALENDAR_ID.
+The most likely causes are:
+
+The Calendar ID is incorrect.
+The calendar belongs to another Google account and hasn't been shared with the authorized account.
+The API request cannot access that particular calendar.
+
+We should identify which one before changing credentials.
+Google documents this exact situation: a 404 Not Found can mean the calendar ID doesn't exist or the authenticated account cannot access that calendar. 
+Let's diagnose it directly instead of guessing.
+Step 1 — Check calendar access
+Replace the verification script temporarily with a diagnostic that lists calendars accessible to your OAuth account.
+Run:
+cat > scripts/check-google-calendars.mjs <<'EOF'
+const response = await fetch("https://oauth2.googleapis.com/token", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    grant_type: "refresh_token",
+  }),
+});
+
+if (!response.ok) {
+  throw new Error(`OAuth failed: HTTP ${response.status}`);
+}
+
+const { access_token } = await response.json();
+
+const result = await fetch(
+  "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+  { headers: { Authorization: `Bearer ${access_token}` } }
+);
+
+const data = await result.json();
+
+if (!result.ok) {
+  throw new Error(`Calendar list failed: HTTP ${result.status}`);
+}
+
+for (const calendar of data.items ?? []) {
+  console.log({
+    summary: calendar.summary,
+    id: calendar.id,
+    accessRole: calendar.accessRole,
+    primary: calendar.primary ?? false,
+  });
+}
+EOF
+
+Run it:
+node --env-file=.env.local scripts/check-google-calendars.mjs
+
+Step 2 — Send me the results
+I need to see:
+
+Calendar names (summary)
+Calendar IDs (id)
+Access roles (accessRole)
+
+These aren't OAuth secrets, but you can redact personal email addresses if you prefer.
+What we're looking for: a calendar with accessRole: "owner" or "writer".
+If your primary calendar appears, we can use its ID or simply primary in .env.local. Google officially supports primary as the calendar identifier. 
+Don't change GOOGLE_CALENDAR_VERIFIED or GOOGLE_CALENDAR_SYNC yet. Let's get the calendar ID right first.
+
+
+ChatGPT:
+Google documents this exact situation: a 404 Not Found can mean the calendar ID doesn't exist or the authenticated account cannot access that calendar. 
+Let's diagnose it directly instead of guessing.
+Step 1 — Check calendar access
+Replace the verification script temporarily with a diagnostic that lists calendars accessible to your OAuth account.
+Run:
+cat > scripts/check-google-calendars.mjs <<'EOF'
+const response = await fetch("https://oauth2.googleapis.com/token", {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams({
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+    grant_type: "refresh_token",
+  }),
+});
+
+if (!response.ok) {
+  throw new Error(`OAuth failed: HTTP ${response.status}`);
+}
+
+const { access_token } = await response.json();
+
+const result = await fetch(
+  "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+  { headers: { Authorization: `Bearer ${access_token}` } }
+);
+
+const data = await result.json();
+
+if (!result.ok) {
+  throw new Error(`Calendar list failed: HTTP ${result.status}`);
+}
+
+for (const calendar of data.items ?? []) {
+  console.log({
+    summary: calendar.summary,
+    id: calendar.id,
+    accessRole: calendar.accessRole,
+    primary: calendar.primary ?? false,
+  });
+}
+EOF
+
+Run it:
+node --env-file=.env.local scripts/check-google-calendars.mjs
+
+Step 2 — Send me the results
+I need to see:
+
+Calendar names (summary)
+Calendar IDs (id)
+Access roles (accessRole)
+
+These aren't OAuth secrets, but you can redact personal email addresses if you prefer.
+What we're looking for: a calendar with accessRole: "owner" or "writer".
+If your primary calendar appears, we can use its ID or simply primary in .env.local. Google officially supports primary as the calendar identifier. 
+Don't change GOOGLE_CALENDAR_VERIFIED or GOOGLE_CALENDAR_SYNC yet. Let's get the calendar ID right first.
+
+
+You:
+You know that there is no Google Calendar ID in my env
+
+
+ChatGPT:
+Ah, that explains it. We found the problem.
+Your .env.local doesn't have GOOGLE_CALENDAR_ID configured yet. OAuth succeeded, but Google cannot find the calendar because the request is using an empty or invalid calendar ID.
+Let's fix that directly.
+1. Get your Calendar ID
+
+Open Google Calendar.
+Find your primary calendar in the left sidebar.
+Click the three dots beside it.
+Select Settings and sharing.
+Under Integrate calendar, copy the Calendar ID.
+
+For your primary calendar, this is usually your Google account email address.
+2. Add it to .env.local
+Open your file:
+nano .env.local
+
+Add:
+GOOGLE_CALENDAR_ID=your_calendar_id
+
+Replace the placeholder with the actual ID.
+3. Verify again
+Save the file, then run:
+node --env-file=.env.local scripts/verify-google-calendar.mjs
+
+We want all four operations to succeed:
+
+OAuth authentication
+Event creation
+Event update
+Event deletion
+
+Keep both verification switches at 0 until that test passes.
+
+
+You:
+🖼️ [Uploaded image: image(9).png — PNG, 99 KB]
+OK here is what I am getting now in the app
+Also here are the tests results:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ node --env-file=.env.local scripts/verify-google-calendar.mjs                                                                                         
+
+Requesting Google access token...
+OAuth successful.
+Creating temporary calendar event...
+Event created.
+Updating temporary event...
+Event updated.
+Deleting temporary event...
+Event deleted.
+
+
+
+ChatGPT:
+Excellent! Google Calendar API verified
+All four verification steps succeeded:
+
+
+
+Test
+Result
+
+
+
+OAuth authentication
+Passed
+
+
+Create Google event
+Passed
+
+
+Update Google event
+Passed
+
+
+Delete Google event
+Passed
+
+
+Your Google credentials, refresh token, Calendar ID and Calendar API permissions are working. The temporary test event was also successfully deleted.
+1. What your screenshot tells us
+The app now displays:
+
+Google Calendar: sync enabled.
+Credentials are detected.
+Verification is reported as successful.
+
+So the integration status is now enabled.
+However, there's one inconsistency: the green status panel still displays this message:
+
+The prototype does not claim Google Calendar is working until real OAuth and sync have been tested.
+
+That message is now outdated. We have tested OAuth and direct Google Calendar event synchronization.
+2. Now test Ledgerwise itself
+The next test is to verify that a booking made through Ledgerwise creates an event in Google Calendar.
+Your internal calendar currently has no slots, so:
+
+In the Calendar tab, create an internal slot.
+Use November 16, 2026, at 9:00–9:30 AM (New York time), as shown in your screenshot.
+Save the slot.
+Book that slot through Ledgerwise.
+Open Google Calendar and check whether the corresponding event appears.
+
+Important Don't confuse the direct API verification with a complete application-level booking test. We still need to verify the latter.
+3. One small UI correction
+Let's locate that outdated message.
+Run:
+rg -n "The prototype does not claim Google Calendar is working" app components
+
+Send me the result.
+We'll remove or replace that stale disclaimer, then finish testing the actual booking synchronization.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ rg -n "The prototype does not claim Google Calendar is working" app components
+app/(dashboard)/calendar/page.tsx
+151:          The prototype does not claim Google Calendar is working until real OAuth and
+
+
+ChatGPT:
+Perfect. We found the exact location.
+Let's inspect the surrounding code before replacing the disclaimer.
+Run:
+sed -n '135,165p' 'app/(dashboard)/calendar/page.tsx'
+
+Send me the output. I'll give you the precise replacement so the green status panel reflects the successful Google API verification without making claims about the full Ledgerwise booking workflow before we've tested it.
+
+
+You:
+┌──(younes㉿younes)-[~/…/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype]
+└─$ sed -n '135,165p' 'app/(dashboard)/calendar/page.tsx'
+          Only pending, confirmed, and needs-human bookings hold a slot.
+        
+      
+  <div
+    className={`rounded border p-4 text-sm ${
+      google.operational
+        ? "border-green-200 bg-green-50 text-green-900"
+        : "border-gray-200 bg-white text-gray-700"
+    }`}
+  >
+    <div className="font-medium">
+      Google Calendar: {google.operational ? "sync enabled" : "not operational"}
+    </div>
+    <p className="mt-1 text-xs">{google.reason}</p>
+    <p className="mt-1 text-xs text-gray-500">
+      The prototype does not claim Google Calendar is working until real OAuth and
+      sync have been tested. Internal slots and bookings work without it.
+    </p>
+  </div>
+
+  <div className="grid gap-6 lg:grid-cols-2">
+    <SlotCreator />
+    <BookSlotForm
+      slots={freeSlotOptions}
+      companies={companies}
+      conversations={conversations.map((conversation) => ({
+        id: conversation.id,
+        label: `${companyName(conversation.companies) ?? "Unknown"} · ${
+          conversation.contact_email
+        } · ${conversation.status}`,
+
+
+
+ChatGPT:
+Great. Replace the outdated paragraph with this:
+Current code:
+<p className="mt-1 text-xs text-gray-500">
+  The prototype does not claim Google Calendar is working until real OAuth and
+  sync have been tested. Internal slots and bookings work without it.
+</p>
+
+Replace with:
+<p className="mt-1 text-xs text-gray-500">
+  Google OAuth and direct event creation, updating, and deletion have been
+  successfully verified. Ledgerwise booking synchronization is undergoing
+  end-to-end testing. The internal calendar remains the source of truth.
+</p>
+
+Save the file. No server restart should be necessary if Next.js hot reload is working.
+Next: test an actual Ledgerwise booking
+
+Create an internal slot.
+Book that slot through Ledgerwise.
+Check Google Calendar for the corresponding event.
+Reschedule the booking and verify the Google event updates.
+Cancel the booking and verify the Google event disappears.
+
+That final test will establish whether the application itself synchronizes correctly, not just whether Google's API accepts requests.
+
+
+You:
+terminal command to replace that code segment
+
+
+ChatGPT:
+Run this from your project root. It replaces only the outdated paragraph:
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("app/(dashboard)/calendar/page.tsx")
+content = path.read_text()
+
+old = '''        <p className="mt-1 text-xs text-gray-500">
+          The prototype does not claim Google Calendar is working until real OAuth and
+          sync have been tested. Internal slots and bookings work without it.
+        </p>'''
+
+new = '''        <p className="mt-1 text-xs text-gray-500">
+          Google OAuth and direct event creation, updating, and deletion have been
+          successfully verified. Ledgerwise booking synchronization is undergoing
+          end-to-end testing. The internal calendar remains the source of truth.
+        </p>'''
+
+if old not in content:
+    raise SystemExit("ERROR: Original text not found. No changes made.")
+
+path.write_text(content.replace(old, new, 1))
+print("Successfully updated Calendar status message.")
+PY
+
+Then verify:
+git diff -- 'app/(dashboard)/calendar/page.tsx'
+
+Your Next.js dev server should hot-reload automatically.
+
+
+You:
+Now is the email sending setup ready though ?
+
+
+ChatGPT:
+Not confirmed yet. Google Calendar is now verified at the API level, but email sending is a separate integration.
+Ledgerwise already has its outreach workflow implemented, but we haven't established that live email delivery is fully configured and tested.
+I would distinguish three things:
+
+Email drafting: generating personalized outreach messages.
+Email sending: successfully delivering messages through the configured provider.
+Reply handling: receiving and processing replies.
+
+Having the first implemented does not mean the other two are operational.
+
+
+ChatGPT:
+Not confirmed yet. Google Calendar is now verified at the API level, but email sending is a separate integration.
+Ledgerwise already has its outreach workflow implemented, but we haven't established that live email delivery is fully configured and tested.
+I would distinguish three things:
+
+Email drafting: generating personalized outreach messages.
+Email sending: successfully delivering messages through the configured provider.
+Reply handling: receiving and processing replies.
+
+Having the first implemented does not mean the other two are operational.
+Let's check the actual setup
+Run this from your Ledgerwise project root:
+echo "=== EMAIL CONFIGURATION REFERENCES ==="
+rg -n "process\.env\.[A-Z0-9_]*(EMAIL|SMTP|RESEND|SENDGRID|MAIL|GMAIL)" app lib
+
+echo ""
+echo "=== EMAIL SENDING IMPLEMENTATION ==="
+rg -n "sendEmail|sendMail|resend|nodemailer|sendgrid|smtp|email.*send|send.*email" app lib
+
+This will help identify:
+
+Which email provider Ledgerwise uses.
+Which environment variables it requires.
+Whether sending is simulated or genuinely connected.
+Whether delivery errors are handled.
+
+Don't paste your .env.local contents or credentials.
+Send me the output, and we'll establish exactly what's ready, what's missing, and get live email sending configured next.
+
+
+ChatGPT:
+Let's check the actual setup
+Run this from your Ledgerwise project root:
+echo "=== EMAIL CONFIGURATION REFERENCES ==="
+rg -n "process\.env\.[A-Z0-9_]*(EMAIL|SMTP|RESEND|SENDGRID|MAIL|GMAIL)" app lib
+
+echo ""
+echo "=== EMAIL SENDING IMPLEMENTATION ==="
+rg -n "sendEmail|sendMail|resend|nodemailer|sendgrid|smtp|email.*send|send.*email" app lib
+
+This will help identify:
+
+Which email provider Ledgerwise uses.
+Which environment variables it requires.
+Whether sending is simulated or genuinely connected.
+Whether delivery errors are handled.
+
+Don't paste your .env.local contents or credentials.
+Send me the output, and we'll establish exactly what's ready, what's missing, and get live email sending configured next.
+
+
+You:
+the zip command again for me to send this to claude and let him check on email sending integration because the app is showing me this:
+Resend email
+Real outbound email is disabled unless the explicit live-send switch and sender configuration are all present.
+Needs setup
+Endpoint: https://resend.com/api-keys · https://api.resend.com/emails
+RESEND_API_KEYEMAIL_FROMEMAIL_LIVE_SEND_ENABLED=1
+
+
+ChatGPT:
+Absolutely. Let's create a fresh ZIP of your current Ledgerwise project so Claude can inspect the Resend email integration without receiving secrets or unnecessary dependencies.
+Run this from the parent Updated UI directory:
+cd "$HOME/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI"
+
+zip -r ledgerwise-email-audit.zip ledgerwise-prototype \
+  -x "ledgerwise-prototype/node_modules/*" \
+     "ledgerwise-prototype/.next/*" \
+     "ledgerwise-prototype/.git/*" \
+     "ledgerwise-prototype/.env*" \
+     "ledgerwise-prototype/supabase/.temp/*" \
+     "ledgerwise-prototype/supabase/schema_snapshot.sql" \
+     "ledgerwise-prototype/coverage/*" \
+     "ledgerwise-prototype/test-results/*" \
+     "ledgerwise-prototype/playwright-report/*"
+
+Verify the archive
+ls -lh ledgerwise-email-audit.zip
+
+Check that no environment files slipped in:
+unzip -l ledgerwise-email-audit.zip | grep -E '\.env|service_role|secret'
+
+Ideally, that last command returns nothing.
+Prompt for Claude
+Upload ledgerwise-email-audit.zip and give Claude this prompt:
+I want you to audit the Resend email integration in my Ledgerwise project.
+Project: Ledgerwise — AI SDR platform for a US bookkeeping firm targeting e-commerce businesses.
+Current application status
+The Integrations section displays:
+Resend email
+Real outbound email is disabled unless the explicit live-send switch and sender configuration are all present.
+Needs setup:
+
+RESEND_API_KEY
+EMAIL_FROM
+EMAIL_LIVE_SEND_ENABLED=1
+
+Resend API endpoint: https://api.resend.com/emails
+Your task
+Inspect the entire codebase and determine whether the Resend integration is genuinely implemented and ready for production testing.
+Investigate:
+
+Resend API integration and authentication.
+Environment variable handling and validation.
+Sender address requirements and domain verification.
+Whether live sending is properly gated behind EMAIL_LIVE_SEND_ENABLED=1.
+Whether email sending is simulated or actually delivered.
+Personalized outreach generation and how messages are passed to Resend.
+Error handling, retries, duplicate-send prevention and delivery status tracking.
+Whether sending is restricted to approved messages.
+Unsubscribe handling, suppression lists and opt-out enforcement.
+Whether the UI accurately reflects the actual integration status.
+Whether API keys or sensitive information could leak to the browser or logs.
+Whether tests cover successful sending and failure scenarios.
+
+Important constraints
+
+Do not modify any files yet.
+Do not invent environment variables or implementation details.
+Do not assume something works just because the UI says it is configured.
+Distinguish implemented, partially implemented, missing and unverified functionality.
+Do not recommend enabling live sending until safety checks have been verified.
+Preserve the existing architecture and Supabase database design.
+
+Deliverables
+Provide:
+
+A clear assessment of the current Resend integration.
+A list of blockers preventing live email sending.
+Exact environment configuration required.
+Required Resend dashboard setup steps.
+A prioritized implementation plan.
+Specific files and functions that need modification.
+Tests required before enabling live sending.
+
+I want a practical, codebase-specific audit, not a generic tutorial.
+One important thing: don't include .env.local, Resend API keys, or any other secrets in the ZIP. Claude only needs the source code to perform this audit.
+
+
+You:
+📎 [Attached file: ledgerwise-email-audit.zip — ZIP, 319 KB]
+Or you know what, here, you see what needs to be configured
+
+
+ChatGPT:
+Yes. I inspected the ZIP. The Resend integration is already implemented in Ledgerwise. You don't need Claude to build the sending functionality from scratch; what remains is configuring the provider and testing the complete sending flow.
+Here's exactly what needs to happen.
+1. Configure Resend
+
+  
+🖼️
+Generated image
+Resend email developer platform logo
+  
+    ****
+
+<text color="secondary" size="xs">Email delivery provider</text>
+<a href="https://resend.com/">Open Resend</a>
+
+  
+
+
+You need to:
+
+Create a Resend account.
+Add a sending domain you control.
+Configure the DNS records Resend provides (typically SPF and DKIM).
+Wait for the domain to become verified.
+Create an API key.
+
+Important: You need a verified sender domain for real outbound email. Don't assume that simply creating an API key is enough.
+2. Add these environment variables
+In your project's .env.local:
+RESEND_API_KEY=re_your_actual_api_key
+EMAIL_FROM=Ledgerwise <hello@yourdomain.com>
+EMAIL_LIVE_SEND_ENABLED=1
+
+Optional:
+EMAIL_REPLY_TO=hello@yourdomain.com
+
+
+
+
+Variable
+Purpose
+
+
+
+RESEND_API_KEY
+Authenticates Ledgerwise with Resend
+
+
+EMAIL_FROM
+Sender name and verified email address
+
+
+EMAIL_LIVE_SEND_ENABLED
+Explicitly enables real email sending
+
+
+EMAIL_REPLY_TO
+Optional reply address
+
+
+Keep the API key private. Never paste it here or include it in the ZIP you share.
+3. What is already implemented?
+I checked the actual source code in your archive.
+
+  
+    **Resend API integration**
+    Implemented
+  
+  `lib/email/resend.ts` sends requests to Resend's API and handles provider errors.
+
+  
+  
+    **Approval before sending**
+    Implemented
+  
+  Only drafts with `approved` status can be sent.
+
+  
+  
+    **Suppression checks**
+    Implemented
+  
+  Suppressed contacts are blocked before sending.
+
+  
+  
+    **Contact verification**
+    Implemented
+  
+  The recipient's contact source must be human-verified.
+
+  
+  
+    **Idempotency protection**
+    Implemented
+  
+  A stable idempotency key is sent to Resend to help prevent duplicate sends.
+
+  
+  
+    **Automated tests**
+    Present
+  
+  `tests/resend.test.ts` tests configuration gating, provider requests and error handling.
+
+
+4. What still needs testing?
+Once configured, we need to verify the actual workflow:
+
+Generate an email draft for a qualified prospect.
+Review and approve it.
+Send it through Ledgerwise.
+Confirm it appears in Resend's email logs.
+Confirm the recipient receives it.
+Confirm Ledgerwise records it as sent and creates the conversation.
+
+There are also a couple of things worth improving later: the ZIP references docs/PROVIDER_SETUP.md, but that file is missing, and the app's integration status checks whether environment variables exist, not whether Resend actually accepts them.
+Let's configure it first
+Next step Create your Resend account and verify your sending domain.
+Open Resend domain settings
+Once you're there, tell me what the domain verification page shows. I'll walk you through the DNS records and then we'll configure Ledgerwise without exposing any secrets.
+
+If you want, I can:
+
+Guide me through Resend domain verification and DNS setup
+Help me configure environment variables for Resend email sending
+Walk me through testing the full email send workflow

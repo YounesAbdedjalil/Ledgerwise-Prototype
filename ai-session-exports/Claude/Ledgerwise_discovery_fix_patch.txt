@@ -1,0 +1,323 @@
+Ledgerwise discovery fix patch
+==============================
+
+Claude:
+I'll start by looking at the file-reading skill, then unpack the zip.
+The project is small enough to extract. I'll pull out the relevant files only.
+The structural bottleneck is already visible in the route. Next, the remaining pipeline pieces.
+Before changing anything, I'll get a baseline on the research tests that can run without node_modules.
+The baseline passes (65 tests). The AI layer has a throttle (MIN_GAP_MS, Groq token budget), so I'll measure its throughput with a virtual clock and compare it against what 30 companies would need.
+Confirmed on the virtual clock: ~67 extraction calls per 300 s on Gemini, and only 6–11 on Groq. Next I'll check how the DB layer and RLS are set up so the fix fits the existing schema.
+I have the full picture, so I'm building the fix now, starting with the deterministic US-evidence module that lets the pipeline avoid spending LLM calls on hopeless candidates.
+Next, extract.ts. The existing tests pin the default behaviour, so the new behaviour is opt-in only.
+Now runner.ts: structured outcomes, an early service-site reject, the US prefilter, the gate-first extraction, and a graceful stop.
+One adjustment: if the batch that hit the target also had unstarted entries, it should report target_reached, not deadline.
+Now the route. This is where the wrapper bug that capped every company at 3 pages gets fixed.
+Now tests for the new behaviour. They cover the replacement loop, the stop reasons, the gate-first extraction, the US prefilter, and the bug-fixed link handling.
+Three failures to look at. The first two look like my test assumptions (two queries returning identical hits per round), but I'll check all three rather than guess.
+All pass; 17 researched to reach 7 imports confirms replacement is happening. Let me clean up that debug line, then add runner-level tests for the autonomous path and the extractor options.
+All green. One of my assertions in the first autonomous test is near-tautological, so I'll tighten it, then run the full suite and typecheck what I can.
+The agent couldn't reach 30 because its design caps a run well below that, and nothing replaced rejected candidates. I've written a patch (ledgerwise-discovery-fix.patch) that fixes this. The 30-company target is still not reachable in one request. I couldn't run the live pipeline here (no Tavily, Jina or AI keys, no network), so every claim below comes from reading the code and measuring the AI throttle in simulation, not from real runs.
+Why it never reached 30
+1. The route imported at most 12 companies per run, and never searched again.
+
+It made 3 fixed queries once, then took .slice(0, 12) of the survivors and researched only those.
+A rejected candidate was never replaced, so the best case was 12 imports even with every candidate qualifying.
+The three queries were identical on every click, so reruns re-researched the same top results.
+Rejected sites weren't recorded anywhere, so they were retried on every run.
+
+2. The AI extraction budget caps a single 300-second request. I simulated lib/ai.ts on a virtual clock:
+
+
+
+Setup
+Extraction calls in 300 s
+
+
+
+Gemini primary
+about 67
+
+
+Groq only (GEMINI_MODEL unset)
+6–11
+
+
+The old code made roughly 3–10 calls per company that passed eligibility, and the throttle is global, so concurrency doesn't help. Please check which setup you're on. If it's Groq-only, that alone limits you to 1–3 companies per request.
+3. A bug capped every company at 3 pages. The runner calls discoverLinks(text, url, 6), but the route's wrapper ignored that argument and always returned 1 link. The shipping, FAQ and contact pages most likely to carry US evidence were never read, and the comment above the wrapper wrongly claimed 8 pages.
+4. Nothing was saved until the very end, and the report hid why candidates failed.
+
+All persistence happened after the whole run, so a timeout lost everything.
+A rejection, a fetch error and an AI outage were all just text in errors, and the UI showed none of it.
+
+Likely contributors I couldn't measure: the root-path-only URL filter (pathname !== "/", which also dropped URLs with tracking parameters) probably discards most Tavily results, since many will be deep links.
+What the patch does
+
+Replacement loop (lib/research/discovery.ts):
+It keeps a candidate pool and searches again whenever the pool runs low.
+It stops at 30 imported, at a time budget, or when candidates run out, with a named stop reason.
+It saves each batch of 4 as it finishes, and never overshoots the target.
+Queries rotate across about 90 category × template combinations with a fresh seed each run, and it asks Tavily for 20 results instead of 10.
+It keeps product and collection links as candidates and drops blog and listicle links.
+
+
+Rejection memory: a new migration (20261115_06_discovery_candidates.sql) lets later runs skip sites already rejected. It only remembers judgements about the company, never fetch or AI failures, and the app still works without it.
+Fewer wasted AI calls:
+Autonomous runs now check for any US wording first, using a deterministic pattern check before any AI call.
+The gate sends a compact excerpt around the US evidence, which is about 1 call instead of 3–10.
+Only companies that pass get up to 2 enrichment calls.
+Manual CSV research is unchanged.
+
+
+Honest reporting: every candidate now has an outcome and the stage where it left the funnel, and the response includes per-stage counts and per-query yield. The button shows an "N of 30 imported" breakdown with the reason it stopped.
+The link bug is fixed, with a page cap of 6 per company.
+Where I changed the filter: I did not touch eligibility.ts. The new US pre-check only skips AI calls that the existing us_ecommerce verified-claim gate would reject anyway.
+
+Expect several requests per run
+My estimate is 10–13 companies per request on Gemini free tier and 1–2 on Groq-only. I haven't measured this, since it depends on your real yield. Since one request can't do 30, the button now chains up to 6 requests, and each saves its progress. On Groq-only that likely falls short of 30, so use Gemini or a paid tier. For a hands-off run, a background job would be the next step.
+Verification
+
+The research tests all pass: 179 passed in total, including new tests for the loop, stop reasons, gate-first extraction and the link fix.
+The one failing file is research-output.test.ts, which can't import papaparse because the zip has no node_modules.
+The research code is strict-typechecked. The route typechecked against stubbed Next and Supabase types, and the button not at all, so please run npm test and npx tsc --noEmit on your side.
+Tavily's 20-result maximum and its exclude_domains behaviour are from memory. The route retries without the exclude list on a 400 but not on a bad max_results.
+
+Decisions for you
+
+Eligibility strictness. I'm not asserting it is too strict, but the new stage counts will show it. Possible weak spots: checkout and collections? are generic words, and a single mention of "software platform" or "SaaS" rejects a real store.
+US evidence policy. docs/ICP.md says US shipping or US pricing counts as us_ecommerce, but rule 6 of the extractor prompt says shipping alone isn't enough. I left the stricter prompt in place. The no_us_signal and us_evidence counts will show how many real brands that rule rejects.
+Jina rate limit. Page fetches are unauthenticated. Unauthenticated Jina reader limits are low, from memory about 20 requests a minute, so a JINA_API_KEY header may be worth adding if fetch failures show up in the stage counts.
+
+Apply with git apply ledgerwise-discovery-fix.patch, then run migration 06 in the SQL editor.
+
+
+You:
+Hmmm good job, I wanna know what you did that led to the fix, in simple terms please
+
+
+Claude:
+Here's the story in plain terms.
+1. I read the code before guessing. I unpacked your zip and followed one candidate company from the moment you click the button all the way to the database. That meant reading the route, the research runner, the page fetcher, the AI extractor, and the importer.
+2. I did the math on what the code could possibly produce. The route said "take the first 12 candidates." So even if every single one was perfect, you could never get more than 12. No amount of tuning the filter would have fixed that. It was a hard ceiling built into the design, and it also searched only once, so a rejected company was never replaced.
+3. I looked for the other limits. The AI step was throttled to avoid hitting free-tier limits. I couldn't call the real AI services, so I ran your own throttle code against a fake clock to count how many AI calls fit into one 300-second request. The answer was about 67 on Gemini and only 6 to 11 on Groq. That told me even a perfect search loop would run out of AI calls long before reaching 30.
+4. I found a bug by noticing a mismatch. The runner asked for up to 6 links per site, but the route's helper quietly ignored that and always returned 1. So every company only got about 3 pages read, which starved the checks that need pages like shipping and contact.
+5. I fixed things in order of how much they mattered:
+
+Replace rejected companies by searching again, instead of stopping after one round.
+Spend fewer AI calls per company, by checking for US wording with a free text check first and only then asking the AI.
+Remember rejected sites, so reruns don't repeat the same work.
+Save results as each batch finishes, so a timeout doesn't lose everything.
+Fix the 1-link bug.
+
+6. I tested my own work, and the tests caught a real mistake. One of my new tests failed. A text pattern I wrote was too greedy and swallowed whole pages, so the "compact excerpt" feature silently fell back to the wrong thing. I fixed the pattern, and the test passed.
+7. I was upfront about what I couldn't check. I never ran the live search or website fetching, so I can't tell you real success rates. That's why I also made the tool report where each candidate dropped out, so your next run shows exactly where the remaining losses are.
+
+
+You:
+
+I looked for the other limits. The AI step was throttled to avoid hitting free-tier limits. I couldn’t call the real AI services, so I ran your own throttle code against a fake clock to count how many AI calls fit into one 300-second request. The answer was about 67 on Gemini and only 6 to 11 on Groq. That told me even a perfect search loop would run out of AI calls long before reaching 30.
+
+I found a bug by noticing a mismatch. The runner asked for up to 6 links per site, but the route’s helper quietly ignored that and always returned 1. So every company only got about 3 pages read, which starved the checks that need pages like shipping and contact.
+
+I fixed things in order of how much they mattered:
+
+
+
+Replace rejected companies by searching again, instead of stopping after one round.
+Spend fewer AI calls per company, by checking for US wording with a free text check first and only then asking the AI.
+Remember rejected sites, so reruns don’t repeat the same work.
+Save results as each batch finishes, so a timeout doesn’t lose everything.
+Fix the 1-link bug.
+
+Hmmm I see now
+Ok next, which AIs agents are doing the search ? (and which models do they use ?
+So the bug was that the AI mistakes was that it made rejections to companies if it couldn't find the 6 criterias ?
+
+
+Claude:
+Two quick corrections, because both questions rest on a small misunderstanding.
+Which AIs do the search?
+None of them. The search step isn't done by an AI.
+
+
+
+Step
+What does it
+Is it AI?
+
+
+
+Finding candidate websites
+Tavily, a search API (like Google, but for programs)
+No
+
+
+Reading the websites
+Jina Reader (r.jina.ai), which turns a web page into plain text
+No
+
+
+E-commerce eligibility check
+Text patterns in eligibility.ts (looking for "Add to cart", "bookkeeping services", etc.)
+No
+
+
+Pulling facts out of the pages
+Gemini or Groq
+Yes, this is the only AI step
+
+
+Drafting emails and replies
+Groq only
+Yes (a different feature)
+
+
+So it isn't really an autonomous agent. It's a scripted pipeline that calls one AI for one job: reading page text and proposing claims like "ships across the US", with an exact quote as proof.
+Which models? I can't tell from the zip, because they come from your environment settings:
+
+Gemini uses whatever you put in GEMINI_MODEL. There's no default, so if it's unset, Gemini isn't used at all.
+Groq defaults to openai/gpt-oss-120b, unless you set GROQ_MODEL.
+AI_EXTRACT_CHAIN can override the order.
+
+Check your .env to see which one you're actually on. It matters, because Gemini allows about 13 calls a minute and Groq only about 1–2.
+Was the bug the AI wrongly rejecting companies?
+No, and the "6 criteria" part was my wording being confusing. The 6 wasn't criteria. It was how many links per site the runner asked for (about, team, contact, shipping pages, and so on).
+The bug was in ordinary code, not in the AI. A helper function in the route ignored that request and always handed back 1 link, so each company only got about 3 pages read.
+That plausibly made rejections worse, though I haven't measured it. The checks work by finding evidence in the text, and with so few pages read there was less text to find it in. A real store whose US address sat on its contact or shipping page would look like it had no US evidence, and get rejected.
+The actual rejection rules are unchanged: needs storefront signals, no service-business signals, and a verified US claim.
+
+
+You:
+For drafting emails, how does Groq work ?
+
+
+Claude:
+I only read the shared AI layer, not the email code itself, so I'll look before answering.
+Groq isn't the whole story for emails. It's one step in a short safety chain, and it's the only AI step in it.
+What happens when you click "generate draft"
+
+Safety checks come first, before any AI. The app refuses to start unless the company has a usable contact email, the email isn't on the suppression list, and the contact's source has been human-verified in the review queue.
+It selects the facts the AI is allowed to use. Only human-verified sources, at most 6, are passed in as JSON: the claim, the evidence quote, and the source link.
+It calls Groq, which writes the email. Groq is the only model used for emails, because the code deliberately excludes Gemini for messages. The reason in the code comments is that Gemini's free tier may train on what you send, and these messages contain prospect details.
+Model: openai/gpt-oss-120b unless you set GROQ_MODEL.
+Settings: temperature 0.3 (fairly consistent wording), maximum 700 output tokens.
+The prompt tells it to use only the supplied facts, mention no pricing, say it's an AI assistant, keep the body under 140 words, and return JSON with a subject and body.
+
+
+Plain code checks what Groq wrote. It rejects the draft if it has an unfilled placeholder like {{name}} or [insert company]. Separate text patterns block pricing words, guarantees, claims of being human, and pressure language like "act now".
+If Groq is down, rate-limited, or the draft fails a check, it falls back to a fixed template. The template is built from the verified facts. It's marked template in the record, so you can tell it wasn't AI-written. If even the template fails the checks, no draft is created.
+Nothing is sent automatically. The draft is saved for a human to review and edit, and sending is a separate step.
+
+The point of this design
+The AI is trusted to write well but not to be safe. Anything risky is blocked by ordinary code that doesn't depend on the AI behaving. The reply-drafting feature for prospect responses (lib/conversations/reply.ts) uses the same pattern.
+I read this code now, but I didn't change or test any of it, so what I've described is the code as written, not something I observed running.
+
+
+You:
+OK OK, now I need a prompt for ChatGPT to see what needs to be done with google calendars
+
+
+Claude:
+To make the prompt accurate, I'll first check what the project already has for Google Calendar.
+Here's a prompt you can paste into ChatGPT. I wrote it from your actual calendar code, so it includes two things I found that ChatGPT would otherwise miss.
+You are a senior full-stack engineer reviewing the Google Calendar integration of
+a Next.js + Supabase prototype called Ledgerwise (an AI SDR tool for a US
+bookkeeping firm; a human sales team approves everything). I will attach the
+relevant files. Read them before answering. If something I describe disagrees
+with the files, trust the files and tell me.
+
+## Goal
+Find out exactly what is missing or wrong before Google Calendar sync can be
+called real, then give me an ordered plan to finish it. Do not assume anything
+works just because the code exists.
+
+## Files I'm attaching
+- docs/GOOGLE_CALENDAR.md, docs/SCOPE.md, docs/SECURITY.md
+- lib/calendar/google.ts, lib/calendar/time.ts
+- app/(dashboard)/calendar/actions.ts, app/(dashboard)/calendar/page.tsx
+- components/calendar/* (BookSlotForm, BookingActions, SlotCreator)
+- supabase/migrations/20261114_02_calendar_source_and_booking.sql
+- supabase/migrations/20261114_03_google_calendar.sql
+- supabase/unapplied/20261114_04_transactional_calendar_operations.sql
+- supabase/unapplied/20261114_05_calendar_security_corrections.sql
+- supabase/unapplied/README.md, docs/MIGRATION_INSTRUCTIONS.md
+- tests/google-calendar.test.ts, tests/calendar-time.test.ts
+- app/(dashboard)/settings/integrations/page.tsx
+
+## What the code does today (from my reading, verify it)
+- An internal calendar (calendar_slots, bookings tables) is the source of truth.
+- Google sync is optional. It needs GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  GOOGLE_REFRESH_TOKEN, GOOGLE_CALENDAR_ID, plus two manual switches:
+  GOOGLE_CALENDAR_VERIFIED=1 and GOOGLE_CALENDAR_SYNC=1.
+- lib/calendar/google.ts exchanges the refresh token for an access token on every
+  call, then creates, patches or deletes events through the Calendar v3 REST API.
+- There is NO OAuth connect/callback flow. The refresh token must be created by
+  hand.
+- If Google sync fails, the internal booking stays and the status is "failed".
+
+## Two problems I already suspect (confirm or refute each, with evidence)
+1. calendar/actions.ts calls these Supabase RPCs: create_calendar_slot,
+   delete_calendar_slot, book_slot, confirm_booking, cancel_booking,
+   reschedule_booking, record_google_calendar_sync. In the files I'm giving you,
+   those functions are defined ONLY in supabase/unapplied/..._04_... , and
+   supabase/unapplied/README.md says the app does NOT call them yet and applying
+   them would break slot creation and booking. That README may be out of date.
+   Work out: if migration 04/05 are not applied to my database, which calendar
+   features fail? If they ARE applied, what else (grants, revoked direct writes)
+   changes? Which state should I be in, and what is the safe order to get there?
+2. docs/GOOGLE_CALENDAR.md and the integrations page refer to
+   docs/PROVIDER_SETUP.md, which is not in the project. Tell me what it should
+   contain for Google specifically.
+
+## Questions to answer
+A. Gap analysis. List every gap between "code exists" and "works end to end in
+   production", grouped as: must-fix, should-fix, nice-to-have. Cover at least:
+   - database state (migrations applied or not, RPCs, RLS/grants)
+   - Google Cloud setup (project, Calendar API enabled, OAuth consent screen,
+     scopes: what is the minimum, is calendar.events enough?)
+   - getting a refresh token safely. I believe that in "Testing" publishing
+     status, refresh tokens expire after about 7 days. Confirm this and tell me
+     the right approach for a single-team internal tool (e.g. Workspace
+     internal app vs. service account vs. a proper OAuth flow).
+   - correctness: timezones and DST, duplicate events on retry (idempotency),
+     what happens when the Google call succeeds but recording the event ID in
+     the database fails (is an orphan event possible and how would cancel
+     behave?), and a missing Google 404/410 on PATCH.
+   - security: where tokens live, what is logged, whether prospect emails or
+     names are sent to Google and whether that matches docs/SECURITY.md.
+   - missing features worth considering: free/busy check before offering slots,
+     attendee invites, Google Meet link, two-way sync (events deleted in Google),
+     per-user calendars vs one shared calendar.
+B. Step-by-step setup guide for a first-time user: Google Cloud Console clicks,
+   consent screen choices, how to generate the refresh token (give exact steps,
+   for example via the OAuth Playground or a small script), where each value goes
+   in .env.local and on Vercel, and how to flip the two flags only after a real
+   test.
+C. A concrete verification checklist I can run by hand, covering create, update
+   (reschedule), delete (cancel), a Google-side failure, and a retry. For each
+   step say what I should see in Google Calendar AND in the database
+   (google_event_id, calendar_sync_status, calendar_synced_at).
+D. A prioritized implementation plan: small tasks, each with the file to change,
+   what to change, and how to test it. Include the proposed code for anything
+   that is missing, and keep changes small and reviewable.
+
+## Rules
+- The internal calendar must stay the source of truth. A Google failure must
+  never roll back or block an internal booking.
+- Never describe Google Calendar as operational until it has been tested against
+  a real Google account. Mark anything you cannot confirm from the files as
+  "unverified".
+- Do not send any pricing or promises in event text. Keep prospect data in
+  events to the minimum needed.
+- Be specific. Quote file names and function names. Do not give generic advice.
+- If you need a file I didn't attach, ask for it by name instead of guessing.
+
+## Output format
+1. A one-paragraph verdict: how close is this to working, and what is the single
+   biggest blocker.
+2. Findings for problems 1 and 2 above.
+3. Gap table (must / should / nice) with file references.
+4. Setup guide (B), verification checklist (C), implementation plan (D).
+
+What to attach: the files listed in the prompt. You can zip just those instead of the whole project.
+Why the first suspected problem is in there: the current actions.ts calls create_calendar_slot, book_slot and the other RPCs, which only exist in the supabase/unapplied/ migrations. The README in that folder says the app doesn't call them yet, which looks out of date. I didn't run anything against your database, so I can't tell which state yours is in. Whichever way it turns out, that decides whether booking even works today, before Google is involved at all. You can check it yourself by looking in the Supabase SQL editor for whether book_slot exists as a function.

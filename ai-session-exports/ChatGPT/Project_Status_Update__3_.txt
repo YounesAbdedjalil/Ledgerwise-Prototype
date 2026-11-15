@@ -1,0 +1,4340 @@
+Project Status Update (3)
+=========================
+
+ChatGPT:
+I've reviewed the main research flow. The structure is sound: URLs are validated before fetching, extra pages must belong to the homepage's hostname, pages are fetched sequentially, and AI claims are checked against fetched text before becoming CSV rows.
+I found one small cache bug worth fixing before the first real run.
+1. Fix cache freshness validation
+Currently, a cache entry with a timestamp in the future can be accepted as fresh. Also, typeof fetchedAt === "number" accepts NaN and infinity.
+Run this patch:
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("scripts/research.ts")
+content = path.read_text()
+
+old = '''    const valid =
+      cached &&
+      typeof cached.fetchedAt === "number" &&
+      cached.page &&
+      cached.page.url === url &&
+      typeof cached.page.title === "string" &&
+      typeof cached.page.text === "string" &&
+      cached.page.text.length > 0;
+
+    if (valid && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+'''
+
+new = '''    const valid =
+      cached &&
+      Number.isFinite(cached.fetchedAt) &&
+      cached.page &&
+      cached.page.url === url &&
+      typeof cached.page.title === "string" &&
+      typeof cached.page.text === "string" &&
+      cached.page.text.length > 0;
+
+    const cacheAge = valid ? Date.now() - cached.fetchedAt : -1;
+
+    if (valid && cacheAge >= 0 && cacheAge < CACHE_TTL_MS) {
+'''
+
+if old not in content:
+    raise SystemExit("Expected cache-validation block not found; no changes made.")
+
+path.write_text(content.replace(old, new))
+print("Cache freshness validation updated.")
+PY
+
+This accepts only finite timestamps from the past 24 hours.
+2. One important security limitation
+The URL checks reject IP-address literals and local hostnames, but Jina Reader performs the actual remote fetch. Our local validation cannot guarantee protection against DNS rebinding or unsafe redirects handled by that remote service. We should document this accurately rather than claim complete SSRF protection.
+3. Verify the patch
+echo "===== CACHE VALIDATION ====="
+sed -n '25,65p' scripts/research.ts
+
+echo "===== TEST SUITE ====="
+npm test
+
+echo "===== TYPESCRIPT ====="
+npx tsc --noEmit
+
+echo "===== LINT ====="
+npm run lint
+
+echo "===== REMAINING PAGE FETCHER ====="
+sed -n '100,220p' lib/research/pages.ts
+
+echo "===== PACKAGE DIFF ====="
+git diff -- package.json
+
+echo "===== WHITESPACE CHECK ====="
+git diff --check
+
+Status board
+
+
+
+Component
+Status
+
+
+
+Research pipeline
+Implemented
+
+
+Evidence verification
+Tested
+
+
+URL validation
+Regression tests passing
+
+
+Cache freshness
+Small fix being applied
+
+
+Real-company research
+Not started
+
+
+Full test suite
+79/79 before cache patch
+
+
+TypeScript / ESLint
+Clean before cache patch
+
+
+Once this passes, we'll move to a controlled first research run with a single company—not all 30 at once.
+
+
+You:
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ >....
+cat docs/research-input.txt
+echo "===== RESEARCH RUNNER ====="
+sed -n '1,280p' lib/research/runner.ts
+echo "===== RESEARCH PAGE FETCHER ====="
+sed -n '1,260p' lib/research/pages.ts
+echo "===== PACKAGE CHANGES ====="
+git diff -- package.json .gitignore
+echo "===== WHITESPACE CHECK ====="
+git diff --check
+===== RESEARCH SCRIPT =====
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fetchResearchPage } from "../lib/research/pages";
+import { parseResearchInput, runResearch } from "../lib/research/runner";
+import {
+  createResearchCsv,
+  createResearchReport,
+} from "../lib/research/output";
+const ROOT = process.cwd();
+const INPUT_PATH = path.join(ROOT, "docs/research-input.txt");
+const OUTPUT_DIR = path.join(ROOT, "docs/research-output");
+const CACHE_DIR = path.join(ROOT, ".cache/pages");
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+type CachedPage = {
+  fetchedAt: number;
+  page: {
+    url: string;
+    title: string;
+    text: string;
+  };
+};
+function cachePath(url: string): string {
+  const key = createHash("sha256").update(url).digest("hex");
+  return path.join(CACHE_DIR, ${key}.json);
+}
+async function fetchWithCache(url: string) {
+  const filePath = cachePath(url);
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const cached = JSON.parse(raw) as CachedPage;
+const valid =
+  cached &&
+  typeof cached.fetchedAt === "number" &&
+  cached.page &&
+  cached.page.url === url &&
+  typeof cached.page.title === "string" &&
+  typeof cached.page.text === "string" &&
+  cached.page.text.length > 0;
+
+if (valid && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+  console.log(`  Cache hit: ${url}`);
+  return cached.page;
+}
+
+  } catch {
+    // Missing or invalid cache: fetch a fresh copy.
+  }
+  console.log(  Fetching: ${url});
+  const page = await fetchResearchPage(url);
+  await mkdir(CACHE_DIR, { recursive: true });
+  const cached: CachedPage = {
+    fetchedAt: Date.now(),
+    page,
+  };
+  await writeFile(filePath, JSON.stringify(cached, null, 2), "utf8");
+  return page;
+}
+async function main() {
+  await mkdir(OUTPUT_DIR, { recursive: true });
+  const input = await readFile(INPUT_PATH, "utf8");
+  const entries = parseResearchInput(input);
+  console.log(Starting research for ${entries.length} companies.);
+  console.log("A maximum of three discovered pages per homepage will be added.");
+  console.log("");
+  const result = await runResearch(entries, {
+    fetchPage: fetchWithCache,
+  });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const csvPath = path.join(OUTPUT_DIR, research-${timestamp}.csv);
+  const reportPath = path.join(OUTPUT_DIR, research-${timestamp}-report.md);
+  await writeFile(csvPath, createResearchCsv(result.rows), "utf8");
+  await writeFile(reportPath, createResearchReport(result.companies), "utf8");
+  const failedCompanies = result.companies.filter(
+    (company) => company.errors.length > 0,
+  ).length;
+  console.log("");
+  console.log("Research run finished.");
+  console.log(Companies processed: ${result.companies.length});
+  console.log(Claims accepted: ${result.rows.length});
+  console.log(Companies with errors: ${failedCompanies});
+  console.log(CSV: ${path.relative(ROOT, csvPath)});
+  console.log(Report: ${path.relative(ROOT, reportPath)});
+  console.log("");
+  console.log("IMPORTANT: Review every accepted CSV row against its source before importing.");
+}
+main().catch((error: unknown) => {
+  console.error(
+    "Research run failed:",
+    error instanceof Error ? error.message : error,
+  );
+  process.exitCode = 1;
+});
+===== RESEARCH INPUT =====
+One company per line:
+Company Name | https://company-homepage.com | optional https://company-homepage.com/about
+
+Extra URLs must belong to the same website as the homepage.
+Leave this file with comments only until we are ready for controlled research.
+===== RESEARCH RUNNER =====
+import { discoverSameSiteLinks, fetchResearchPage, validateResearchUrl } from "./pages";
+import { extractClaims } from "./extract";
+import { verifyClaims, type ProposedClaim, type ResearchPage } from "./verify";
+export type ResearchInputEntry = {
+  companyName: string;
+  website: string;
+  extraUrls: string[];
+};
+export type ResearchOutputRow = {
+  company_name: string;
+  website: string;
+  claim_type: string;
+  claim: string;
+  source_url: string;
+  source_title: string;
+  retrieved_at: string;
+  evidence: string;
+};
+export type CompanyResearchReport = {
+  companyName: string;
+  website: string;
+  pagesRead: string[];
+  proposed: number;
+  accepted: number;
+  rejected: number;
+  errors: string[];
+  rejectedClaims: {
+    claim_type: string;
+    reason: string;
+  }[];
+};
+export type ResearchRunResult = {
+  rows: ResearchOutputRow[];
+  companies: CompanyResearchReport[];
+};
+type RunnerDeps = {
+  fetchPage?: (url: string) => Promise;
+  extract?: (
+    companyName: string,
+    pages: ResearchPage[],
+  ) => Promise<ProposedClaim[]>;
+  discoverLinks?: (text: string, baseUrl: string, maxLinks?: number) => string[];
+  now?: () => Date;
+};
+function validateHttpUrl(value: string, lineNumber: number): URL {
+  try {
+    return validateResearchUrl(value);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Invalid URL";
+throw new Error(`Line ${lineNumber}: ${message}`);
+
+  }
+}
+export function parseResearchInput(input: string): ResearchInputEntry[] {
+  const entries: ResearchInputEntry[] = [];
+  const errors: string[] = [];
+  input.split(/\r?\n/).forEach((rawLine, index) => {
+    const lineNumber = index + 1;
+    const line = rawLine.trim();
+if (!line || line.startsWith("#")) return;
+
+const fields = line.split("|").map((field) => field.trim());
+const [companyName, rawWebsite, ...rawExtraUrls] = fields;
+
+if (!companyName || !rawWebsite) {
+  errors.push(`Line ${lineNumber}: expected Company | Website | optional extra URLs`);
+  return;
+}
+
+try {
+  const website = validateHttpUrl(rawWebsite, lineNumber);
+  const extraUrls = rawExtraUrls
+    .filter(Boolean)
+    .map((value) => validateHttpUrl(value, lineNumber));
+
+  for (const extraUrl of extraUrls) {
+    if (extraUrl.hostname !== website.hostname) {
+      throw new Error(
+        `Line ${lineNumber}: extra page must belong to the same website as the homepage`,
+      );
+    }
+  }
+
+  entries.push({
+    companyName,
+    website: website.toString(),
+    extraUrls: [...new Set(extraUrls.map((url) => url.toString()))],
+  });
+} catch (error) {
+  errors.push(
+    error instanceof Error
+      ? error.message
+      : `Line ${lineNumber}: invalid entry`,
+  );
+}
+
+  });
+  if (errors.length) {
+    throw new Error(Research input contains errors:\n${errors.join("\n")});
+  }
+  if (!entries.length) {
+    throw new Error("Research input contains no companies");
+  }
+  return entries;
+}
+export async function runResearch(
+  entries: ResearchInputEntry[],
+  deps: RunnerDeps = {},
+): Promise {
+  const fetchPage = deps.fetchPage ?? fetchResearchPage;
+  const extract = deps.extract ?? extractClaims;
+  const discoverLinks = deps.discoverLinks ?? discoverSameSiteLinks;
+  const now = deps.now ?? (() => new Date());
+  const rows: ResearchOutputRow[] = [];
+  const companies: CompanyResearchReport[] = [];
+  for (const entry of entries) {
+    const report: CompanyResearchReport = {
+      companyName: entry.companyName,
+      website: entry.website,
+      pagesRead: [],
+      proposed: 0,
+      accepted: 0,
+      rejected: 0,
+      errors: [],
+      rejectedClaims: [],
+    };
+const pages: ResearchPage[] = [];
+const visited = new Set<string>();
+
+const readPage = async (url: string) => {
+  let safeUrl: URL;
+
+  try {
+    safeUrl = validateResearchUrl(url);
+
+    const homepageHost = validateResearchUrl(entry.website).hostname;
+    if (safeUrl.hostname !== homepageHost) {
+      throw new Error("Page must belong to the same website as the homepage");
+    }
+  } catch (error) {
+    report.errors.push(
+      `Could not read ${url}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return;
+  }
+
+  const normalizedUrl = safeUrl.toString();
+  if (visited.has(normalizedUrl)) return;
+  visited.add(normalizedUrl);
+
+  try {
+    const page = await fetchPage(normalizedUrl);
+    pages.push(page);
+    report.pagesRead.push(page.url);
+  } catch (error) {
+    report.errors.push(
+      `Could not read ${url}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+};
+
+// Read the homepage first so we can discover relevant same-site pages.
+await readPage(entry.website);
+
+const discovered = pages.length
+  ? discoverLinks(pages[0].text, entry.website, 3)
+  : [];
+
+const additionalUrls = [...entry.extraUrls, ...discovered];
+
+for (const url of additionalUrls) {
+  await readPage(url);
+}
+
+if (!pages.length) {
+  report.errors.push("No pages could be read; extraction was skipped");
+  companies.push(report);
+  continue;
+}
+
+let proposals: ProposedClaim[];
+
+try {
+  proposals = await extract(entry.companyName, pages);
+  report.proposed = proposals.length;
+} catch (error) {
+  report.errors.push(
+    `AI extraction failed: ${
+      error instanceof Error ? error.message : String(error)
+    }`,
+  );
+  companies.push(report);
+  continue;
+}
+
+const verification = verifyClaims(proposals, pages);
+const retrievedAt = now().toISOString().slice(0, 10);
+
+report.accepted = verification.accepted.length;
+report.rejected = verification.rejected.length;
+report.rejectedClaims = verification.rejected.map((item) => ({
+  claim_type: item.claim_type,
+  reason: item.reason,
+}));
+
+for (const claim of verification.accepted) {
+  rows.push({
+    company_name: entry.companyName,
+    website: entry.website,
+    claim_type: claim.claim_type,
+    claim: claim.claim,
+    source_url: claim.source_url,
+    source_title: claim.source_title,
+    retrieved_at: retrievedAt,
+    evidence: claim.evidence,
+  });
+}
+
+companies.push(report);
+
+  }
+  return { rows, companies };
+}
+===== RESEARCH PAGE FETCHER =====
+import { isIP } from "node:net";
+import type { ResearchPage } from "./verify";
+type FetchLike = (input: string | URL, init?: RequestInit) => Promise;
+type PageDeps = {
+  fetch?: FetchLike;
+};
+const MAX_PAGE_CHARACTERS = 120_000;
+export function validateResearchUrl(input: string): URL {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new Error("invalid URL");
+  }
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("Only HTTP and HTTPS pages are supported");
+  }
+  if (url.username || url.password) {
+    throw new Error("URLs containing credentials are not allowed");
+  }
+  const hostname = url.hostname.toLowerCase().replace(/.$/, "");
+  const ipHostname =
+    hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
+  if (isIP(ipHostname) !== 0) {
+    throw new Error("Private or local IP-address URLs are not allowed");
+  }
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname === "local"
+  ) {
+    throw new Error("Private or local URLs are not allowed");
+  }
+  url.hash = "";
+  return url;
+}
+const safeHttpUrl = validateResearchUrl;
+function fallbackTitle(url: URL): string {
+  const path = decodeURIComponent(url.pathname)
+    .split("/")
+    .filter(Boolean)
+    .pop();
+  return path
+    ? path.replace(/[-_]/g, " ").replace(/.[^.]+$/, "")
+    : url.hostname;
+}
+export function parseReaderResponse(
+  responseText: string,
+  originalUrl: string,
+): ResearchPage {
+  const url = safeHttpUrl(originalUrl);
+  const lines = responseText.replace(/\r\n/g, "\n").split("\n");
+  const titleLine = lines.find((line) => /^Title:\s*/i.test(line));
+  const title = titleLine?.replace(/^Title:\s*/i, "").trim();
+  const markerIndex = lines.findIndex((line) =>
+    /^Markdown Content:\s*$/i.test(line.trim()),
+  );
+  let contentLines =
+    markerIndex >= 0 ? lines.slice(markerIndex + 1) : lines;
+  // Remove Jina's metadata headers when the Markdown Content marker is absent.
+  if (markerIndex < 0) {
+    contentLines = contentLines.filter(
+      (line) =>
+        !/^(Title|URL Source|Markdown Content):\s*/i.test(line.trim()),
+    );
+  }
+  const text = contentLines.join("\n").trim().slice(0, MAX_PAGE_CHARACTERS);
+  if (!text) {
+    throw new Error(Reader returned no page text for ${url.toString()});
+  }
+  return {
+    url: url.toString(),
+    title: title || fallbackTitle(url),
+    text,
+  };
+}
+const USEFUL_PATH = /about|company|our-story|team|leadership|contact|career|jobs|press|news|shipping|wholesale|retail|stockist/i;
+export function discoverSameSiteLinks(
+  markdown: string,
+  baseUrl: string,
+  maxLinks = 3,
+): string[] {
+  const base = safeHttpUrl(baseUrl);
+  const found = new Map<string, { url: string; score: number }>();
+  const markdownLink = /](([^)\s]+)(?:\s+"[^"]*")?)/g;
+  let match: RegExpExecArray | null;
+  while ((match = markdownLink.exec(markdown)) !== null) {
+    const raw = match[1];
+try {
+  const candidate = new URL(raw, base);
+
+  if (!["http:", "https:"].includes(candidate.protocol)) continue;
+  if (candidate.hostname !== base.hostname) continue;
+  if (candidate.username || candidate.password) continue;
+
+  candidate.hash = "";
+  candidate.search = "";
+
+  // Skip the current page and common non-page assets.
+  if (candidate.pathname === base.pathname) continue;
+  if (/\.(pdf|jpg|jpeg|png|gif|webp|svg|css|js|zip|xml)$/i.test(candidate.pathname)) {
+    continue;
+  }
+
+  const normalized = candidate.toString();
+  const score = USEFUL_PATH.test(candidate.pathname) ? 1 : 0;
+
+  if (!found.has(normalized)) {
+    found.set(normalized, { url: normalized, score });
+  }
+} catch {
+  // Ignore malformed links; one bad link should not stop page discovery.
+}
+
+  }
+  return [...found.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(0, maxLinks))
+    .map((item) => item.url);
+}
+export async function fetchResearchPage(
+  originalUrl: string,
+  deps: PageDeps = {},
+): Promise {
+  const target = safeHttpUrl(originalUrl);
+  const fetcher = deps.fetch ?? fetch;
+  const readerUrl = https://r.jina.ai/${target.toString()};
+  const response = await fetcher(readerUrl, {
+    method: "GET",
+    headers: {
+      Accept: "text/plain",
+      "User-Agent": "LedgerwiseResearchPrototype/1.0",
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(
+      Reader request failed for ${target.toString()}: HTTP ${response.status},
+    );
+  }
+  const body = await response.text();
+  return parseReaderResponse(body, target.toString());
+}
+===== PACKAGE CHANGES =====
+diff --git a/.gitignore b/.gitignore
+index 5ef6a52..05fdbe0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log*
+typescript
+ .tsbuildinfo
+ next-env.d.ts
++
++# Local research page cache
++.cache/
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+:
+diff --git a/.gitignore b/.gitignore
+index 5ef6a52..05fdbe0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log
+typescript
+ .tsbuildinfo
+ next-env.d.ts
++
++# Local research page cache
++.cache/
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+:
+diff --git a/.gitignore b/.gitignore
+index 5ef6a52..05fdbe0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log
+typescript
+ .tsbuildinfo
+ next-env.d.ts
++
++# Local research page cache
++.cache/
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+:
+diff --git a/.gitignore b/.gitignore
+index 5ef6a52..05fdbe0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log
+typescript
+ .tsbuildinfo
+ next-env.d.ts
++
++# Local research page cache
++.cache/
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+:
+diff --git a/.gitignore b/.gitignore
+index 5ef6a52..05fdbe0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log
+typescript
+ .tsbuildinfo
+ next-env.d.ts
++
++# Local research page cache
++.cache/
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+:
+diff --git a/.gitignore b/.gitignore
+index 5ef6a52..05fdbe0 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -39,3 +39,6 @@ yarn-error.log
+typescript
+ *.tsbuildinfo
+ next-env.d.ts
++
++# Local research page cache
++.cache/
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ >....
+      cached.page.text.length > 0;
+const cacheAge = valid ? Date.now() - cached.fetchedAt : -1;
+
+if (valid && cacheAge >= 0 && cacheAge < CACHE_TTL_MS) {
+
+'''
+if old not in content:
+    raise SystemExit("Expected cache-validation block not found; no changes made.")
+path.write_text(content.replace(old, new))
+print("Cache freshness validation updated.")
+PY
+Cache freshness validation updated.
+┌──(younes㉿younes)-[~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype]
+└─$ >....
+npx tsc --noEmit
+echo "===== LINT ====="
+npm run lint
+echo "===== REMAINING PAGE FETCHER ====="
+sed -n '100,220p' lib/research/pages.ts
+echo "===== PACKAGE DIFF ====="
+git diff -- package.json
+echo "===== WHITESPACE CHECK ====="
+git diff --check
+===== CACHE VALIDATION =====
+};
+function cachePath(url: string): string {
+  const key = createHash("sha256").update(url).digest("hex");
+  return path.join(CACHE_DIR, ${key}.json);
+}
+async function fetchWithCache(url: string) {
+  const filePath = cachePath(url);
+  try {
+    const raw = await readFile(filePath, "utf8");
+    const cached = JSON.parse(raw) as CachedPage;
+const valid =
+  cached &&
+  Number.isFinite(cached.fetchedAt) &&
+  cached.page &&
+  cached.page.url === url &&
+  typeof cached.page.title === "string" &&
+  typeof cached.page.text === "string" &&
+  cached.page.text.length > 0;
+
+const cacheAge = valid ? Date.now() - cached.fetchedAt : -1;
+
+if (valid && cacheAge >= 0 && cacheAge < CACHE_TTL_MS) {
+  console.log(`  Cache hit: ${url}`);
+  return cached.page;
+}
+
+  } catch {
+    // Missing or invalid cache: fetch a fresh copy.
+  }
+  console.log(  Fetching: ${url});
+  const page = await fetchResearchPage(url);
+  await mkdir(CACHE_DIR, { recursive: true });
+  const cached: CachedPage = {
+    fetchedAt: Date.now(),
+    page,
+  };
+===== TEST SUITE =====
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (61.500644ms)
+✔ falls through to the next provider on a 429 (1.146139ms)
+✔ a rate-limited model is skipped on the next call (0.830032ms)
+✔ a model is retried after its cooldown expires (1.508213ms)
+✔ a Retry-After header sets the cooldown (1.910048ms)
+✔ repeated 429s escalate the cooldown (1.038015ms)
+✔ a success resets the escalation (1.051522ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.368095ms)
+✔ truncated output tries the next model without cooling the first (0.863011ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (0.963248ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.604348ms)
+✔ oversized input is never sent to Groq (0.939827ms)
+✔ when every model is cooling down it throws without any network call (0.769857ms)
+✔ nothing configured throws and makes no network call (0.345528ms)
+✔ consecutive calls to one provider are spaced out (0.414459ms)
+✔ extractJson strips code fences (1.317594ms)
+✔ extractJson throws on garbage (0.237664ms)
+✔ claim types are exactly the closed set of seven (4.575614ms)
+✔ accepts us_ecommerce (1.116679ms)
+✔ accepts category (0.494992ms)
+✔ accepts size_fit (0.147516ms)
+✔ accepts growth_signal (0.158419ms)
+✔ accepts pain_signal (0.439638ms)
+✔ accepts disqualifier (0.281505ms)
+✔ accepts contact (0.212587ms)
+✔ rejects claim_type "size" (0.538921ms)
+✔ rejects claim_type "other" (0.706076ms)
+✔ rejects claim_type "pain_sigal" (0.181098ms)
+✔ rejects claim_type "" (0.124321ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.179476ms)
+✔ disqualifier rows still need a source (0.170482ms)
+✔ contact must be Name | Role (0.165839ms)
+✔ extracts claims and attaches the actual fetched page URL (2.844121ms)
+✔ ignores any source URL supplied by the AI (0.464908ms)
+✔ returns an empty array when the AI finds no supported claims (2.977072ms)
+✔ rejects malformed JSON (0.678468ms)
+✔ rejects a response without a claims array (0.936388ms)
+✔ rejects malformed claim objects (0.527008ms)
+✔ splits long pages into overlapping chunks (0.434563ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.682975ms)
+✔ CSV output uses the exact importer columns and preserves values (8.473571ms)
+✔ CSV output includes headers when no claims were accepted (0.565489ms)
+✔ report includes totals, sources, rejected claims, and errors (0.829673ms)
+✔ parses a Jina Reader response and preserves the original source URL (8.520389ms)
+✔ uses a fallback title when Reader provides no title (2.219521ms)
+✔ rejects an empty Reader response (0.77561ms)
+✔ discovers same-site links and prioritizes useful pages (3.251737ms)
+✔ ignores duplicate links and removes tracking query strings (0.347438ms)
+✔ rejects non-HTTP and private/local URLs (0.399863ms)
+✔ fetches through Jina Reader and returns the original page URL (61.66488ms)
+✔ reports Reader HTTP errors clearly (0.447022ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.413965ms)
+✔ rejects local hostnames with a trailing dot (0.404007ms)
+✔ parses company names, homepages, and optional same-site pages (9.253265ms)
+✔ rejects invalid URLs and extra pages from another website (0.761108ms)
+✔ rejects empty research input (0.213169ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (1.854133ms)
+✔ continues to the next company when one homepage cannot be fetched (1.015748ms)
+✔ records an extraction failure without losing the company report (0.311047ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (0.416245ms)
+✔ runResearch rejects extra pages from another hostname (0.349232ms)
+✔ accepts a claim when its evidence appears on the fetched page (3.601493ms)
+✔ matches evidence despite case and whitespace differences (0.439537ms)
+✔ rejects evidence that does not appear on the page (0.571096ms)
+✔ rejects unsupported claim types (0.219668ms)
+✔ rejects a source URL that was not fetched (0.250064ms)
+✔ rejects evidence outside the permitted length (0.229576ms)
+✔ accepts a contact only when name and role appear in the evidence (0.642078ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.283981ms)
+✔ rejects a contact email that is not on the page (0.624377ms)
+✔ rejects duplicate claims (0.744243ms)
+✔ accepts no more than three claims of the same type (0.866257ms)
+✔ shipped config has no weights set yet (1.10111ms)
+✔ blank weights: criteria evaluated, no points, no total (0.40782ms)
+✔ partial weights: still no total (0.318914ms)
+✔ full weights: total sums points of met criteria (0.174212ms)
+✔ unmet criterion says unknown and carries no sources (0.281211ms)
+✔ every met criterion is traceable to at least one source (0.157974ms)
+✔ disqualifiers are surfaced and never count as criterion evidence (0.242964ms)
+ℹ tests 79
+ℹ suites 0
+ℹ pass 79
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 838.049073
+===== TYPESCRIPT =====
+===== LINT =====
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+===== REMAINING PAGE FETCHER =====
+const USEFUL_PATH = /about|company|our-story|team|leadership|contact|career|jobs|press|news|shipping|wholesale|retail|stockist/i;
+export function discoverSameSiteLinks(
+  markdown: string,
+  baseUrl: string,
+  maxLinks = 3,
+): string[] {
+  const base = safeHttpUrl(baseUrl);
+  const found = new Map<string, { url: string; score: number }>();
+  const markdownLink = /](([^)\s]+)(?:\s+"[^"]*")?)/g;
+  let match: RegExpExecArray | null;
+  while ((match = markdownLink.exec(markdown)) !== null) {
+    const raw = match[1];
+try {
+  const candidate = new URL(raw, base);
+
+  if (!["http:", "https:"].includes(candidate.protocol)) continue;
+  if (candidate.hostname !== base.hostname) continue;
+  if (candidate.username || candidate.password) continue;
+
+  candidate.hash = "";
+  candidate.search = "";
+
+  // Skip the current page and common non-page assets.
+  if (candidate.pathname === base.pathname) continue;
+  if (/\.(pdf|jpg|jpeg|png|gif|webp|svg|css|js|zip|xml)$/i.test(candidate.pathname)) {
+    continue;
+  }
+
+  const normalized = candidate.toString();
+  const score = USEFUL_PATH.test(candidate.pathname) ? 1 : 0;
+
+  if (!found.has(normalized)) {
+    found.set(normalized, { url: normalized, score });
+  }
+} catch {
+  // Ignore malformed links; one bad link should not stop page discovery.
+}
+
+  }
+  return [...found.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(0, maxLinks))
+    .map((item) => item.url);
+}
+export async function fetchResearchPage(
+  originalUrl: string,
+  deps: PageDeps = {},
+): Promise {
+  const target = safeHttpUrl(originalUrl);
+  const fetcher = deps.fetch ?? fetch;
+  const readerUrl = https://r.jina.ai/${target.toString()};
+  const response = await fetcher(readerUrl, {
+    method: "GET",
+    headers: {
+      Accept: "text/plain",
+      "User-Agent": "LedgerwiseResearchPrototype/1.0",
+    },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) {
+    throw new Error(
+      Reader request failed for ${target.toString()}: HTTP ${response.status},
+    );
+  }
+  const body = await response.text();
+  return parseReaderResponse(body, target.toString());
+}
+===== PACKAGE DIFF =====
+diff --git a/package.json b/package.json
+index d5223b7..86f052b 100644
+--- a/package.json
++++ b/package.json
+@@ -7,7 +7,8 @@
+     "build": "next build",
+     "start": "next start",
+     "lint": "eslint",
+
+"test": "tsx --test tests/*.test.ts"
+
+
+"test": "tsx --test tests/*.test.ts",
+"research": "tsx scripts/research.ts"
+
+   },
+   "dependencies": {
+:
+
+
+ChatGPT:
+Excellent. The cache patch is applied, and the verification results are clean.
+79/79 tests passing TypeScript clean ESLint clean
+Review findings
+
+Cache validation: now rejects invalid, non-finite, and future timestamps. Correct.
+Research input: comments-only, so no accidental bulk research.
+Research runner: sequential fetching, same-host checks, and evidence verification are in place.
+Jina Reader: 30-second timeout and 120,000-character page limit are configured.
+Git configuration: .cache/ is ignored, and the research npm script is correctly added.
+Security limitation: DNS rebinding and redirects handled by Jina remain outside our local validation guarantees.
+
+One distinction: the cache change has passed TypeScript and lint, but we haven't added dedicated automated tests for cache expiry yet.
+Project status
+
+
+
+Component
+Status
+
+
+
+Research implementation
+Ready for controlled test
+
+
+Regression tests
+79/79 passing
+
+
+Cache validation
+Updated
+
+
+Real-company research
+Not started
+
+
+30-company target
+Pending
+
+
+Email and booking workflows
+Remaining project work
+
+
+Next step: first real-company test
+Let's test exactly one company first, inspect its fetched pages, accepted claims, rejected claims, and source evidence, then decide whether to scale to 30+.
+Which US e-commerce company should we research first?
+Send me its name and homepage URL. I'll help check that it fits the Ledgerwise ICP before we put it into docs/research-input.txt.
+
+
+You:
+📎 [Attached file: Unscale AI Engineer Case Study(1).pdf — PDF, 87 KB]
+Alright, now time for the manual research of companies, right ?
+Imma need some sources to browse US e-commerce companies
+Remember the task at hand
+Also re-check the document, and check if we are on the right path
+
+
+ChatGPT:
+Yes. We're now moving into the manual company-research phase. The goal is not simply to collect 30 e-commerce websites: we need 30 real companies that plausibly fit Ledgerwise's ICP, with source-backed evidence that lets us qualify them and eventually write personalised emails.
+I re-checked the four-page Unscale brief. Our overall build is on the right path, but research is now a critical outstanding deliverable: the brief explicitly requires at least 30 real companies, qualification reasons with links and quotes, and first emails grounded in that research. It also requires human control over email approval, conversations, and booked calls. 
+
+
+ChatGPT:
+Yes. We're now moving into the manual company-research phase. The goal is not simply to collect 30 e-commerce websites: we need 30 real companies that plausibly fit Ledgerwise's ICP, with source-backed evidence that lets us qualify them and eventually write personalised emails.
+I re-checked the four-page Unscale brief. Our overall build is on the right path, but research is now a critical outstanding deliverable: the brief explicitly requires at least 30 real companies, qualification reasons with links and quotes, and first emails grounded in that research. It also requires human control over email approval, conversations, and booked calls. 
+1. Where to find suitable companies
+I would use these sources in this order. The first group helps us discover brands; the second helps us find evidence that a brand is worth contacting.
+A. Discover US e-commerce brands
+
+  
+    
+🖼️
+Generated image
+1800DTC ecommerce brand directory website screenshot
+    
+      **1. 1800DTC — Brand Directory**
+
+  A directory of 20,000+ DTC brands, organised by product category. Good for discovering smaller consumer brands across apparel, beauty, food, pets, home and more. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+DTCetc direct to consumer brand directory website
+    
+      **2. DTCetc — DTC Directory**
+
+  A directory of 2,300+ brands, with news about funding, launches, retail expansion and industry developments. Its news feed is especially useful for finding reasons to reach out. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+CompanyData US ecommerce companies database website
+    
+      **3. CompanyData — US E-commerce Companies**
+
+  A large company directory with employee and revenue filters. Useful for finding candidates in the approximate $1M–$10M revenue and 5–50 employee ranges. Treat its figures as estimates that need independent checking. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+BuiltWith Shopify technology trends website
+    
+      **4. BuiltWith — US Shopify Websites**
+
+  Useful for discovering websites that use Shopify. However, a Shopify installation alone does not prove the company is US-based or fits our size requirements. 
+</box>
+
+  
+
+
+B. Find reasons to contact them
+
+  
+    
+🖼️
+Generated image
+GetManifest finance legal jobs ecommerce brands website
+    
+      **5. GetManifest — Finance & Legal Jobs**
+
+  Particularly relevant to Ledgerwise: it tracks finance and legal roles at DTC brands. A finance manager, accounting or operations vacancy can be a useful signal. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+Work Insiders consumer ecommerce startup funding database website
+    
+      **6. Work Insiders — Consumer & E-commerce Funding**
+
+  Tracks funding announcements and SEC Form D filings. Useful for identifying recent funding signals and following up with the company's own announcement. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+LinkedIn company page jobs employees website
+    
+      **7. LinkedIn**
+
+  Use company pages to investigate employee counts, founders, COOs, finance leaders and hiring. Remember that LinkedIn counts are not necessarily the company's exact payroll headcount.
+</box>
+
+  
+
+
+2. What counts as good research?
+The Unscale brief gives us a very specific target. 
+
+
+
+Requirement
+What we need to establish
+
+
+
+US company
+Headquarters or credible evidence of US operations
+
+
+E-commerce
+Sells products online through its own website, Shopify, Amazon, etc.
+
+
+Revenue
+Approximately $1M–$10M yearly
+
+
+Employees
+Approximately 5–50
+
+
+Contact
+Founder, COO, or finance decision-maker
+
+
+Reason to contact
+Hiring, funding, or expansion into new channels
+
+
+Important: A company appearing in a directory does not automatically qualify. A directory is a discovery source, not proof of every ICP criterion.
+For revenue and employee counts, use credible public estimates when exact figures are unavailable, and label them as estimates. Don't manufacture a number to fill a field. If we cannot establish a requirement, leave it unknown or reject the candidate.
+3. Our manual research workflow
+For every candidate:
+
+Find the company through one of the directories.
+Open its official website and establish that it sells online.
+Check its About, Careers, Press, News and wholesale/retail pages.
+Look for a recent hiring, funding or expansion signal.
+Find a founder, COO or finance contact from a credible public source.
+Check employee and revenue estimates independently.
+Record the exact source URL and a short supporting quotation.
+Only then enter the company into our research CSV.
+
+Our existing importer expects these exact columns:
+company_name,website,claim_type,claim,source_url,source_title,retrieved_at,evidence
+
+The allowed claim types are:
+
+us_ecommerce
+category
+size_fit
+growth_signal
+pain_signal
+disqualifier
+contact
+
+The evidence field must contain the actual supporting text, not our interpretation of it. Our verifier checks that the evidence appears on the fetched page.
+4. Search phrases you can use
+These are useful Google searches to discover candidates and evidence:
+site:linkedin.com/company "DTC" ecommerce brand USA
+US Shopify brands "About Us" consumer products
+DTC brand hiring finance manager ecommerce
+ecommerce brand hiring accounting manager USA
+consumer brand recently raised funding 2026
+DTC brand expanding wholesale retail stores
+ecommerce brand expanding into Amazon wholesale
+
+For individual companies, search:
+[Company Name] founder COO
+[Company Name] finance accounting jobs
+[Company Name] funding announcement
+[Company Name] wholesale retail expansion
+[Company Name] employee count revenue
+
+5. Are we on the right path?
+Foundation passing checks
+
+
+
+Project area
+Current status
+
+
+
+Database and authentication
+Implemented
+
+
+Prospect import and source storage
+Implemented
+
+
+Qualification scoring foundation
+Implemented; weights still unset
+
+
+AI model integration
+Smoke-tested
+
+
+Research extraction and verification
+Implemented and tested
+
+
+Research output CSV/report
+Implemented
+
+
+Real company research
+Not started
+
+
+30+ qualified companies
+Outstanding
+
+
+Personalised email workflow
+Outstanding
+
+
+Reply handling and human handoff
+Outstanding
+
+
+Real calendar availability and booking
+Outstanding
+
+
+Final QA and submission materials
+Outstanding
+
+
+Our latest reported automated checks were 79/79 tests passing, with TypeScript and lint clean. That is encouraging, but it does not mean the whole case is finished.
+One important distinction: our research agent can verify that a quotation exists on a fetched page. It cannot independently prove that the quotation is true, that an employee estimate is accurate, or that the company is commercially qualified. Human review is still necessary.
+6. Let's start with a controlled research batch
+I don't want us to throw 30 companies into the script immediately. We should validate the process on one company, inspect the source pages and resulting CSV, fix anything that doesn't work, and then scale up.
+
+  **First research target**
+
+  Find one US e-commerce brand with a real website, ideally around 5–50 employees, and at least one publicly verifiable growth signal.
+  Then give me:
+
+Company name
+Official website URL
+
+  I'll help assess its fit and identify the exact pages and claims worth collecting before we add it to docs/research-input.txt.
+
+My recommendation: Start with 1800DTC and DTCetc for brand discovery, then use official company pages, LinkedIn and GetManifest for verification. This gives us a much better chance of finding the right-sized brands rather than filling the list with huge retailers or tiny one-person stores.
+
+
+ChatGPT:
+1. Where to find suitable companies
+I would use these sources in this order. The first group helps us discover brands; the second helps us find evidence that a brand is worth contacting.
+A. Discover US e-commerce brands
+
+  
+    
+🖼️
+Generated image
+1800DTC ecommerce brand directory website screenshot
+    
+      **1. 1800DTC — Brand Directory**
+
+  A directory of 20,000+ DTC brands, organised by product category. Good for discovering smaller consumer brands across apparel, beauty, food, pets, home and more. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+DTCetc direct to consumer brand directory website
+    
+      **2. DTCetc — DTC Directory**
+
+  A directory of 2,300+ brands, with news about funding, launches, retail expansion and industry developments. Its news feed is especially useful for finding reasons to reach out. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+CompanyData US ecommerce companies database website
+    
+      **3. CompanyData — US E-commerce Companies**
+
+  A large company directory with employee and revenue filters. Useful for finding candidates in the approximate $1M–$10M revenue and 5–50 employee ranges. Treat its figures as estimates that need independent checking. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+BuiltWith Shopify technology trends website
+    
+      **4. BuiltWith — US Shopify Websites**
+
+  Useful for discovering websites that use Shopify. However, a Shopify installation alone does not prove the company is US-based or fits our size requirements. 
+</box>
+
+  
+
+
+B. Find reasons to contact them
+
+  
+    
+🖼️
+Generated image
+GetManifest finance legal jobs ecommerce brands website
+    
+      **5. GetManifest — Finance & Legal Jobs**
+
+  Particularly relevant to Ledgerwise: it tracks finance and legal roles at DTC brands. A finance manager, accounting or operations vacancy can be a useful signal. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+Work Insiders consumer ecommerce startup funding database website
+    
+      **6. Work Insiders — Consumer & E-commerce Funding**
+
+  Tracks funding announcements and SEC Form D filings. Useful for identifying recent funding signals and following up with the company's own announcement. 
+</box>
+
+  
+  
+  
+    
+🖼️
+Generated image
+LinkedIn company page jobs employees website
+    
+      **7. LinkedIn**
+
+  Use company pages to investigate employee counts, founders, COOs, finance leaders and hiring. Remember that LinkedIn counts are not necessarily the company's exact payroll headcount.
+</box>
+
+  
+
+
+2. What counts as good research?
+The Unscale brief gives us a very specific target. 
+
+
+
+Requirement
+What we need to establish
+
+
+
+US company
+Headquarters or credible evidence of US operations
+
+
+E-commerce
+Sells products online through its own website, Shopify, Amazon, etc.
+
+
+Revenue
+Approximately $1M–$10M yearly
+
+
+Employees
+Approximately 5–50
+
+
+Contact
+Founder, COO, or finance decision-maker
+
+
+Reason to contact
+Hiring, funding, or expansion into new channels
+
+
+Important: A company appearing in a directory does not automatically qualify. A directory is a discovery source, not proof of every ICP criterion.
+For revenue and employee counts, use credible public estimates when exact figures are unavailable, and label them as estimates. Don't manufacture a number to fill a field. If we cannot establish a requirement, leave it unknown or reject the candidate.
+3. Our manual research workflow
+For every candidate:
+
+Find the company through one of the directories.
+Open its official website and establish that it sells online.
+Check its About, Careers, Press, News and wholesale/retail pages.
+Look for a recent hiring, funding or expansion signal.
+Find a founder, COO or finance contact from a credible public source.
+Check employee and revenue estimates independently.
+Record the exact source URL and a short supporting quotation.
+Only then enter the company into our research CSV.
+
+Our existing importer expects these exact columns:
+company_name,website,claim_type,claim,source_url,source_title,retrieved_at,evidence
+
+The allowed claim types are:
+
+us_ecommerce
+category
+size_fit
+growth_signal
+pain_signal
+disqualifier
+contact
+
+The evidence field must contain the actual supporting text, not our interpretation of it. Our verifier checks that the evidence appears on the fetched page.
+4. Search phrases you can use
+These are useful Google searches to discover candidates and evidence:
+site:linkedin.com/company "DTC" ecommerce brand USA
+US Shopify brands "About Us" consumer products
+DTC brand hiring finance manager ecommerce
+ecommerce brand hiring accounting manager USA
+consumer brand recently raised funding 2026
+DTC brand expanding wholesale retail stores
+ecommerce brand expanding into Amazon wholesale
+
+For individual companies, search:
+[Company Name] founder COO
+[Company Name] finance accounting jobs
+[Company Name] funding announcement
+[Company Name] wholesale retail expansion
+[Company Name] employee count revenue
+
+5. Are we on the right path?
+Foundation passing checks
+
+
+
+Project area
+Current status
+
+
+
+Database and authentication
+Implemented
+
+
+Prospect import and source storage
+Implemented
+
+
+Qualification scoring foundation
+Implemented; weights still unset
+
+
+AI model integration
+Smoke-tested
+
+
+Research extraction and verification
+Implemented and tested
+
+
+Research output CSV/report
+Implemented
+
+
+Real company research
+Not started
+
+
+30+ qualified companies
+Outstanding
+
+
+Personalised email workflow
+Outstanding
+
+
+Reply handling and human handoff
+Outstanding
+
+
+Real calendar availability and booking
+Outstanding
+
+
+Final QA and submission materials
+Outstanding
+
+
+Our latest reported automated checks were 79/79 tests passing, with TypeScript and lint clean. That is encouraging, but it does not mean the whole case is finished.
+One important distinction: our research agent can verify that a quotation exists on a fetched page. It cannot independently prove that the quotation is true, that an employee estimate is accurate, or that the company is commercially qualified. Human review is still necessary.
+6. Let's start with a controlled research batch
+I don't want us to throw 30 companies into the script immediately. We should validate the process on one company, inspect the source pages and resulting CSV, fix anything that doesn't work, and then scale up.
+
+  **First research target**
+
+  Find one US e-commerce brand with a real website, ideally around 5–50 employees, and at least one publicly verifiable growth signal.
+  Then give me:
+
+Company name
+Official website URL
+
+  I'll help assess its fit and identify the exact pages and claims worth collecting before we add it to docs/research-input.txt.
+
+My recommendation: Start with 1800DTC and DTCetc for brand discovery, then use official company pages, LinkedIn and GetManifest for verification. This gives us a much better chance of finding the right-sized brands rather than filling the list with huge retailers or tiny one-person stores.
+
+
+You:
+📎 [Attached file: research-claims-filled(1).csv — CSV, 17 KB]
+OK I made this, what do you think about it ?
+
+
+ChatGPT:
+I’ve inspected the CSV. This is a useful first research collection, and you have 41 company names — already above the brief’s minimum of 30. But I would not import it as a finished, qualified lead list yet.
+The biggest issue is that you have mostly collected product-category descriptions. Those help us understand what a company sells, but they don't establish that it fits Ledgerwise's size and location requirements or give us a compelling reason to contact it.
+Here is the initial audit:
+
+41 distinct company names.
+57 populated research rows.
+All seven claim types are valid.
+No duplicate complete rows.
+One incomplete company entry: Summit Brands.
+40 of the 57 claims are category.
+Only 6 are us_ecommerce.
+Only 2 are size_fit.
+Only 3 are growth_signal.
+Only 2 are contact.
+No pain_signal claims.
+
+That distribution tells us exactly what to improve: less directory-style description, more qualification evidence.
+
+
+ChatGPT:
+I’ve inspected the CSV. This is a useful first research collection, and you have 41 company names — already above the brief’s minimum of 30. But I would not import it as a finished, qualified lead list yet.
+The biggest issue is that you have mostly collected product-category descriptions. Those help us understand what a company sells, but they don't establish that it fits Ledgerwise's size and location requirements or give us a compelling reason to contact it.
+Here is the initial audit:
+
+41 distinct company names.
+57 populated research rows.
+All seven claim types are valid.
+No duplicate complete rows.
+One incomplete company entry: Summit Brands.
+40 of the 57 claims are category.
+Only 6 are us_ecommerce.
+Only 2 are size_fit.
+Only 3 are growth_signal.
+Only 2 are contact.
+No pain_signal claims.
+
+That distribution tells us exactly what to improve: less directory-style description, more qualification evidence.
+1. Some of your companies are actually excellent prospects
+I checked a few against external primary sources. Here are three particularly good examples:
+
+  
+    
+      **Bunch Bikes**
+      Strong ICP fit
+    
+    $2.01M
+    FY2025 revenue
+    - 7 employees.
+    - US company, with an online store and domestic shipping.
+    - Its annual report gives both revenue and employee count. 
+    **What to add:** `size_fit` evidence, plus its recent crowdfunding activity as a possible `growth_signal`.
+  
+  
+  
+    
+      **Boyd Cycling**
+      Strong ICP fit
+    
+    $1.12M
+    Reported revenue, FY2024
+    - 11 employees.
+    - US-based company.
+    - Its SEC annual filing also identifies Nicole Johnson as CEO. 
+    **What to add:** `size_fit`, `us_ecommerce` and `contact` claims.
+  
+  
+  
+    
+      **Innovative Eyewear**
+      Strong ICP fit
+    
+    $2.66M
+    FY2025 revenue
+    - 13 full-time employees.
+    - $2.43M of revenue came from e-commerce channels.
+    - Revenue grew approximately 63% year over year.
+    - Over 400 retail locations by the end of 2025. 
+    **What to add:** `size_fit`, `us_ecommerce` and potentially a more precise `growth_signal`.
+  
+
+
+These are the kinds of companies we want: real financial and employee evidence, a clear e-commerce business, and potentially useful sales signals.
+2. Things I would correct
+
+
+
+Company
+My assessment
+
+
+
+Traeger
+Correctly identified as disqualified: $559.5M revenue and 433 employees.
+
+
+Grove Collaborative
+Correctly identified as disqualified: $173.7M revenue and 235 employees.
+
+
+Jetset Pilates
+Remove from the qualified list. Its core business is fitness studios and franchising, not an e-commerce brand.
+
+
+Pura
+Investigate as a likely disqualification: an October 2026 report says it surpassed $100M in revenue.
+
+
+MeUndies
+Investigate employee-count disqualification: a workforce-data source estimates 132 employees in June 2026.
+
+
+Helton Tool & Home
+Promising: employee-size evidence and leadership contacts are already present. Revenue still needs verification.
+
+
+Wild Rye
+Good category research, but its ICP fit still needs stronger evidence.
+
+
+Last Crumb
+Good e-commerce/category starting point, but size, revenue and decision-maker evidence are missing.
+
+
+Keep Traeger and Grove as negative qualification examples. They can help us test whether the scoring system correctly rejects companies that are too large.
+Important implementation detail: our current scoring foundation displays disqualifiers but does not automatically change a company's qualification status. We must address that before treating the qualification workflow as reliable.
+3. The biggest problem: too many category claims
+For example:
+
+category: 40 claims
+us_ecommerce: 6 claims
+size_fit: 2 claims
+growth_signal: 3 claims
+contact: 2 claims
+pain_signal: 0 claims
+
+The category descriptions are useful, but some evidence is too generic to support the full claim.
+For example, a product-menu quotation such as Carbon Gravel Wheels / Alloy Gravel Wheels doesn't necessarily support every detail in a broader claim about all of a company's products.
+Also, the us_ecommerce evidence should ideally establish both online selling and US availability. A shipping statement alone doesn't always prove the entire claim.
+4. What I want the final research dataset to look like
+For each of our 30+ qualified companies, aim to collect:
+
+
+
+Claim type
+Target
+
+
+
+category
+What it sells
+
+
+us_ecommerce
+Online selling and US market
+
+
+size_fit
+Revenue and employee evidence
+
+
+contact
+Founder, COO or finance decision-maker
+
+
+growth_signal
+Funding or channel expansion
+
+
+pain_signal
+Relevant finance/accounting/operations hiring
+
+
+Not every company will have every signal. That's fine. Never invent a claim just to complete the dataset.
+Also, remember: the case asks for 30 companies that fit the customer profile, not merely 30 company names. 
+5. My recommended next steps
+
+Remove the incomplete Summit Brands row.
+Keep the two clearly disqualified companies in a separate negative-test dataset.
+Investigate Pura, MeUndies and Jetset Pilates before considering them qualified.
+Enrich Bunch Bikes, Boyd Cycling and Innovative Eyewear with the primary-source evidence above.
+Continue researching until we have at least 30 genuinely qualified companies.
+
+Overall verdict: Good first collection
+You have done useful discovery work. The company selection is a starting point, and you have already found some excellent candidates. But I would not import this CSV into Ledgerwise as the final qualified dataset yet.
+My next recommendation is to improve the quality of the existing 40 populated company records before spending time discovering another 40. I can help audit and enrich them one company at a time, preserving the exact CSV schema our importer expects.
+
+
+ChatGPT:
+1. Some of your companies are actually excellent prospects
+I checked a few against external primary sources. Here are three particularly good examples:
+
+  
+    
+      **Bunch Bikes**
+      Strong ICP fit
+    
+    $2.01M
+    FY2025 revenue
+    - 7 employees.
+    - US company, with an online store and domestic shipping.
+    - Its annual report gives both revenue and employee count. 
+    **What to add:** `size_fit` evidence, plus its recent crowdfunding activity as a possible `growth_signal`.
+  
+  
+  
+    
+      **Boyd Cycling**
+      Strong ICP fit
+    
+    $1.12M
+    Reported revenue, FY2024
+    - 11 employees.
+    - US-based company.
+    - Its SEC annual filing also identifies Nicole Johnson as CEO. 
+    **What to add:** `size_fit`, `us_ecommerce` and `contact` claims.
+  
+  
+  
+    
+      **Innovative Eyewear**
+      Strong ICP fit
+    
+    $2.66M
+    FY2025 revenue
+    - 13 full-time employees.
+    - $2.43M of revenue came from e-commerce channels.
+    - Revenue grew approximately 63% year over year.
+    - Over 400 retail locations by the end of 2025. 
+    **What to add:** `size_fit`, `us_ecommerce` and potentially a more precise `growth_signal`.
+  
+
+
+These are the kinds of companies we want: real financial and employee evidence, a clear e-commerce business, and potentially useful sales signals.
+2. Things I would correct
+
+
+
+Company
+My assessment
+
+
+
+Traeger
+Correctly identified as disqualified: $559.5M revenue and 433 employees.
+
+
+Grove Collaborative
+Correctly identified as disqualified: $173.7M revenue and 235 employees.
+
+
+Jetset Pilates
+Remove from the qualified list. Its core business is fitness studios and franchising, not an e-commerce brand.
+
+
+Pura
+Investigate as a likely disqualification: an October 2026 report says it surpassed $100M in revenue.
+
+
+MeUndies
+Investigate employee-count disqualification: a workforce-data source estimates 132 employees in June 2026.
+
+
+Helton Tool & Home
+Promising: employee-size evidence and leadership contacts are already present. Revenue still needs verification.
+
+
+Wild Rye
+Good category research, but its ICP fit still needs stronger evidence.
+
+
+Last Crumb
+Good e-commerce/category starting point, but size, revenue and decision-maker evidence are missing.
+
+
+Keep Traeger and Grove as negative qualification examples. They can help us test whether the scoring system correctly rejects companies that are too large.
+Important implementation detail: our current scoring foundation displays disqualifiers but does not automatically change a company's qualification status. We must address that before treating the qualification workflow as reliable.
+3. The biggest problem: too many category claims
+For example:
+
+category: 40 claims
+us_ecommerce: 6 claims
+size_fit: 2 claims
+growth_signal: 3 claims
+contact: 2 claims
+pain_signal: 0 claims
+
+The category descriptions are useful, but some evidence is too generic to support the full claim.
+For example, a product-menu quotation such as Carbon Gravel Wheels / Alloy Gravel Wheels doesn't necessarily support every detail in a broader claim about all of a company's products.
+Also, the us_ecommerce evidence should ideally establish both online selling and US availability. A shipping statement alone doesn't always prove the entire claim.
+4. What I want the final research dataset to look like
+For each of our 30+ qualified companies, aim to collect:
+
+
+
+Claim type
+Target
+
+
+
+category
+What it sells
+
+
+us_ecommerce
+Online selling and US market
+
+
+size_fit
+Revenue and employee evidence
+
+
+contact
+Founder, COO or finance decision-maker
+
+
+growth_signal
+Funding or channel expansion
+
+
+pain_signal
+Relevant finance/accounting/operations hiring
+
+
+Not every company will have every signal. That's fine. Never invent a claim just to complete the dataset.
+Also, remember: the case asks for 30 companies that fit the customer profile, not merely 30 company names. 
+5. My recommended next steps
+
+Remove the incomplete Summit Brands row.
+Keep the two clearly disqualified companies in a separate negative-test dataset.
+Investigate Pura, MeUndies and Jetset Pilates before considering them qualified.
+Enrich Bunch Bikes, Boyd Cycling and Innovative Eyewear with the primary-source evidence above.
+Continue researching until we have at least 30 genuinely qualified companies.
+
+Overall verdict: Good first collection
+You have done useful discovery work. The company selection is a starting point, and you have already found some excellent candidates. But I would not import this CSV into Ledgerwise as the final qualified dataset yet.
+My next recommendation is to improve the quality of the existing 40 populated company records before spending time discovering another 40. I can help audit and enrich them one company at a time, preserving the exact CSV schema our importer expects.
+
+
+You:
+📎 [Attached file: research-claims-updated(1).csv — CSV, 35 KB]
+What about this one ?
+
+
+ChatGPT:
+This is a substantial improvement in research depth. You've added revenue estimates, employee counts, founders, contact information and business signals for all 41 companies.
+However, there's an important distinction: you've improved the research notes, but you haven't yet converted all that research into evidence that our Ledgerwise application can safely import and verify.
+I inspected the actual CSV, including its rows and columns.
+1. What improved?
+
+  
+    
+      41
+      **Companies**
+      Distinct company names
+    
+  
+  
+    
+      263
+      **Total rows**
+      Including your new research notes
+    
+  
+  
+    
+      205
+      **New research notes**
+      Five additional fields per company
+    
+  
+  
+    
+      57
+      **Structured research rows**
+      With the original evidence fields
+    
+  
+
+
+The new information is useful:
+
+Revenue estimates.
+Employee-count estimates.
+Founder names.
+Contact email addresses.
+Funding, expansion and other business signals.
+
+This is exactly the kind of information we need to investigate before qualifying a company.
+2. The most promising candidates
+Based on the estimates you've entered (not independently verified), these are worth prioritising:
+
+
+
+Company
+Revenue estimate
+Employees
+
+
+
+Wild Rye
+~$1.1M
+6–20
+
+
+Bunch Bikes
+~$2.3M
+6–11
+
+
+Sigmas
+~$3M
+~20
+
+
+Innovative Eyewear
+~$1.64M
+11–13
+
+
+Amberjack
+~$2.1M–$4.9M
+26–27
+
+
+Tom Beckbe
+~$4.6M–$5.2M
+19–38
+
+
+Helton Tool & Home
+~$3M–$10M
+12–20
+
+
+ARES Tool
+~$4.66M
+~11
+
+
+Last Crumb
+~$2.4M
+18–27
+
+
+Research priorities
+These are good candidates for further verification. They are not yet confirmed qualified leads.
+Some other entries in your notes suggest possible disqualifications:
+
+Raw Nutrition: approximately $230M.
+Golden Pet Brands: 500+ employees.
+Cariloha: approximately $48.2M and 120–159 employees.
+MeUndies: approximately $35M–$41M and 144–147 employees.
+Quip: approximately $54M–$63M and 200–287 employees.
+
+Keep these as potential negative test cases, but verify the figures and dates before making final decisions.
+3. Important problems to fix
+
+  
+    **Problem 1 — Import compatibility**
+    Blocking
+  
+  Your original importer accepts only seven claim types:
+
+us_ecommerce
+category
+size_fit
+growth_signal
+pain_signal
+disqualifier
+contact
+
+  But you've added five new claim types:
+Yearly Revenue
+Employees Count
+Founder
+Contact
+Signals
+
+  Those new rows will fail validation if you try to import the entire CSV.
+  We should preserve your research, but map it into the existing schema.
+  
+  
+    Problem 2 — Missing evidence
+    Blocking
+  
+  The 205 new research rows have no source_url, source_title, retrieved_at or evidence.
+  This means the revenue and employee figures cannot yet be traced back to their sources.
+  This is particularly important because the case requires every qualification reason to have supporting evidence.
+  
+  
+    Problem 3 — Contact information
+    Needs correction
+  
+  Many entries contain generic addresses such as info@, support@ and customerservice@.
+  Those are useful company contact channels, but they aren't necessarily the founder, COO or finance decision-maker.
+  Our importer also expects a contact claim in the format Name | Role or Name | Role | email.
+  
+  
+    Problem 4 — Conflicting estimates
+    Needs review
+  
+  Some entries contain very wide ranges or contradictory sources.
+  For example:
+
+Petite Keep: ~$15.1M versus another source suggesting $0–$5M.
+Jetset Pilates: ~$15M–$23.9M versus $100M–$250M.
+HexClad: >$550M versus ~$89.7M.
+
+  Don't select whichever estimate makes a company fit. Record the conflicting sources and mark the company as unresolved until reviewed.
+
+4. How we should map the new research into our existing schema
+
+
+
+Your new field
+Existing claim type
+
+
+
+Yearly Revenue
+size_fit
+
+
+Employees Count
+size_fit
+
+
+Founder
+contact
+
+
+Contact
+contact, only if a real person and role are supported
+
+
+Signals
+growth_signal, pain_signal or disqualifier, depending on the evidence
+
+
+For example, Bunch Bikes could eventually have separate evidence rows:
+claim_type: size_fit
+claim: Annual revenue was approximately $2.3M in 2024.
+evidence: [Exact supporting quotation]
+
+claim_type: size_fit
+claim: The company had approximately 6–11 employees.
+evidence: [Exact supporting quotation]
+
+claim_type: contact
+claim: Aaron Powell | Founder and CEO
+evidence: [Exact supporting quotation]
+
+Those are illustrative claim structures, not verified source quotations. Each one needs its own real source.
+The seven-type schema is intentional, so I would not change the database just to accommodate the new spreadsheet headings. 
+5. My recommendation: don't run the importer yet
+We should turn this into two separate stages:
+
+Research master: Preserve all your findings, estimates, conflicting figures and source notes.
+Verified import CSV: Only include claims with valid source URLs, titles, dates and verbatim supporting evidence.
+
+That way, we don't lose your research while keeping the application strict.
+6. Project status
+
+
+
+Task
+Status
+
+
+
+Discover 30+ companies
+41 found
+
+
+Collect business information
+Expanded
+
+
+Verify revenue and headcount
+Incomplete
+
+
+Verify decision-makers
+Incomplete
+
+
+Source-backed qualification
+Incomplete
+
+
+Import-ready research CSV
+Not ready
+
+
+My suggested next step: Let's use Bunch Bikes as our first complete, end-to-end research record. It has enough information to test the process: e-commerce evidence, revenue, employees, founder and business signals.
+Once we can turn one company into properly sourced, importer-compatible claims, we can repeat that process for the other 40 without changing the architecture.
+
+
+You:
+📎 [Attached file: research-claims-corrected(1).csv — CSV, 71 KB]
+What about this one ?
+
+
+ChatGPT:
+1. CSV validation results
+Improved structure Not import-ready
+
+
+
+Check
+Result
+
+
+
+Companies
+41
+
+
+Rows
+302
+
+
+Allowed claim types
+All valid
+
+
+Duplicate rows
+0
+
+
+Missing company names
+0
+
+
+Missing website values
+6
+
+
+Invalid source URL placeholders
+80
+
+
+Evidence shorter than 20 characters
+4
+
+
+Future or invalid dates
+0
+
+
+The 80 UNVERIFIED URLs are the biggest technical blocker. The importer requires actual HTTP(S) source URLs.
+The four short evidence entries are founder claims for Last Crumb, Uproot Clean, Furry Muse and Mimi So International. They need fuller supporting quotations.
+2. One serious semantic problem
+Your claim-type distribution is now:
+
+
+
+Claim type
+Rows
+
+
+
+disqualifier
+121
+
+
+size_fit
+72
+
+
+contact
+63
+
+
+growth_signal
+43
+
+
+pain_signal
+2
+
+
+category
+1
+
+
+us_ecommerce
+0
+
+
+This is not what we want.
+I found that many original category and e-commerce claims were converted into disqualifier rows with claims prefixed by Unverified:.
+For example:
+claim_type: disqualifier
+claim: Unverified: category: Smart eyewear...
+source_url: UNVERIFIED
+
+That is incorrect. An unverified claim is not a disqualifier.
+We must not let the application interpret these 80 placeholders as actual reasons to reject a company.
+The proper treatment is:
+
+Preserve the original claim type.
+Keep the row out of the verified import dataset.
+Record its status as unverified in the research master.
+Use disqualifier only when actual evidence establishes that the company fails an ICP requirement.
+
+3. What is genuinely good now?
+You have started recording actual negative evidence, which is valuable.
+Examples include:
+
+Traeger: reported FY2025 revenue of $559.5M and approximately 433 employees.
+Grove Collaborative: reported FY2025 net revenue of $173.7M and approximately 235 employees.
+Pura: evidence indicating nine-figure revenue and 267 employees.
+HexClad: evidence indicating revenue well beyond the ICP range.
+
+These are useful negative qualification cases, although the underlying evidence still needs human review.
+Keep them. We need examples of companies the system should reject.
+4. My recommended correction
+Don't discard this CSV or start again.
+Create two separate datasets:
+
+  **Research master**
+
+  Preserve everything
+  Contains all 302 rows, including conflicting estimates, unverified claims, negative signals and research notes.
+  
+  **Verified import CSV**
+
+  Only validated claims
+  Contains only records with:
+
+Correct claim type.
+Actual HTTP(S) source URL.
+Source title and retrieval date.
+Verbatim evidence.
+Valid company website.
+Human-reviewed interpretation.
+
+I would also avoid changing our importer or database schema to accommodate spreadsheet-specific statuses. We can manage research status in the research master without weakening the application.
+5. Project status
+
+
+
+Deliverable
+Status
+
+
+
+Discover 30+ companies
+41 found
+
+
+Revenue and employee research
+Expanded
+
+
+Contact research
+Expanded
+
+
+Source verification
+Incomplete
+
+
+Positive ICP qualification
+Needs work
+
+
+Negative qualification test set
+Started
+
+
+Import-ready CSV
+Blocked
+
+
+My verdict: This is your best version so far in terms of research depth. The main remaining problem isn't a lack of information; it's separating verified facts, unresolved research and actual disqualification evidence.
+My recommendation is to fix the claim-type mapping first, then work through the 41 companies and identify which genuinely qualify. We should aim for 30 verified ICP-fit companies, not simply 30 names in the spreadsheet.
+
+
+You:
+Here's the research log btw:
+1–10
+Wild Rye
+
+Revenue / Employees / Founder / Signals: MoneyTalksNews (Apr 2026) reports 11 FT employees and >$4M sales; BoiseDev (Oct 2024) reports 307% growth 2021–2024 and 10 FT employees; Crustdata (Sep 2026) tracks headcount from ~7 to 20; CB Insights lists $670K raised and founder Cassie Abel; Seamless.AI lists $1M–$5M revenue and 51–200 employees; Wefunder projects $5.2M in 2025.
+
+
+Contact: Company website / public inbox careers@wild-rye.com (not a direct founder email).
+
+Sigmas
+
+Revenue: Stephilareine.com (Oct 2026) reports ~$3M annualized run rate within six months of DTC launch.
+
+Employees: Tracxn lists 20 employees as of Mar 2026; TipRanks lists 22 as of Oct 2026; PitchBook lists 3; Prospeo lists 1–10.
+Founder: FashionWeekDaily (Oct 2026) and ADVFN (Mar 2026) name Jay Cheng and Daniel Hoang as co-founders.
+Signals: $1M seed led by Mucker Capital and HongShan Capital (HSG, formerly Sequoia China).
+
+Contact: No public founder email; use sigmas.com contact or LinkedIn.
+
+Bunch Bikes
+
+Revenue: Wefunder 2025 / Kingscrowd reports $2.3M FY24 revenue and $2.5M run-rate; SEC Form C-AR shows FY2025 revenue $2,006,092; SignalHire estimates ~$2.6M.
+
+Employees: SEC Form C-AR lists 7 current employees; UNT article (2021) says 11 workers; SignalHire lists 10–50; Salary.com estimates <25.
+Founder: Aaron Powell, Founder & CEO.
+
+Signals:  EBITDA-positive since 2023; Shark Tank backing; Wefunder community  round — referenced in the file, but primary source URLs were not  independently verified in this search.
+Contact: info@bunchbike.com / ceo@bunchbike.com (investor/CEO route).
+
+Boyd Cycling
+
+Revenue: Kona Equity lists $912,000 annual revenue; SignalHire estimates $1–10M, ~$3.1M; Tracxn lists $1M–$10M.
+
+Employees: Kona Equity lists 6; SignalHire lists 10–50; Tracxn lists 8; PitchBook lists 3; 2014 SCSBDC article says 10.
+Founder: Boyd Johnson & Nicole Johnson.
+
+Signals:  Expanded junior trade-in program to UK; $1.07M total raised —  referenced in the file, but primary source URLs were not independently  verified in this search.
+Contact: team@boydcycling.com (not a direct founder email).
+
+Innovative Eyewear
+
+Revenue: MarketWatch lists $2.66M revenue and 13 employees; Fox Business lists $2.66M and confirms founders; Barron’s lists $2.66M; Craft.co lists $2.7M and Q1 2026 revenue $773.6K.
+
+
+Employees: MarketWatch lists 13; other sources cite 11–13.
+
+Founder: Harrison Gross, Konrad Dabrowski, David Eric Cohen.
+
+Signals:  Nasdaq-listed LUCY; smart eyewear under Lucyd/Nautica/Eddie  Bauer/Reebok; revenue scaling — referenced in the file, but primary  source URLs were not independently verified in this search.
+Contact: info@lucyd.co (not a direct founder email).
+
+Amberjack
+
+Revenue: SignalHire estimates ~$2.1M; Growjo estimates $4.9M; Cience lists $5M–$10M.
+
+Employees: Tracxn lists 26; PitchBook lists 27; Cience lists 11–50; Prospeo lists 21–50.
+Founder: Jonathan Peters (Founder & CEO).
+
+Signals:  +17% YoY headcount; seed-stage DTC footwear — referenced in the file,  but primary source URLs were not independently verified in this search.
+Contact: No public founder email; use amberjack.shop contact.
+
+RIP-IT
+
+Revenue: Kona Equity lists $6,793,000 annual revenue.
+
+
+Employees: Kona Equity lists 19 employees; other estimates range 32–55.
+
+Founder: Jason Polstein & Matthew Polstein.
+
+Signals:  Janelle Anderson appointed CEO in 2024; women’s-sports partnership; ~55  employees — referenced in the file, but primary source URLs were not  independently verified in this search.
+Contact: No public founder email; use ripit.com contact.
+
+Tom Beckbe
+
+Revenue: SignalHire estimates $10M–$50M, ~$18.9M; Prospeo estimates $3,507,755; ContactOut lists $661K; Cience lists $250M–$500M (likely erroneous).
+
+Employees: Tracxn lists 38 as of Sep 2026; FundedIQ lists 1–10; ContactOut lists 11–50.
+Founder: Radcliff Menge & Mary Menge.
+
+Signals:  Series A; 38 employees as of 2026; hunting/apparel brand founded 2015 —  referenced in the file, but primary source URLs were not independently  verified in this search.
+Contact: info@tombeckbe.com (not a direct founder email).
+
+Helton Tool & Home
+
+Revenue: D&B lists $3,000,000; Salary.com estimates $5M–$10M; Prospeo estimates $3,230,384; Kona Equity lists $7,175,000; Adapt.io lists $1M–$10M.
+
+Employees: D&B lists 12; Salary.com lists 11–20; Owler lists 28; Kona Equity lists 18; Adapt.io lists 0–25.
+Founder: Jack Helton (President/CEO).
+
+Signals:  Started on eBay in 1999; Arizona tool/home distributor; ~12 employees —  referenced in the file, but primary source URLs were not independently  verified in this search.
+Contact: customerservice@heltontoolandhome.com (not a direct founder email).
+
+ARES Tool
+
+Revenue: SignalHire estimates $1M–$10M; Prospeo estimates $941,105; Sellersnooper estimates $4,656,225.
+
+Employees: Adapt.io lists 0–25; SEC filing lists 17–18.
+Founder: Mark Desimone (CEO).
+
+Signals:  New 76-pc master ratcheting tap & die set; 11 employees; MJD  Industries parent — referenced in the file, but primary source URLs were  not independently verified in this search.
+Contact: customerservice@arestool.com; bryan@arestool.com trade contact.
+
+
+11–20
+Last Crumb
+
+Revenue: Owler estimates <$1M; Tracxn lists 27 employees.
+
+Employees: Owler estimates <10; Tracxn lists 27.
+Founder: Derek Jaeger.
+
+Signals:  First Upper East Side outpost in 2026; $3M seed funding; luxury cookie  weekly drops — referenced in the file, but primary source URLs were not  independently verified in this search.
+Contact: hello@lastcrumb.com (not a direct founder email).
+
+Good Girl Snacks
+
+Revenue: Altis Research estimates $2.6M annual revenue; Livemint (Sep 2026) says company declined to disclose revenue, valued at $8.5M.
+
+Employees: Altis Research lists 12; Tracxn lists 16.
+Founder: Leah Marcus & Yasaman Bakhtiar.
+
+Signals:  $8.5M valuation; 2,000 retail doors; viral TikTok pickle brand; first  operations hire — referenced in the file, and Livemint confirms the  $8.5M valuation and $3M seed round.
+
+
+Contact: careers@goodgirlsnacks.com (not a direct founder email).
+
+cadootz!
+
+Revenue:  Not disclosed; enterprise value ~$12M–$18M — referenced in the file,  but primary source URL was not independently verified.
+Employees: 5–6 — referenced in the file, but primary source URL was not independently verified.
+Founder: Rachel Mansfield, Jordan Carpenter, Kiva Dickinson.
+
+
+Signals: DTC website launched early 2026; 6 employees; better-for-you kids snack brand; >$3M seed funding from Selva Ventures.
+
+
+Contact: No public founder email; use website contact.
+
+Harken Sweets
+
+Revenue: ~$3.7M — referenced in the file, but primary source URL was not independently verified.
+Employees: Forbes (Mar 2024) says Lefkowitz “just hired her first employee”; current count 6 per file.
+
+Founder: Katie Lefkowitz.
+
+Signals:  4,000+ stores including Walmart and Safeway; 2025 NIQ Founders Pitch  Slam winner — referenced in the file, but primary source URLs were not  independently verified. Entrepreneur (Jul 2024) confirms retail  expansion.
+
+
+Contact: hello@harkensweets.com (not a direct founder email).
+
+Fields Good
+
+Revenue:  ~$1M–$10M per LeadIQ (another source $25M–$50M) — primary source URL  not independently verified; multiple podcast/interview sources confirm  founder Field Failing and NYC fast-casual concept.
+
+
+Employees: ~34 — primary source URL not independently verified.
+Founder: Field Failing.
+
+
+Signals:  NYC fast-casual chicken concept; 34 employees — referenced in the file,  but primary source URLs were not independently verified.
+Contact: No verified public founder email; supplied contact domain fieldsgoodchicken.com.
+
+Raw Nutrition
+
+Revenue: Entrepreneur (Nov 2025) reports ~$230M brand size; Inc. 5000 lists 51–200 employees and 2,837% 3-year growth; earlier source lists $5.6M and 30 employees.
+
+Employees: Inc. lists 51–200; earlier source lists 30.
+
+Founder: Domenic Iacovone, Matt Jansen, Chris Bumstead.
+
+Signals: 2025 Inc. 5000 honoree; 2,837% 3-year growth; ~$230M sports-nutrition brand — confirmed by Entrepreneur and Inc..
+
+Contact: support@getrawnutrition.com (not a direct founder email).
+
+Petite Keep
+
+Revenue: Prospeo estimates $1,539,990; Inc. 5000 lists 51–200 employees and 954% 3-year growth; Substack (Sep 2026) says “over 75 team members” and “eight-figure business”.
+
+Employees: Prospeo lists 11–20; Inc. lists 51–200; Substack lists 75+.
+Founder: Lindsay Mullenger.
+Signals:  Shark Tank appearance; 39% YoY headcount growth; bootstrapped with $3K;  personalized keepsake trunks — Substack and Inc. confirm Shark Tank  deal and growth.
+
+Contact: info@petitekeep.com (not a direct founder email).
+
+Uproot Clean
+
+Revenue: Prospeo estimates $513,330; file cites ~$57M per Sellersnooper, but that source was not independently verified in this search.
+
+
+Employees: 6–30 per file; Prospeo implies small team.
+
+Founder: Mehul Patel.
+Signals:  985K monthly visitors; 1,779 active Meta ads; doubled Petco door count;  Target launch — Pet Age (Oct 2025) confirms Petco door count doubling; Pet Age (Jul 2025) confirms Walmart launch.
+
+Contact: help@uprootclean.co / help@uprootclean.com (not a direct founder email).
+
+Furry Muse
+
+Revenue: Prospeo estimates $256,665.
+
+
+Employees: 1–10 per file; wikiHow confirms founder-led brand.
+
+Founder: Roslyn Teng.
+
+Signals:  Viral Wander! Bow Harness debut; wholesale on Faire; Chewy coming soon;  founder-led remote team — referenced in the file, but primary source  URLs were not independently verified.
+Contact: No public founder email; use website contact.
+
+Golden Pet Brands
+
+Revenue:  Not disclosed; preparing NYSE IPO at >$1B valuation — referenced in  the file, but primary source URL was not independently verified.
+Employees: 500+ per file; Pet Age (Nov 2026) says acquisition added ~100 employees and company employs more than 400; The Herd (Apr 2026) says >400 employees.
+
+Founder/CEO: Apu Mody named CEO; launched by Golden Hippo.
+
+Signals:  Preparing NYSE IPO at >$1B valuation; Seward acquisition; 500+  employees; new CEO/CFO — Pet Age confirms Seward acquisition and CEO  appointment.
+
+
+Contact: No public founder email; use website contact.
+
+
+21–30
+Hadley Designs
+
+Revenue:  Amazon seller case study says revenue grew from $4M in 2020 to >$10M  in 2022, with 26 employees; Indeed lists 11–50 employees and revenue  $6.4M–$30M (CAD); Helium 10 podcast describes a “multi-eight-figure brand”.
+
+
+Employees: 26 per Amazon case study; 11–50 per Indeed.
+Founder: Josh & Becca Hadley.
+
+Signals:  8-figure revenue and on track toward 9-figure growth; 10+ years;  female-led — Helium 10 and iHeart confirm multi-eight-figure status.
+
+Contact: No public founder email; use website contact.
+
+Cariloha
+
+Revenue: Craft.co lists founder/CEO Jeff Pedersen and key people; Business View Magazine says ~600 employees; Clodura lists $5.50M revenue and 51–200 employees; Illuminem lists $100M–$500M revenue and 51–200 employees; 2013 press release says $25M sales; Inc. lists 501–1,000 employees.
+
+Employees: ~600 per Business View; 51–200 per Clodura; 501–1,000 per Inc..
+Founder: Jeff Pedersen.
+
+Signals:  149–159 employees; bamboo apparel/home goods; founded 2007 — referenced  in the file, but employee count is inconsistent across sources.
+Contact: No public founder email found; use website contact.
+
+Pura
+
+Revenue: Inc. (Oct 2026) describes “nine figures in revenue”; BeautyMatter (Mar 2026) projects $500M+ full-year revenue; SIG.ai says 267 employees and profitable as of 2026; Tracxn lists 268 employees; Craft.co confirms founders Bruno Lima & Richie Stapler.
+
+Employees: 267–268 per SIG.ai and Tracxn; 80–268 range in file.
+Founder: Richie Stapler & Bruno Lima.
+Signals: ~267 employees and profitable as of 2026; BeautyMatter Future50; founded 2014 — confirmed by SIG.ai and BeautyMatter.
+
+Contact: No public founder email found; use website contact.
+
+So Good So You
+
+Revenue: Kona Equity lists $12,000,000 and 42 employees; Owler lists $85.2M; Minneapolis Star Tribune (2020) says 45 employees and ~400% revenue growth; Bizwomen (Jul 2026) says >$12M in 2020 and Jennifer Jorgensen named CEO.
+
+Employees: 42 per Kona; 45 per Star Tribune; 42–148 range in file.
+Founder: Rita Katona & Eric Hall; CEO Jennifer Jorgensen.
+
+Signals:  Bansk Group majority investment; Jennifer Jorgensen named CEO in July  2026; founders moved to board roles — confirmed by Bizwomen.
+Contact: No public founder email; use sogoodsoyou.com contact.
+
+Something & Nothing
+
+Revenue: Seedtable lists 6 employees and $14.2M total raised; Tracxn lists 30 employees as of Aug 2026; The Grocer (Sep 2026) says US accounts for >65% of revenue; multiple sources confirm founders Rupert Pugsley & Oliver Dixon.
+
+Employees: 6 per Seedtable; 30 per Tracxn.
+Founder: Rupert Pugsley & Oliver Dixon.
+Signals: Series A; 30 employees; B Corp; non-alcoholic beverages — The Grocer and FoodBev confirm $6.4M raise for US expansion.
+
+Contact: No public founder email; use website contact.
+
+Olive & June
+
+Revenue: USA Today (Nov 2024) says ~30 staff and $240M acquisition by Helen of Troy; Yahoo Finance (Oct 2026) says revenue ~$125M in 2025; Tracxn lists 247 employees as of May 2026; Glossy (Nov 2024) says closing in on $100M annual revenue.
+
+Employees: ~30 per USA Today; 247 per Tracxn; 85–247 range in file.
+Founder: Sarah Gibson Tuttle.
+Signals:  Acquired by Helen of Troy for $240M in Nov 2024; projected $92M 2024  sales — USA Today and Yahoo Finance confirm acquisition and revenue  trajectory.
+
+Contact: hello@oliveandjune.com (not a direct founder email).
+
+Facelove
+
+Revenue: SignalHire estimates $1–10M, ~$497.4K; Shopify store directory lists 543.8K monthly visits and 172 Meta ads; ecom.jobs lists ~4 employees.
+
+
+Employees: ~4 per ecom.jobs; 1–10 range in file.
+
+Founder: Rachel Lang (CEO/Founder).
+
+Signals:  Facial fitness studio concept; small team; founded 2015 — multiple  sources confirm Rachel Lang as founder and facial massage expert.
+
+
+Contact: No public founder email found; use website contact.
+
+MeUndies
+
+Revenue: SignalHire estimates $10M–$50M, ~$40M; Kona Equity lists $41,325,000; RocketReach lists $69.7M in 2026; Growjo estimates $35.3M.
+
+Employees: RocketReach lists 63; Crustdata tracks decline from ~134 to 88 by Sep 2026; Cience lists 51–200; 144–147 range in file.
+Founder: Jonathan Shokrian.
+
+Signals:  Subscription underwear model; ~144 employees; ~$35.3M revenue —  LinkedIn confirms first online underwear subscription model launched in  2011.
+
+
+Contact: support@meundies.com (not a direct founder email).
+
+Body & Bra
+
+Revenue: Not found publicly — primary source URL not identified.
+Employees: Small/not disclosed — primary source URL not identified.
+Founder: Public record managers Timo Jesse van der Drift & Pieter Jan Leo Wielders — primary source URL not identified.
+Signals: DTC premium bras/shapewear; Fort Lauderdale, FL — primary source URL not identified.
+Contact: hey@bodyandbra.com.
+
+Mimi So International
+
+Revenue: Growjo estimates $6.2M.
+
+
+Employees: Growjo lists 31.
+Founder: Mimi So — Equilar bio confirms she launched the brand in 1998.
+Signals: Luxury jewelry brand; ~31 employees; ~$6.2M revenue — Growjo provides estimates.
+
+
+Contact: No public founder email found; use website contact.
+
+
+31–41
+Gamer’s Choice
+
+Revenue: Job descriptions reference a $10M–$100M revenue band — primary source URL not independently verified in this search.
+Employees: ~65 per file — primary source URL not independently verified.
+Founder: Not publicly named — primary source URL not identified.
+Signals:  Founder-led; 65 employees; founded 2020; trading-card retail plus live  commerce — job postings confirm DTC channels including Whatnot, TikTok,  TCGplayer, webstore, NYC retail.
+
+
+Contact: hr@gamerschoice.com.
+
+Quip
+
+Revenue: Intro.co (Simon Enever bio) says scaled to $100M+ revenue/year; Craft.co lists founders Bill May & Simon Enever; SetterVC lists 129–200 employees and $163.95M total funding; Crain’s (2021) says 200 employees.
+
+Employees: 129–200 per SetterVC; 200 per Crain’s.
+Founder: Simon Enever & Bill May.
+
+Signals: Oral-care subscription brand; ~287 employees; ~$63M revenue — Intro.co confirms $100M+ revenue scale and $150M raised.
+
+
+Contact: support@quip.com (not a direct founder email).
+
+Howler Brothers
+
+Revenue: StartupIntros lists $5.1M–$7.4M and 35–47 employees; SignalHire estimates $10M–$50M and 10–50 employees; Growjo estimates $12.5M; Cience lists $5M–$10M and 11–50 employees.
+
+Employees: 35–47 per StartupIntros; 50 per Tracxn as of Jul 2026; Crustdata tracks growth to 50 by Jun 2026.
+Founder: Chase Heard & Andy Stepanian.
+
+Signals: Austin-based apparel; 50 employees as of 2026 (61 per Growjo) — Crustdata confirms headcount growth to 50.
+
+
+Contact: service@howlerbros.com (not a direct founder email).
+
+Taylor Stitch
+
+Revenue: Kona Equity lists $4,579,000; CB Insights lists ~48 employees as of early 2026.
+
+Employees: Kona Equity lists 21; CB Insights lists ~48; 47–52 range in file.
+Founder: Michael Maher, Barrett Purdum, Michael Armenta.
+
+Signals: 47 employees; 8% employee growth; San Francisco apparel — CB Insights confirms lean team and founding in 2008.
+
+
+Contact: hello@taylorstitch.com (not a direct founder email).
+
+Mott & Bow
+
+Revenue: Prospeo estimates $4,021,085.
+
+Employees: Crustdata tracks decline to 43 by Sep 2026; Tracxn lists 43; 43–45 range in file.
+Founder: Alejandro Chahin.
+Signals:  Headcount declined ~20.4% YoY to 43; Shopify Plus; expanded into  women’s denim — Crustdata confirms decline and WWD confirms women’s  denim expansion.
+
+Contact: help@mottandbow.com (not a direct founder email).
+
+Aviator Nation
+
+Revenue: Datanyze lists $110M and 400 employees; Forbes (Mar 2025) says sales hit $150M in 2023; Enlyft lists 400+ employees and $10M–$50M revenue; Salary.com estimates <$5M; Faster-than-normal chat lists $150M–$200M projected 2023 revenue and 582 employees.
+
+Employees: 400 per Datanyze and Enlyft; 582 per Faster-than-normal.
+Founder: Paige Mycoskie.
+
+Signals: 9% employee growth; 20+ retail stores; projected $150M–$200M for 2023 — Forbes confirms $150M sales in 2023.
+
+
+Contact: info@aviatornation.com (not a direct founder email).
+
+HexClad
+
+Revenue: Shopify (Jul 2025) says >$550M annual revenue; RocketReach lists $63.5M in 2026 and 153 employees; LA Times lists 165 employees and $1B+ valuation; Salary.com estimates <$5M and <25 employees.
+
+Employees: 153 per RocketReach; 165 per LA Times; <25 per Salary.com.
+Founder: Danny Winer & Cole Mecray.
+Signals:  $1B+ valuation; Gordon Ramsay partnership; 194.7% growth 2022–2024 —  Shopify and LA Times confirm $550M+ revenue and $1B+ valuation.
+
+Contact: info@hexclad.com (not a direct founder email).
+
+Traeger
+
+Revenue: SEC 10-K FY2025 shows revenue decreased 7.4% to $559.5M; MetaTrader FY2024 summary lists $604.1M revenue and 666 employees; stockanalysis.com shows quarterly revenue $74.68M for Q3 2026.
+
+Employees: 666 per FY2024 10-K; 433 per file (FY2025 10-K).
+Founder: Joe Traeger; CEO Jeremy Andrus — SEC 10-K confirms company identity.
+Signals: NYSE: COOK; ~$510M revenue; 433 employees per recent filing snapshot — SEC 10-K confirms FY2025 revenue $559.5M.
+
+Contact: investor@traeger.com / info@traegergrills.com.
+
+Summit Brands
+
+Revenue: Growjo estimates $16.5M and 73 employees; Datanyze lists 88 employees and CEO Joshua Jones; AeroLeads lists 60 employees.
+
+Employees: 73 per Growjo; 88 per Datanyze; 60 per AeroLeads; 52–88 range in file.
+
+Founder: Family-owned since 1958; CEO Joshua Jones.
+
+Signals: 14% employee growth; 73–88 employees; household cleaning products — Datanyze and Growjo provide estimates.
+
+Contact: No public founder email; use website contact.
+
+Grove Collaborative
+
+Revenue: SEC 10-K FY2025 shows net revenue $173.7M; MetaTrader summary confirms $173.7M.
+
+
+Employees:  ~235 full-time employees at Dec 31, 2025 per SEC 10-K (file cites  407–482, which appears to be a different period or source).
+Founder: Stuart Landesberg — SEC filing confirms company identity.
+Signals:  NYSE: GROV; FY revenue ~$149M; ~407 employees; sustainable  home/personal care — SEC 10-K confirms $173.7M net revenue and ~235 FTEs.
+
+
+Contact: ir@grove.co / community@grove.co.
+
+Jetset Pilates
+
+Revenue: Datanyze lists $15M and 300 employees; Franocity lists average gross revenue $305,514 per studio; FranchiseSidekick lists average gross revenue $349,103; BizQuest lists average unit revenue $924,028.
+
+
+Employees: 300 per Datanyze; 171–692 range in file.
+
+Founder: Tamara Galinsky.
+
+Signals:  121% YoY headcount growth; 515 employees by June 2026; franchise  expansion — Franchise Times (Jul 2024) confirms franchise expansion and  first franchised studio performance.
+Contact: support@jetsetpilates.com (not a direct founder email).
+
+
+
+ChatGPT:
+This research log is actually one of the most useful things you've produced so far. It changes my assessment of the CSV because I can now see where the numbers came from, where sources disagree, and which claims you explicitly haven't verified.
+More importantly, you're doing something good from a data-quality perspective: you're recording conflicting estimates instead of quietly choosing the number that makes a company qualify.
+However, I want to be strict here. The goal is to build a credible AI SDR platform, not simply to produce a spreadsheet with 41 impressive-looking companies.
+1. What I think of your research process
+Good research methodology
+There are four things I particularly like:
+
+Multiple-source comparison. You're comparing revenue and headcount estimates rather than trusting a single commercial database.
+Primary-source discovery. The Bunch Bikes SEC Form C-AR and Traeger's SEC 10-K are much stronger evidence than generic company-data aggregators.
+Explicit uncertainty. You identify when sources weren't independently verified.
+Contact transparency. You're distinguishing a founder's direct email from a generic support or careers inbox.
+
+This is the right direction.
+2. The most important issue: not all numbers mean the same thing
+We need to be careful about the following distinctions:
+
+
+
+Research finding
+How we should interpret it
+
+
+
+Annual revenue
+Revenue for a specified financial year
+
+
+Annualized run rate
+Extrapolation from a shorter period, not actual annual revenue
+
+
+Company valuation
+Not revenue
+
+
+Funding raised
+Not revenue
+
+
+Employee count
+Must have an as-of date
+
+
+Estimated employee range
+Approximate, not verified headcount
+
+
+Monthly website visits
+Traffic signal, not revenue
+
+
+Retail locations
+Distribution/expansion signal, not proof of financial fit
+
+
+For example, Sigmas' approximately $3M annualized run rate is useful, but it must not be recorded as $3M confirmed annual revenue.
+Likewise, a company raising $3M doesn't mean it generates $3M in sales.
+3. My company-level assessment
+Based strictly on the research log you supplied, here's how I would prioritise the 41 companies.
+Priority for verification
+These are the candidates I would investigate first:
+
+
+
+Company
+Why it deserves attention
+
+
+
+Bunch Bikes
+SEC revenue and employee evidence
+
+
+Innovative Eyewear
+Public-company financial reporting
+
+
+Wild Rye
+Revenue and employee evidence, but conflicting estimates
+
+
+Amberjack
+Potentially within both size ranges
+
+
+Helton Tool & Home
+Several estimates within the ICP
+
+
+ARES Tool
+Potentially within both size ranges
+
+
+Good Girl Snacks
+Revenue and employee estimates
+
+
+Harken Sweets
+Small team and retail expansion
+
+
+Taylor Stitch
+Revenue and employee estimates
+
+
+Mott & Bow
+Revenue and headcount estimates
+
+
+Mimi So International
+Potentially within both size ranges
+
+
+Howler Brothers
+Potential fit, but revenue estimates conflict
+
+
+Sigmas
+Funding and employee evidence; revenue is a run rate
+
+
+Additional candidates requiring more investigation:
+
+Boyd Cycling: revenue estimates include values below the $1M threshold.
+RIP-IT: employee estimates straddle the 50-person limit.
+Tom Beckbe: revenue estimates vary substantially.
+Something & Nothing: employee count is inconsistent and revenue remains unknown.
+cadootz!: promising early-stage company, but actual revenue and employee evidence need strengthening.
+Uproot Clean: major revenue disagreement between sources.
+
+These are research priorities, not confirmed qualified leads.
+Likely negative qualification examples
+I would keep these for testing our rejection logic:
+
+Traeger
+Grove Collaborative
+HexClad
+Aviator Nation
+Pura
+Golden Pet Brands
+Cariloha
+Quip
+Raw Nutrition
+Olive & June
+MeUndies
+Petite Keep
+Summit Brands
+
+A few other companies, such as Fields Good and Jetset Pilates, appear to fail the e-commerce business-model requirement rather than the financial criteria.
+This distinction matters: a company can be financially within the target range and still be the wrong type of customer.
+4. Three things we must improve before importing
+A. Every claim needs its own source
+For example, Bunch Bikes should not have one general source attached to its entire research record.
+It should have individual claims:
+
+
+
+Claim
+Preferred evidence
+
+
+
+US e-commerce
+Official store / company website
+
+
+Revenue
+SEC Form C-AR
+
+
+Employees
+SEC Form C-AR
+
+
+Founder
+Official company history or filing
+
+
+Growth signal
+Original funding announcement or company announcement
+
+
+This makes the scoring explanation traceable.
+B. We need to distinguish source quality
+I recommend these internal research labels:
+
+Primary: SEC filings, official company announcements, official careers pages.
+Strong secondary: Reputable business publications and established financial reporting.
+Estimated: Commercial databases such as Growjo, SignalHire and Prospeo.
+Unverified: Source not located, inaccessible or not independently checked.
+
+These are research-management labels, not additional importer claim types.
+C. A generic inbox is not a decision-maker
+Your research log correctly flags this.
+For Ledgerwise, we want:
+
+Founder
+COO
+Finance leader
+Person responsible for accounting or finance operations
+
+A generic info@ address should not be treated as proof that we identified the right contact.
+We can retain it as a company contact channel, but should not confuse it with a verified decision-maker.
+5. How this affects our application
+This research log reinforces our original architecture.
+We should keep:
+
+Seven allowed claim types.
+Source-backed qualification.
+Separate evidence for revenue and employees.
+Negative qualification examples.
+Human review before email approval.
+
+One additional improvement I recommend: the qualification engine should distinguish three outcomes:
+
+  
+    Qualified
+    **Evidence supports the ICP**
+  
+  All required criteria are supported, with no established disqualifier.
+  
+  
+    Needs review
+    **Insufficient or conflicting evidence**
+  
+  Missing revenue, conflicting employee counts, uncertain location, etc.
+  
+  
+    Disqualified
+    **Evidence establishes an ICP mismatch**
+  
+  Too large, too small, wrong geography or wrong business model.
+
+
+An unknown value must never be treated as a failed criterion automatically. And an unverified claim must never become a disqualifier.
+6. Where we stand
+
+
+
+Deliverable
+Assessment
+
+
+
+Company discovery
+41 candidates
+
+
+Research depth
+Good
+
+
+Revenue/headcount verification
+Inconsistent
+
+
+Source traceability
+Incomplete
+
+
+Contact identification
+Partially complete
+
+
+30 qualified companies
+Not established
+
+
+Import-ready evidence
+Not established
+
+
+My honest verdict: The research log is good enough to guide our next phase, but not good enough to declare that we have 30 qualified prospects.
+I would stop discovering new companies temporarily and concentrate on converting the strongest existing candidates into fully sourced records.
+Next, I can turn these 41 entries into a company-by-company qualification matrix, with a decision, the exact missing evidence, conflicting estimates, and the next research action for each company. That will give us a controlled route to 30 verified prospects rather than more spreadsheet rows.
+
+
+You:
+Nah, integrate the log into the csv to fix the problems you encountered with the csv ?
+
+
+ChatGPT:
+Yes. I'll use your research log to repair the existing CSV rather than asking you to redo the research.
+I'll preserve the original eight importer fields, correct the rows that were incorrectly labelled disqualifier, and incorporate your source comparisons and uncertainty notes without inventing URLs or quotations.
+One important distinction: a source mentioned in your log is not automatically a verified source. I'll keep those cases explicitly marked for follow-up rather than making the CSV look more complete than it is.
+
+
+ChatGPT:
+Yes. I'll use your research log to repair the existing CSV rather than asking you to redo the research.
+I'll preserve the original eight importer fields, correct the rows that were incorrectly labelled disqualifier, and incorporate your source comparisons and uncertainty notes without inventing URLs or quotations.
+One important distinction: a source mentioned in your log is not automatically a verified source. I'll keep those cases explicitly marked for follow-up rather than making the CSV look more complete than it is.
+Done. I've integrated your research log across all 41 companies and corrected the CSV's structural problems.
+Your updated files
+
+  
+    
+      
+      **Integrated research master**
+      Recommended
+    
+    302 rows · 12 columns · Includes your research notes for all 41 companies, plus review flags.
+    [Download integrated research master](sandbox:/mnt/data/research-claims-integrated-master.csv)
+  
+  
+  
+    
+      
+      **Normalized importer-schema CSV**
+    
+    302 rows · Exactly the original 8 columns expected by the importer.
+    [Download normalized CSV](sandbox:/mnt/data/research-claims-normalized.csv)
+  
+  
+  
+    
+      
+      **Integration notes**
+    
+    Explains the corrections and remaining limitations.
+    [Download integration notes](sandbox:/mnt/data/research-claims-integration-notes.txt)
+  
+
+
+What I fixed
+
+Restored the correct claim types for previously misclassified unverified claims.
+Mapped revenue and employee research notes to size_fit.
+Moved conflicting estimates into unresolved size_fit records instead of treating them as disqualifiers.
+Preserved genuine existing disqualification records.
+Integrated the research log into the master CSV.
+Added explicit source-verification and human-review flags.
+
+Validation after correction
+
+
+
+Claim type
+Rows
+
+
+
+size_fit
+103
+
+
+contact
+64
+
+
+growth_signal
+46
+
+
+disqualifier
+41
+
+
+category
+40
+
+
+us_ecommerce
+6
+
+
+pain_signal
+2
+
+
+Still not ready to import
+There are still 80 records with UNVERIFIED source URLs. Other records have URLs but need their evidence checked against the actual page.
+I deliberately did not invent source URLs or fabricate quotations to make the importer pass.
+Next step: Use the integrated master as our working research file. Once we verify the missing sources and quotations, we can produce the final importer-ready CSV.
+
+
+ChatGPT:
+Done. I've integrated your research log across all 41 companies and corrected the CSV's structural problems.
+Your updated files
+
+  
+    
+      
+      **Integrated research master**
+      Recommended
+    
+    302 rows · 12 columns · Includes your research notes for all 41 companies, plus review flags.
+    [Download integrated research master](sandbox:/mnt/data/research-claims-integrated-master.csv)
+  
+  
+  
+    
+      
+      **Normalized importer-schema CSV**
+    
+    302 rows · Exactly the original 8 columns expected by the importer.
+    [Download normalized CSV](sandbox:/mnt/data/research-claims-normalized.csv)
+  
+  
+  
+    
+      
+      **Integration notes**
+    
+    Explains the corrections and remaining limitations.
+    [Download integration notes](sandbox:/mnt/data/research-claims-integration-notes.txt)
+  
+
+
+What I fixed
+
+Restored the correct claim types for previously misclassified unverified claims.
+Mapped revenue and employee research notes to size_fit.
+Moved conflicting estimates into unresolved size_fit records instead of treating them as disqualifiers.
+Preserved genuine existing disqualification records.
+Integrated the research log into the master CSV.
+Added explicit source-verification and human-review flags.
+
+Validation after correction
+
+
+
+Claim type
+Rows
+
+
+
+size_fit
+103
+
+
+contact
+64
+
+
+growth_signal
+46
+
+
+disqualifier
+41
+
+
+category
+40
+
+
+us_ecommerce
+6
+
+
+pain_signal
+2
+
+
+Still not ready to import
+There are still 80 records with UNVERIFIED source URLs. Other records have URLs but need their evidence checked against the actual page.
+I deliberately did not invent source URLs or fabricate quotations to make the importer pass.
+Next step: Use the integrated master as our working research file. Once we verify the missing sources and quotations, we can produce the final importer-ready CSV.
+
+
+You:
+I think we should proceed without them, let's continue with the current research csv and continue with the app development, I am done with research for now
+
+
+ChatGPT:
+Agreed. We’ll stop research and move back to app development. We’ll use the current CSV as the working research dataset, without spending more time finding missing sources or adding companies.
+One important boundary: the 80 rows marked UNVERIFIED still cannot pass the importer’s source-URL validation. We can keep them in the research files, but we should not weaken the importer or pretend those rows are verified. We’ll work with the records that meet the existing validation rules and keep the rest flagged.
+Project status
+
+
+
+Area
+Status
+
+
+
+Research collection
+Paused
+
+
+Current CSV
+Working dataset; not fully import-ready
+
+
+Importer and validation
+Built and tested
+
+
+Scoring engine
+Built; weights still unset
+
+
+AI provider layer
+Built; smoke-tested
+
+
+Research agent
+Built; 79 tests passing
+
+
+Dashboard and authentication
+Working
+
+
+Next development focus
+Qualification and sales workflow
+
+
+
+
+ChatGPT:
+Agreed. We’ll stop research and move back to app development. We’ll use the current CSV as the working research dataset, without spending more time finding missing sources or adding companies.
+One important boundary: the 80 rows marked UNVERIFIED still cannot pass the importer’s source-URL validation. We can keep them in the research files, but we should not weaken the importer or pretend those rows are verified. We’ll work with the records that meet the existing validation rules and keep the rest flagged.
+Project status
+
+
+
+Area
+Status
+
+
+
+Research collection
+Paused
+
+
+Current CSV
+Working dataset; not fully import-ready
+
+
+Importer and validation
+Built and tested
+
+
+Scoring engine
+Built; weights still unset
+
+
+AI provider layer
+Built; smoke-tested
+
+
+Research agent
+Built; 79 tests passing
+
+
+Dashboard and authentication
+Working
+
+
+Next development focus
+Qualification and sales workflow
+
+
+Next step: finish qualification logic
+I recommend we tackle this before email generation:
+
+Define transparent scoring weights for the five ICP criteria.
+Make hard disqualifiers block qualification, regardless of score.
+Ensure missing or unverified evidence never earns points.
+Display the final qualification decision and its evidence in the prospect detail page.
+Add tests for borderline, disqualified, and incomplete prospects.
+
+First, let's inspect your current working tree so we don't overwrite any recent changes. Run this from your project directory:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+echo "===== GIT STATUS ====="
+git status --short
+
+echo "===== LATEST COMMIT ====="
+git log -1 --oneline
+
+echo "===== SCORING CONFIG ====="
+cat lib/scoring/config.ts
+
+echo "===== SCORING ENGINE ====="
+cat lib/scoring/score.ts
+
+echo "===== SCORING TESTS ====="
+cat tests/score.test.ts
+
+echo "===== TEST SUITE ====="
+npm test
+
+Paste the complete output. We'll make the next change in a small, testable step.
+I can also check in tomorrow to help keep the remaining development work on track, if you'd like.
+
+
+ChatGPT:
+Next step: finish qualification logic
+I recommend we tackle this before email generation:
+
+Define transparent scoring weights for the five ICP criteria.
+Make hard disqualifiers block qualification, regardless of score.
+Ensure missing or unverified evidence never earns points.
+Display the final qualification decision and its evidence in the prospect detail page.
+Add tests for borderline, disqualified, and incomplete prospects.
+
+First, let's inspect your current working tree so we don't overwrite any recent changes. Run this from your project directory:
+cd ~/Documents/UNSCALE/ledgerwise-prototype/ledgerwise-prototype
+
+echo "===== GIT STATUS ====="
+git status --short
+
+echo "===== LATEST COMMIT ====="
+git log -1 --oneline
+
+echo "===== SCORING CONFIG ====="
+cat lib/scoring/config.ts
+
+echo "===== SCORING ENGINE ====="
+cat lib/scoring/score.ts
+
+echo "===== SCORING TESTS ====="
+cat tests/score.test.ts
+
+echo "===== TEST SUITE ====="
+npm test
+
+Paste the complete output. We'll make the next change in a small, testable step.
+I can also check in tomorrow to help keep the remaining development work on track, if you'd like.
+
+
+You:
+Remind me again, which phase are we at ?
+
+
+ChatGPT:
+We're currently in Phase 4: AI-powered qualification and sales workflow development, moving from the research foundation into the core SDR product.
+Here's where we stand in the Ledgerwise project:
+Project phase tracker
+
+  
+    
+      **Phase 1 — Foundation and setup**
+      Completed
+    
+    Next.js, Supabase, authentication, deployment, GitHub.
+  
+  
+    
+      **Phase 2 — Research and data ingestion**
+      Built
+    
+    CSV importer, source validation, company records, research agent.
+  
+  
+    
+      **Phase 3 — AI infrastructure**
+      Built
+    
+    Multi-provider AI layer, model fallback, extraction and message tasks.
+  
+  
+    
+      **Phase 4 — Qualification engine**
+      In progress
+    
+    Scoring weights, hard disqualifiers, evidence-backed qualification decisions.
+  
+  
+    **Phase 5 — Personalized email generation and approval**
+    Pending
+  
+  
+    **Phase 6 — Reply handling and human handoff**
+    Pending
+  
+  
+    **Phase 7 — Calendar availability and booking**
+    Pending
+  
+  
+    **Phase 8 — QA, documentation and submission**
+    Pending
+  
+
+
+Our immediate next task
+Finalize the scoring engine:
+
+Set the five ICP criterion weights.
+Enforce disqualification rules.
+Prevent unverified evidence from earning points.
+Show qualification decisions and supporting sources.
+Test edge cases.
+
+Important: The research agent and AI infrastructure are built, but that doesn't mean the complete SDR workflow is finished. Email, conversations, booking, and final QA are still ahead.
+We are therefore past the initial setup and research stages, but still in the core product-development phase.
+
+
+You:
+Let's do prepare Phases 5, 6, and 7
+
+
+ChatGPT:
+Absolutely. Let's prepare Phases 5, 6, and 7 together before implementing them. These three phases form the actual sales workflow of Ledgerwise: generating outreach, handling prospect replies, and booking meetings.
+The goal is to design them as one connected system rather than three isolated features.
+Ledgerwise — Sales workflow implementation plan
+
+  
+    **Current development position**
+    Phase 4 in progress
+  
+  
+    
+      **Phase 5 — AI email generation**
+
+  <text color="secondary" size="sm">Generate, review, edit, approve, reject and simulate sending personalized emails.</text>
+  <span class="ce-badge ce-badge-default">To prepare</span>
+</list-item>
+<list-item>
+  **Phase 6 — AI conversations and human handoff**
+
+  <text color="secondary" size="sm">Classify incoming replies, respond safely, escalate sensitive cases and let salespeople take over.</text>
+  <span class="ce-badge ce-badge-default">To prepare</span>
+</list-item>
+<list-item>
+  **Phase 7 — Calendar and meeting booking**
+
+  <text color="secondary" size="sm">Show available slots, prevent double bookings and confirm meetings.</text>
+  <span class="ce-badge ce-badge-default">To prepare</span>
+</list-item>
+
+  
+
+
+Phase 5 — Personalized email generation
+
+🖼️
+Generated image
+modern SaaS CRM email approval queue dashboard email draft preview interface
+
+Objective: Turn a qualified prospect into a personalized, evidence-backed first email.
+Planned workflow
+
+Salesperson opens a qualified company.
+Clicks Generate email.
+AI receives:
+Company information.
+Verified research claims and source evidence.
+Qualification reasons.
+Ledgerwise's service context.
+
+
+AI produces a personalized first email.
+Draft enters the approval queue.
+Salesperson can edit, approve or reject it.
+Approved email can be simulated as sent.
+
+Existing database tables
+
+email_drafts
+email_events
+audit_logs
+
+Planned dashboard
+
+
+
+Screen
+Function
+
+
+
+Email queue
+All pending drafts
+
+
+Email preview
+Subject and body
+
+
+Evidence panel
+Sources behind personalized claims
+
+
+Review controls
+Edit, approve, reject
+
+
+Send history
+Simulated sending events
+
+
+Important safeguards
+
+No invented company facts.
+Every factual personalization claim must have supporting evidence.
+No pricing promises.
+No real email sending by default.
+Clearly label simulated sends.
+
+Definition of done: A salesperson can generate, review, edit, approve, reject and simulate sending a personalized email.
+
+Phase 6 — AI replies and human handoff
+
+🖼️
+Generated image
+CRM shared inbox customer conversations AI assistant human handoff dashboard interface
+
+Objective: Let AI handle straightforward prospect replies while keeping humans in control of important decisions.
+Planned workflow
+
+A prospect reply enters the system.
+A conversation is created or updated.
+AI classifies the reply.
+Application rules determine whether AI can respond.
+AI drafts or sends a simulated response.
+Uncertain or sensitive cases are sent to human review.
+Salesperson can take over the conversation.
+
+Reply classification
+
+
+
+Prospect reply
+Expected handling
+
+
+
+Interested
+AI can draft a response
+
+
+Asks a basic question
+AI responds using approved information
+
+
+Asks whether it's a bot
+Honest AI disclosure
+
+
+Requests pricing
+Human handoff
+
+
+Legal or sensitive question
+Human handoff
+
+
+Unsubscribe / stop
+Permanent suppression
+
+
+Unclear message
+Human handoff
+
+
+Existing database tables
+
+conversations
+messages
+suppressed_contacts
+audit_logs
+
+Planned dashboard
+
+Shared conversation inbox.
+Conversation history.
+AI/human handling status.
+AI response preview.
+Human takeover control.
+Suppression status.
+Handoff reason.
+
+Definition of done: Salespeople can see incoming conversations, understand why AI responded or escalated, and take control at any time.
+
+Phase 7 — Calendar and meeting booking
+
+🖼️
+Generated image
+modern CRM calendar availability meeting booking dashboard weekly calendar time slots interface
+
+Objective: Allow an interested prospect to book an actual available meeting slot.
+Planned workflow
+
+Prospect expresses interest in a meeting.
+AI identifies the booking intent.
+Application retrieves available slots.
+Prospect chooses a slot.
+System checks availability again.
+Booking is created.
+Calendar availability is updated.
+Salesperson sees the confirmed booking.
+
+Existing database tables
+
+calendar_slots
+bookings
+audit_logs
+
+Important booking rules
+
+Never offer a slot that is already booked.
+Recheck availability immediately before confirming.
+Prevent two prospects from booking the same slot.
+Store timezone information.
+Do not claim a meeting is booked until the database confirms it.
+Record cancellations and booking changes.
+
+Planned dashboard
+
+
+
+Screen
+Function
+
+
+
+Calendar
+View availability
+
+
+Slot management
+Create/manage available slots
+
+
+Bookings
+View confirmed meetings
+
+
+Booking details
+Prospect, date, time, status
+
+
+Conversation link
+See the conversation that led to booking
+
+
+Definition of done: A prospect can select an available slot, receive a confirmed booking, and see that booking reflected in the salesperson's calendar.
+
+How the three phases connect
+This is the workflow we are building:
+
+  
+    **Qualified prospect**
+
+<text color="secondary" size="xs">Phase 4</text>
+
+  
+  
+  
+    **Generate and approve email**
+
+<text color="secondary" size="xs">Phase 5</text>
+
+  
+  
+  
+    **Prospect replies**
+
+<text color="secondary" size="xs">Phase 6</text>
+
+  
+  
+  
+    
+      
+        **AI handles**
+
+    <text color="secondary" size="xs">Safe, routine replies</text>
+  </box>
+</grid-item>
+<grid-item>
+  <box background="rgba(245,158,11,0.10)" radius="md" padding={2} align="center" height="100%">
+    **Human takes over**
+
+    <text color="secondary" size="xs">Sensitive or uncertain replies</text>
+  </box>
+</grid-item>
+
+  
+  
+  
+    **Meeting requested and booked**
+
+<text color="secondary" size="xs">Phase 7</text>
+
+  
+  
+  
+    
+    **Confirmed meeting**
+  
+
+
+Technical preparation
+Before implementation, these are the design decisions I recommend:
+
+
+
+Area
+Proposed approach
+
+
+
+AI generation
+Reuse lib/ai.ts
+
+
+Email sending
+Simulated by default
+
+
+Reply processing
+Rule-based safety checks before AI
+
+
+Human takeover
+Persisted conversation status
+
+
+Suppression
+Permanent database enforcement
+
+
+Booking
+Database-backed slot reservations
+
+
+Concurrency
+Database transaction or atomic booking function
+
+
+Calendar integration
+External calendar provider, if configured
+
+
+Auditability
+Record important actions in audit_logs
+
+
+One important distinction: the current database already has the necessary tables, but we have not yet confirmed that their schemas and constraints support every workflow above. We will inspect them before implementing anything.
+One decision before Phase 7
+Which calendar approach should we prepare?
+{@body const [calendar,setCalendar] = DIL.useState("google")}
+
+  
+    
+      Google Calendar integration
+  <text color="secondary" size="xs">Read real availability and create actual calendar events through Google Calendar.</text>
+</radio>
+<radio value="internal">
+  **Internal Ledgerwise calendar**
+
+  <text color="secondary" size="xs">Salespeople configure available slots inside the app; bookings are stored in Supabase.</text>
+</radio>
+<radio value="both">
+  **Both**
+
+  <text color="secondary" size="xs">Internal calendar first, with external calendar synchronization.</text>
+</radio>
+
+  
+  GenUI.issueNewTurn("For Phase 7, prepare the "+calendar+" calendar approach. Continue planning Phases 5, 6 and 7 accordingly.")}>Confirm calendar approach
+
+
+My recommendation is Google Calendar integration, provided we can configure it within the available free-tier constraints. It better demonstrates actual scheduling rather than simply recording an appointment in a database.
+After that decision, we'll inspect the existing database schemas and empty pages, prepare the implementation checklist, and build Phase 5 first.
+Project status: Phases 5–7 are now architecturally planned, not implemented. We will keep the existing safety rules and avoid real external sending or booking until the integrations are properly configured and tested.
+
+
+You:
+For Phase 7, prepare the both calendar approach. Continue planning Phases 5, 6 and 7 accordingly.
+
+
+ChatGPT:
+Excellent. We'll prepare both an internal Ledgerwise calendar and Google Calendar integration. That gives us a self-contained demo that works without external accounts, while also demonstrating real calendar integration when Google is connected.
+I'll make one important architectural decision: the internal Ledgerwise database will remain the booking authority; Google Calendar will synchronize with it. This prevents the application from depending entirely on an external service.
+Updated implementation plan: Phases 5, 6 and 7
+
+  Ledgerwise sales workflow
+  
+    Phase 5 — Email generation
+    Planned
+  
+  
+    Phase 6 — Conversation handling
+    Planned
+  
+  
+    Phase 7 — Calendar and booking
+    Both approaches
+  
+
+
+Phase 5 — Personalized email generation and approval
+
+🖼️
+Generated image
+modern CRM sales email drafting approval queue dashboard with email preview and prospect details
+
+5.1 — Generation pipeline
+The salesperson starts from a qualified prospect and requests an email.
+The application gathers:
+
+Company profile.
+Verified company research.
+Evidence and source URLs.
+Qualification score and reasons.
+Ledgerwise's approved service information.
+
+The AI produces a subject and email body.
+Important: The AI does not get to invent company facts. Application code must validate the claims against the research records before the draft is presented for approval.
+5.2 — Approval workflow
+
+  
+    **Generated draft**
+
+<text color="secondary" size="xs">Status: draft</text>
+
+  
+  
+  
+    **Salesperson review**
+
+<text color="secondary" size="xs">Edit · Approve · Reject</text>
+
+  
+  
+  
+    
+      
+        **Approved**
+
+    <text color="secondary" size="xs">Simulated send</text>
+  </box>
+</grid-item>
+<grid-item>
+  <box border radius="md" padding={2}>
+    **Rejected**
+
+    <text color="secondary" size="xs">No sending</text>
+  </box>
+</grid-item>
+
+  
+
+
+5.3 — Implementation components
+
+
+
+Component
+Responsibility
+
+
+
+Email generation action
+Request AI draft
+
+
+Draft validation
+Check factual claims and sources
+
+
+Approval queue
+Display drafts awaiting review
+
+
+Email editor
+Edit subject and body
+
+
+Approval actions
+Approve or reject
+
+
+Send simulator
+Record simulated send events
+
+
+Database: reuse email_drafts, email_events, audit_logs.
+Acceptance tests:
+
+Drafts cannot be sent before approval.
+Rejected drafts cannot be sent.
+Unsupported facts are rejected or removed.
+Every generated draft is associated with its prospect.
+Simulated sending never contacts a real person.
+
+
+Phase 6 — AI conversation management and human handoff
+
+🖼️
+Generated image
+CRM AI customer support shared inbox conversation detail human handoff interface
+
+6.1 — Incoming message pipeline
+A reply arrives through a simulated inbound-message interface initially. We can add a real email provider integration later.
+The application:
+
+Identifies the prospect and conversation.
+Saves the incoming message.
+Checks suppression and safety rules.
+Classifies the reply.
+Decides whether AI may handle it.
+Creates an AI response draft or requests human intervention.
+
+6.2 — Safety decision hierarchy
+The order matters. Critical rules run before the AI model.
+
+
+
+Condition
+Application action
+
+
+
+Opt-out / unsubscribe
+Suppress permanently
+
+
+Bot identity question
+Honest AI disclosure
+
+
+Pricing question
+Human handoff
+
+
+Legal or sensitive topic
+Human handoff
+
+
+Uncertain request
+Human handoff
+
+
+Routine question
+AI response
+
+
+Meeting interest
+Start booking workflow
+
+
+The AI must never be able to override the suppression system.
+6.3 — Conversation state machine
+
+  
+    **AI handling**
+  
+  
+  
+    
+      
+        **Routine reply**
+
+    <text color="secondary" size="xs">AI continues</text>
+  </box>
+</grid-item>
+<grid-item>
+  <box border radius="md" padding={2} align="center">
+    **Escalation**
+
+    <text color="secondary" size="xs">Human takeover</text>
+  </box>
+</grid-item>
+
+  
+  
+  
+    **Human takeover / conversation closed / suppressed**
+  
+
+
+We will respect the existing database statuses:
+
+ai_handling
+needs_human
+human_takeover
+closed
+suppressed
+
+6.4 — Implementation components
+
+
+
+Component
+Responsibility
+
+
+
+Shared inbox
+List conversations
+
+
+Conversation viewer
+Display messages
+
+
+Classification service
+Identify intent and risk
+
+
+AI response generator
+Draft safe responses
+
+
+Human takeover action
+Stop AI handling
+
+
+Suppression handler
+Enforce permanent opt-outs
+
+
+Audit logging
+Record important decisions
+
+
+Acceptance tests:
+
+Opt-outs always trigger suppression.
+Human takeover prevents further automatic responses.
+AI cannot answer pricing or legal questions.
+Every inbound and outbound message is recorded.
+A conversation can be linked to a booking.
+
+
+Phase 7 — Internal calendar + Google Calendar
+
+🖼️
+Generated image
+modern SaaS scheduling calendar weekly availability booking dashboard Google Calendar style
+
+This phase will have two operating modes.
+
+  
+    
+    **A. Internal Ledgerwise calendar**
+    Standalone
+  
+  This works without Google authentication.
+
+  Salespeople can:
+
+Create available slots.
+Set meeting duration.
+Set their timezone.
+View bookings.
+Cancel or reschedule meetings.
+
+  The database stores all slots and bookings.
+  
+  
+    
+    **B. Google Calendar integration**
+    Optional connection
+  
+  When a salesperson connects Google Calendar:
+
+
+Read busy periods from Google Calendar.
+Exclude conflicts from available slots.
+Create Google Calendar events for confirmed bookings.
+Update or cancel corresponding events when bookings change.
+Track synchronization status and errors.
+
+7.1 — How both calendars work together
+The internal calendar is the source of truth for Ledgerwise bookings.
+
+  
+    **Prospect requests a meeting**
+  
+  
+  
+    **Ledgerwise checks available slots**
+  
+  
+  
+    **Google busy-time check (if connected)**
+  
+  
+  
+    **Atomically reserve slot in Supabase**
+  
+  
+  
+    **Create Google event (if connected)**
+  
+  
+  
+    **Confirmed booking**
+  
+
+
+7.2 — Preventing double bookings
+This is one of the most important technical requirements.
+We should not simply check whether a slot is free and then insert a booking. Two requests could arrive simultaneously.
+Instead:
+
+Use a database transaction or atomic database function.
+Lock or constrain the requested slot.
+Check whether it remains available.
+Create the booking only if available.
+Return a conflict if another booking won the race.
+
+For Google synchronization, we also need:
+
+An idempotency mechanism so retries don't create duplicate events.
+A saved Google event ID.
+A sync status for each booking.
+Retry handling when Google is temporarily unavailable.
+
+A booking must not be reported as fully confirmed until the required booking and calendar synchronization steps succeed. If synchronization fails, the application should show a pending or failed state and recover safely.
+7.3 — Database preparation
+We already have:
+
+calendar_slots
+bookings
+audit_logs
+
+Before changing the schema, we will inspect their actual columns and constraints.
+We may need to add fields or supporting tables for:
+
+
+
+Data
+Purpose
+
+
+
+Google account connection
+OAuth credentials and calendar identity
+
+
+Google event ID
+Match external event to internal booking
+
+
+Sync status
+Track pending, synced and failed states
+
+
+Timezone
+Correct local meeting display
+
+
+Idempotency key
+Avoid duplicate bookings/events
+
+
+External busy periods
+Prevent conflicts with existing events
+
+
+OAuth tokens must be stored securely server-side, never exposed to browser code or committed to Git.
+7.4 — Google integration scope
+I recommend starting with this scope:
+Initial integration
+
+Connect Google account.
+Select a calendar.
+Read busy periods.
+Create events.
+Update and cancel events.
+
+Later enhancement
+
+Detect external calendar changes and synchronize them back into Ledgerwise.
+Handle calendar disconnects and revoked permissions.
+Support multiple salespeople and calendars.
+
+This keeps the initial implementation achievable without abandoning the longer-term design.
+
+Combined testing strategy
+We should test each phase independently and then test the full sales journey.
+
+
+
+Test scenario
+Expected result
+
+
+
+Qualified prospect generates email
+Draft created
+
+
+Unverified research claim
+Not used as factual personalization
+
+
+Email rejected
+Cannot be sent
+
+
+Prospect asks about pricing
+Human handoff
+
+
+Prospect opts out
+Permanently suppressed
+
+
+Prospect asks for meeting
+Booking flow begins
+
+
+Slot already booked
+Rejected
+
+
+Two simultaneous booking attempts
+Only one succeeds
+
+
+Google unavailable
+No false confirmation
+
+
+Google event created
+Event ID saved
+
+
+Booking cancelled
+Corresponding Google event updated/cancelled
+
+
+Recommended implementation order
+
+Complete Phase 4 scoring and qualification decisions.
+Implement Phase 5 email generation and approval.
+Implement Phase 6 conversations, classification and handoff.
+Implement Phase 7 internal calendar.
+Add Google OAuth and calendar synchronization.
+Run end-to-end tests across all three phases.
+Document limitations and demo the complete workflow.
+
+This ordering gives us a functioning product even if Google integration takes longer than expected.
+Updated project status
+
+
+
+Phase
+Status
+
+
+
+1. Foundation
+Completed
+
+
+2. Research and ingestion
+Built
+
+
+3. AI infrastructure
+Built
+
+
+4. Qualification
+In progress
+
+
+5. Email generation
+Planned
+
+
+6. Conversations
+Planned
+
+
+7. Internal + Google calendar
+Architecture decided
+
+
+8. Final QA and submission
+Pending
+
+
+Next practical step: inspect the existing database schemas and current empty dashboard pages before writing migrations or implementation code. That way we build on what already exists instead of duplicating or breaking it.
+I can take that inspection as our next development task and then turn this plan into a file-by-file implementation checklist.
+
+If you want, I can:
+
+Inspect database schemas for Phases 5-7
+Outline implementation checklist for Phases 5-7
+Draft sequence for Phase 5 email generation UI

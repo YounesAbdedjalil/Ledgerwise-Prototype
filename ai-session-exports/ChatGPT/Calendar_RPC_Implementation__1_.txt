@@ -1,0 +1,2932 @@
+Calendar RPC Implementation (1)
+===============================
+
+ChatGPT:
+Perfect. We'll use the Supabase SQL Editor—no need for the Supabase CLI.
+Before you execute anything, let's verify that the application is ready for these migrations. In your project terminal, run this single command:
+printf '\n===== CALENDAR ACTIONS DIFF =====\n'
+git diff -- "app/(dashboard)/calendar/actions.ts"
+
+printf '\n===== MIGRATION 04 =====\n'
+cat supabase/unapplied/04_transactional_calendar_operations.sql
+
+printf '\n===== MIGRATION 05 =====\n'
+cat supabase/unapplied/05_calendar_security_corrections.sql
+
+Paste the output here. I'll check the exact RPC names, parameters, return values, permissions, and how the current calendar actions need to call them.
+Don't execute either migration yet. Once the code and SQL contract match, I'll give you the exact application order: migration 04 first, then migration 05, followed by the verification steps.
+
+
+You:
+📎 [Attached file: Pasted text(2).txt — TXT, 19 KB]
+Migration 04:
+And Migration 05:
+-- Ledgerwise — migration 05
+-- Correct suppression concurrency and audit actor authorization.
+-- Apply only after migrations 01–04 have been reviewed and approved.
+begin;
+-- 1. Suppression records can be read by authenticated users,
+--    but all writes must go through the SECURITY DEFINER RPC.
+revoke insert on table public.suppressed_contacts
+  from anon, authenticated;
+grant select on table public.suppressed_contacts
+  to authenticated;
+drop policy if exists auth_insert_suppressed_contacts
+  on public.suppressed_contacts;
+-- 2. Authenticated users may create audit records only as themselves.
+--    Existing application writers already supply actor_id = auth.uid().
+drop policy if exists auth_insert_audit_logs
+  on public.audit_logs;
+create policy auth_insert_audit_logs
+  on public.audit_logs
+  for insert
+  to authenticated
+  with check (actor_id = auth.uid());
+-- 3. Serialize suppression with booking operations.
+--    This MUST use the same advisory lock as the calendar RPCs:
+--    pg_advisory_xact_lock(734921, 1).
+create or replace function public.suppress_contact(
+  p_email text,
+  p_reason text,
+  p_source_message_id uuid default null
+)
+returns public.suppressed_contacts
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_email text := lower(trim(coalesce(p_email, '')));
+  v_row public.suppressed_contacts;
+begin
+  if auth.uid() is null then
+    raise exception 'not_authenticated';
+  end if;
+  if v_email = ''
+    or v_email !~ '^[^@[:space:]]+@[^@[:space:]]+.[^@[:space:]]+$'
+  then
+    raise exception 'invalid_email';
+  end if;
+  -- Shared transaction lock with book_slot and other calendar mutations.
+  perform pg_advisory_xact_lock(734921, 1);
+  insert into public.suppressed_contacts (
+    email,
+    reason,
+    source_message_id
+  )
+  values (
+    v_email,
+    coalesce(nullif(trim(p_reason), ''), 'opt_out'),
+    p_source_message_id
+  )
+  on conflict (lower(email)) do nothing
+  returning * into v_row;
+  if v_row.id is null then
+    select *
+      into v_row
+      from public.suppressed_contacts
+      where lower(email) = v_email;
+return v_row;
+
+  end if;
+  insert into public.audit_logs (
+    actor_id,
+    action,
+    entity_type,
+    entity_id,
+    detail
+  )
+  values (
+    auth.uid(),
+    'contact_suppressed',
+    'suppressed_contacts',
+    v_row.id,
+    jsonb_build_object(
+      'email', v_email,
+      'reason', v_row.reason,
+      'source_message_id', p_source_message_id
+    )
+  );
+  return v_row;
+end;
+$$;
+revoke all on function public.suppress_contact(text, text, uuid)
+  from public, anon, authenticated;
+grant execute on function public.suppress_contact(text, text, uuid)
+  to authenticated;
+commit;
+
+
+ChatGPT:
+I have Migration 04 and Migration 05 now. Hold off on running them in Supabase for the moment. There are a few important things to verify first.
+What I found
+
+Migration 04 defines all seven expected RPCs: slot creation/deletion, booking, confirmation, cancellation, rescheduling, and Google Calendar sync metadata.
+The calendar mutation RPCs use the shared advisory lock pg_advisory_xact_lock(734921, 1).
+It revokes direct writes to calendar_slots and bookings, then grants authenticated users access through the RPCs.
+Migration 05 adds the suppression RPC, uses the same advisory lock, and restricts audit inserts to records whose actor_id matches auth.uid().
+
+Two things need attention before execution:
+
+Migration 04 has no explicit BEGIN/COMMIT in the supplied contents. We should make sure it runs atomically, so a failure cannot leave only part of the permissions or functions installed.
+The SECURITY DEFINER RPCs authenticate the caller, but I don't yet see per-user or per-company authorization checks inside them. We need to compare that with the existing RLS and application access model before approving the permissions.
+
+
+
+ChatGPT:
+I have Migration 04 and Migration 05 now. Hold off on running them in Supabase for the moment. There are a few important things to verify first.
+What I found
+
+Migration 04 defines all seven expected RPCs: slot creation/deletion, booking, confirmation, cancellation, rescheduling, and Google Calendar sync metadata.
+The calendar mutation RPCs use the shared advisory lock pg_advisory_xact_lock(734921, 1).
+It revokes direct writes to calendar_slots and bookings, then grants authenticated users access through the RPCs.
+Migration 05 adds the suppression RPC, uses the same advisory lock, and restricts audit inserts to records whose actor_id matches auth.uid().
+
+Two things need attention before execution:
+
+Migration 04 has no explicit BEGIN/COMMIT in the supplied contents. We should make sure it runs atomically, so a failure cannot leave only part of the permissions or functions installed.
+The SECURITY DEFINER RPCs authenticate the caller, but I don't yet see per-user or per-company authorization checks inside them. We need to compare that with the existing RLS and application access model before approving the permissions.
+
+Next: show me the current application changes
+Run this in your project terminal:
+git diff -- "app/(dashboard)/calendar/actions.ts"
+
+Paste the output here.
+I need that diff to check that every action calls the correct RPC with the exact parameter names and types, and that no action still attempts a direct database write.
+Once that matches, I'll give you the precise SQL Editor steps. We'll apply 04 first, then 05, and verify the functions and permissions afterward.
+
+
+ChatGPT:
+Next: show me the current application changes
+Run this in your project terminal:
+git diff -- "app/(dashboard)/calendar/actions.ts"
+
+Paste the output here.
+I need that diff to check that every action calls the correct RPC with the exact parameter names and types, and that no action still attempts a direct database write.
+Once that matches, I'll give you the precise SQL Editor steps. We'll apply 04 first, then 05, and verify the functions and permissions afterward.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ git diff -- "app/(dashboard)/calendar/actions.ts"
+diff --git a/app/(dashboard)/calendar/actions.ts b/app/(dashboard)/calendar/actions.ts
+index 4afb3bd..07e0dc0 100644
+--- a/app/(dashboard)/calendar/actions.ts
++++ b/app/(dashboard)/calendar/actions.ts
+@@ -3,11 +3,9 @@
+ import { revalidatePath } from "next/cache";
+ import { createClient } from "@/lib/supabase/server";
+ import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+-import { writeAudit } from "@/lib/server/audit";
+ import { isSuppressed } from "@/lib/suppression";
+ import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+ import {
+
+OCCUPYING_BOOKING_STATUSES,
+validateBookingInput,
+validateSlotInput,
+ } from "@/lib/calendar/time";
+@@ -108,30 +106,18 @@ async function recordGoogleSync(
+result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
+deleted = false
+ ): Promise {
+if (result.status === "not_configured") return;
+if (result.status === "synced") {
+await supabase
+ .from("bookings")
+
+
+ .update(
+
+
+   deleted
+
+
+     ? {
+
+
+         google_event_id: null,
+
+
+         calendar_sync_status: "deleted",
+
+
+         calendar_synced_at: new Date().toISOString(),
+
+
+       }
+
+
+     : {
+
+
+         ...(result.eventId ? { google_event_id: result.eventId } : {}),
+
+
+         calendar_sync_status: "synced",
+
+
+         calendar_synced_at: new Date().toISOString(),
+
+
+       }
+
+
+ )
+
+
+ .eq("id", bookingId);
+
+
+return;
+}
+await supabase
+.from("bookings")
+.update({ calendar_sync_status: "failed" })
+.eq("id", bookingId);
+
+
+const status =
+result.status === "not_configured"
+ ? "not_configured"
+
+
+ : deleted && result.status === "synced"
+
+
+   ? "deleted"
+
+
+   : result.status;
+
+
+const { error } = await supabase.rpc("record_google_calendar_sync", {
+p_booking_id: bookingId,
+p_status: status,
+p_event_id: result.status === "synced" && !deleted ? result.eventId ?? null : null,
+});
+if (error) console.error("Calendar sync metadata could not be recorded:", error.message);
+ }
+
+ async function checkSuppressed(
+@@ -157,33 +143,6 @@ async function checkSuppressed(
+   }
+ }
+-async function checkSlotFree(
+
+supabase: ServerSupabase,
+slot: SlotRow,
+ignoreBookingId?: string
+-): Promise<{ ok: boolean; error?: string }> {
+const { data: overlappingSlots, error: slotError } = await supabase
+.from("calendar_slots")
+.select("id")
+.lt("start_time", slot.end_time)
+.gt("end_time", slot.start_time);
+if (slotError) return { ok: false, error: slotError.message };
+
+const slotIds = Array.from(
+new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
+);
+const { data, error } = await supabase
+.from("bookings")
+.select("id")
+.in("slot_id", slotIds)
+.in("status", [...OCCUPYING_BOOKING_STATUSES]);
+if (error) return { ok: false, error: error.message };
+const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+if (conflict) {
+return { ok: false, error: "That time is already held by another booking." };
+}
+return { ok: true };
+-}
+
+ export async function createSlot(input: {
+   startTime: string;
+@@ -197,43 +156,21 @@ export async function createSlot(input: {
+   const validation = validateSlotInput(input);
+   if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+
+const { data, error } = await supabase
+.from("calendar_slots")
+.insert({
+ start_time: input.startTime,
+
+
+ end_time: input.endTime,
+
+
+ timezone: input.timezone,
+
+
+ source: "internal",
+
+
+ external_id: null,
+
+
+ is_available: true,
+
+
+ fetched_at: new Date().toISOString(),
+
+
+})
+.select("id")
+.single();
+
+
+const { data, error } = await supabase.rpc("create_calendar_slot", {
+p_start_time: input.startTime,
+p_end_time: input.endTime,
+p_timezone: input.timezone,
+});
+if (error || !data) {
+  return {
+ok: false,
+
+
+ error:
+
+
+   error?.message ??
+
+
+   "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+
+
+
+
+ error: error?.message ?? "The slot could not be created.",
+
+   };
+ }
+
+
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "calendar_slot_created",
+entityType: "calendar_slots",
+entityId: data.id,
+detail: {
+ start_time: input.startTime,
+
+
+ end_time: input.endTime,
+
+
+ timezone: input.timezone,
+
+
+ source: "internal",
+
+
+},
+});
+
+
+const slotId = data as string;
+revalidateCalendar();
+
+
+
+return { ok: true, slotId: data.id, message: "Internal slot created." };
+
+
+return { ok: true, slotId, message: "Internal slot created." };
+ }
+
+ export async function deleteSlot(slotId: string): Promise {
+@@ -245,36 +182,12 @@ export async function deleteSlot(slotId: string): Promise
+   const loaded = await loadSlot(supabase, slotId);
+   if (!loaded.slot) return { ok: false, error: loaded.error };
+
+const { data: active, error } = await supabase
+.from("bookings")
+.select("id")
+.eq("slot_id", slotId)
+.in("status", [...OCCUPYING_BOOKING_STATUSES])
+.limit(1);
+if (error) return { ok: false, error: error.message };
+if ((active ?? []).length > 0) {
+return {
+ ok: false,
+
+
+ error: "Cancel or reschedule the active booking before deleting this slot.",
+
+
+};
+}
+
+const { error: deleteError } = await supabase
+:
+.from("bookings")
+.select("id")
+.eq("slot_id", slotId)
+.in("status", [...OCCUPYING_BOOKING_STATUSES])
+.limit(1);
+if (error) return { ok: false, error: error.message };
+if ((active ?? []).length > 0) {
+return {
+ ok: false,
+
+
+ error: "Cancel or reschedule the active booking before deleting this slot.",
+
+
+};
+}
+
+const { error: deleteError } = await supabase
+.from("calendar_slots")
+.delete()
+.eq("id", slotId);
+
+
+const { data: deleted, error: deleteError } = await supabase.rpc(
+"delete_calendar_slot",
+{ p_slot_id: slotId }
+);
+if (deleteError) return { ok: false, error: deleteError.message };
+
+
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "calendar_slot_deleted",
+entityType: "calendar_slots",
+entityId: slotId,
+detail: {
+ start_time: loaded.slot.start_time,
+
+
+ end_time: loaded.slot.end_time,
+
+
+},
+});
+
+
+if (!deleted) return { ok: false, error: "The slot could not be deleted." };
+revalidateCalendar();
+return { ok: true, slotId, message: "Slot deleted." };
+
+
+@@ -292,43 +205,49 @@ export async function bookSlot(input: {
+   const user = await getSessionUser(supabase);
+   if (!user) return { ok: false, error: "Not signed in." };
+   if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+
+if (input.companyId && !isUuid(input.companyId)) {
+return { ok: false, error: "Invalid company ID." };
+}
+if (input.conversationId && !isUuid(input.conversationId)) {
+return { ok: false, error: "Invalid conversation ID." };
+}
+
+
+let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
+const conversationId =
+input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+
+
+let companyId = input.companyId ?? null;
+
+const conversationId = input.conversationId ?? null;
+let prospectName = input.prospectName;
+let prospectEmail = normalizeEmail(input.prospectEmail);
+if (conversationId) {
+
+
+
+const { data: conversation } = await supabase
+
+
+const { data: conversation, error: conversationError } = await supabase
+  .from("conversations")
+  .select("id,company_id,contact_email,status")
+  .eq("id", conversationId)
+  .maybeSingle();
+if (conversationError) return { ok: false, error: conversationError.message };
+if (!conversation) return { ok: false, error: "Conversation not found." };
+if (conversation.status === "suppressed") {
+
+
+ return {
+
+
+   ok: false,
+
+
+   error: "This contact is suppressed. A booking cannot be created.",
+
+
+ };
+
+
+
+
+ return { ok: false, error: "This contact is suppressed. A booking cannot be created." };
+
+
+}
+
+if (companyId && companyId !== conversation.company_id) {
+
+ return { ok: false, error: "Company does not match the conversation." };
+
+   }
+   companyId = companyId ?? conversation.company_id;
+   if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
+ }
+ if (companyId) {
+
+
+
+const { data: company } = await supabase
+
+
+const { data: company, error: companyError } = await supabase
+  .from("companies")
+  .select("name,contact_name,contact_email")
+  .eq("id", companyId)
+  .maybeSingle();
+
+
+if (company) {
+ if (!prospectName.trim() && company.contact_name !== "unknown") {
+
+
+   prospectName = company.contact_name;
+
+
+ }
+
+
+ if (!prospectEmail && company.contact_email) {
+
+
+   prospectEmail = normalizeEmail(company.contact_email);
+
+
+ }
+
+
+
+
+if (companyError) return { ok: false, error: companyError.message };
+if (!company) return { ok: false, error: "Company not found." };
+if (!prospectName.trim() && company.contact_name !== "unknown") {
+ prospectName = company.contact_name;
+
+
+}
+if (!prospectEmail && company.contact_email) {
+ prospectEmail = normalizeEmail(company.contact_email);
+
+   }
+ }
+
+@@ -339,9 +258,7 @@ export async function bookSlot(input: {
+   if (!suppression.ok) return { ok: false, error: suppression.error };
+   const cleanProspectName = trimText(prospectName, 200);
+
+if (!cleanProspectName) {
+return { ok: false, error: "A prospect name is required." };
+}
+
+
+if (!cleanProspectName) return { ok: false, error: "A prospect name is required." };
+const validation = validateBookingInput({
+  prospectName: cleanProspectName,
+
+
+@@ -352,58 +269,25 @@ export async function bookSlot(input: {
+   const loaded = await loadSlot(supabase, input.slotId);
+   if (!loaded.slot) return { ok: false, error: loaded.error };
+
+const { slot } = loaded;
+if (!slot.is_available) {
+return { ok: false, error: "That slot is marked unavailable." };
+}
+
+
+const slot = loaded.slot;
+if (!slot.is_available) return { ok: false, error: "That slot is marked unavailable." };
+if (Date.parse(slot.end_time) <= Date.now()) {
+  return { ok: false, error: "That slot is in the past." };
+}
+
+
+const free = await checkSlotFree(supabase, slot);
+if (!free.ok) return { ok: false, error: free.error };
+
+const { data: inserted, error } = await supabase
+.from("bookings")
+.insert({
+ company_id: companyId,
+
+
+ conversation_id: conversationId,
+
+
+ slot_id: input.slotId,
+
+
+ prospect_name: cleanProspectName,
+
+
+ prospect_email: prospectEmail,
+
+
+ timezone: input.timezone,
+
+
+ status: "pending",
+
+
+})
+.select("id")
+.single();
+
+if (error || !inserted) {
+if (error?.code === "23505") {
+ return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+
+
+}
+
+
+// The RPC repeats the critical checks under the shared database transaction lock.
+const { data: createdBookingId, error } = await supabase.rpc("book_slot", {
+p_slot_id: input.slotId,
+p_company_id: companyId,
+p_conversation_id: conversationId,
+p_prospect_name: cleanProspectName,
+p_prospect_email: prospectEmail,
+p_timezone: input.timezone,
+});
+if (error || !createdBookingId) {
+  return { ok: false, error: error?.message ?? "The booking could not be created." };
+}
+
+
+
+if (conversationId) {
+await supabase
+ .from("conversations")
+
+
+ .update({ status: "human_takeover", booking_request: false })
+
+
+ .eq("id", conversationId);
+
+
+}
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_created",
+entityType: "bookings",
+entityId: inserted.id,
+detail: {
+ slot_id: input.slotId,
+
+
+ company_id: companyId,
+
+
+ conversation_id: conversationId,
+
+
+ prospect_email: prospectEmail,
+
+
+ status: "pending",
+
+
+},
+});
+
+
+const bookingId = createdBookingId as string;
+const google = await syncBookingToGoogle({
+  summary: Ledgerwise call: ${cleanProspectName},
+
+
+@@ -417,14 +301,13 @@ export async function bookSlot(input: {
+     endTime: slot.end_time,
+     timezone: slot.timezone,
+   });
+
+await recordGoogleSync(supabase, inserted.id, google);
+
+
+await recordGoogleSync(supabase, bookingId, google);
+revalidateCalendar();
+
+
+
+revalidatePath(/conversations/${conversationId ?? ""});
+
+
+if (conversationId) revalidatePath(/conversations/${conversationId});
+return {
+  ok: true,
+
+
+bookingId: inserted.id,
+
+
+bookingId,
+slotId: input.slotId,
+message:
+  google.status === "synced"
+@@ -457,30 +340,19 @@ export async function confirmBooking(
+};
+   }
+
+
+const { data: updated, error } = await supabase
+.from("bookings")
+.update({ status: "confirmed" })
+.eq("id", bookingId)
+.eq("status", booking.status)
+.select("id")
+.maybeSingle();
+
+
+const { data: updated, error } = await supabase.rpc("confirm_booking", {
+p_booking_id: bookingId,
+});
+if (error) return { ok: false, error: error.message };
+
+
+if (!updated) {
+return {
+ ok: false,
+
+
+ error: "The booking changed while you were confirming it. Refresh and try again.",
+
+
+};
+}
+
+
+if (!updated) return { ok: false, error: "The booking could not be confirmed." };
+let syncNote = "";
+
+
+
+let syncStatus = "not_attempted";
+if (!booking.google_event_id && booking.slot_id) {
+  const loadedSlot = await loadSlot(supabase, booking.slot_id);
+  if (loadedSlot.slot) {
+const google = await syncBookingToGoogle(
+  bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+);
+ syncStatus = google.status;
+ await recordGoogleSync(supabase, bookingId, google);
+ syncNote =
+   google.status === "synced"
+
+
+
+@@ -491,18 +363,6 @@ export async function confirmBooking(
+     }
+   }
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_confirmed",
+entityType: "bookings",
+entityId: bookingId,
+detail: {
+ previous_status: booking.status,
+
+
+ slot_id: booking.slot_id,
+
+
+ google_sync_status: booking.google_event_id ? "already_linked" : syncStatus,
+
+
+},
+});
+ revalidateCalendar();
+ return { ok: true, bookingId, message: Booking confirmed.${syncNote} };
+
+ }
+@@ -530,29 +390,18 @@ export async function cancelBooking(
+     return { ok: false, error: "This booking is already cancelled or rescheduled." };
+   }
+
+const { data: updated, error } = await supabase
+.from("bookings")
+.update({ status: "cancelled" })
+.eq("id", bookingId)
+.eq("status", booking.status)
+.select("id")
+.maybeSingle();
+
+
+const { data: updated, error } = await supabase.rpc("cancel_booking", {
+p_booking_id: bookingId,
+p_reason: cleanReason,
+});
+if (error) return { ok: false, error: error.message };
+
+
+if (!updated) {
+return {
+ ok: false,
+
+
+ error: "The booking changed while you were cancelling it. Refresh and try again.",
+
+
+};
+}
+
+
+if (!updated) return { ok: false, error: "The booking could not be cancelled." };
+let syncNote = "";
+if (booking.google_event_id) {
+  const google = await deleteGoogleEvent(booking.google_event_id);
+  if (google.status === "not_configured") {
+
+
+
+ await supabase
+
+
+   .from("bookings")
+
+
+   .update({ calendar_sync_status: "failed" })
+
+
+   .eq("id", bookingId);
+
+
+
+
+ await recordGoogleSync(supabase, bookingId, { status: "failed" });
+ syncNote =
+   " The internal booking is cancelled, but the Google event could not be removed because sync is not operational.";
+
+   } else {
+@@ -564,19 +413,6 @@ export async function cancelBooking(
+   }
+ }
+
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_cancelled",
+entityType: "bookings",
+entityId: bookingId,
+detail: {
+ previous_status: booking.status,
+
+
+ slot_id: booking.slot_id,
+
+
+ reason: cleanReason,
+
+
+ google_event_id: booking.google_event_id,
+
+
+},
+});
+ revalidateCalendar();
+ return {
+   ok: true,
+
+@@ -630,28 +466,13 @@ export async function rescheduleBooking(
+     return { ok: false, error: "The new slot is in the past." };
+   }
+
+const free = await checkSlotFree(supabase, loadedSlot.slot, bookingId);
+if (!free.ok) return { ok: false, error: free.error };
+
+const { data: updated, error } = await supabase
+.from("bookings")
+.update({ slot_id: newSlotId, status: "pending" })
+.eq("id", bookingId)
+.eq("status", booking.status)
+.select("id")
+.maybeSingle();
+if (error) {
+if (error.code === "23505") {
+ return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+
+
+}
+return { ok: false, error: error.message };
+}
+if (!updated) {
+return {
+ ok: false,
+
+
+ error: "The booking changed while you were rescheduling it. Refresh and try again.",
+
+
+};
+}
+
+
+const { data: updated, error } = await supabase.rpc("reschedule_booking", {
+
+p_booking_id: bookingId,
+
+p_new_slot_id: newSlotId,
+
+p_reason: cleanReason,
+
+});
+
+if (error) return { ok: false, error: error.message };
+
+if (!updated) return { ok: false, error: "The booking could not be rescheduled." };
+const google = booking.google_event_id
+  ? await updateGoogleEvent(
+
+
+@@ -662,10 +483,7 @@ export async function rescheduleBooking(
+         bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+       );
+   if (google.status === "not_configured" && booking.google_event_id) {
+
+await supabase
+ .from("bookings")
+
+
+ .update({ calendar_sync_status: "failed" })
+
+
+ .eq("id", bookingId);
+
+
+
+
+await recordGoogleSync(supabase, bookingId, { status: "failed" });
+
+   } else {
+     await recordGoogleSync(supabase, bookingId, google);
+   }
+@@ -678,19 +496,7 @@ export async function rescheduleBooking(
+           ? " The Google event was not updated because sync is not operational."
+           : "";
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_rescheduled",
+entityType: "bookings",
+entityId: bookingId,
+detail: {
+ old_slot_id: booking.slot_id,
+
+
+ new_slot_id: newSlotId,
+
+
+ previous_status: booking.status,
+
+
+ reason: cleanReason,
+
+
+ google_sync: google.status,
+
+
+},
+});
+
+
+
+
+   revalidateCalendar();
+   return {
+(END)
+
+
+ChatGPT:
+The diff confirms that the calendar actions have been switched over to the Migration 04 RPCs. The RPC names and argument names match the SQL for the main operations:
+
+
+
+Application action
+RPC
+Contract
+
+
+
+createSlot
+create_calendar_slot
+Matches
+
+
+deleteSlot
+delete_calendar_slot
+Matches
+
+
+bookSlot
+book_slot
+Matches
+
+
+confirmBooking
+confirm_booking
+Matches
+
+
+cancelBooking
+cancel_booking
+Matches
+
+
+rescheduleBooking
+reschedule_booking
+Matches
+
+
+Google sync metadata
+record_google_calendar_sync
+Matches
+
+
+There are still issues to fix before applying the migrations:
+
+record_google_calendar_sync is a SECURITY DEFINER function but does not verify that the caller is authorized to update the specified booking.
+The other RPCs authenticate the caller, but their SQL does not visibly enforce company-level ownership or authorization either. We need to compare that with your existing database policies and application model.
+The diff still has a stray blank area where the old rescheduling audit write was removed. The RPC now writes the audit record, so that removal is intentional; the formatting can be cleaned up.
+The previous lint warning about syncStatus appears to have been addressed.
+
+Do not apply migrations 04 and 05 yet. The authorization question is more important than the remaining formatting.
+
+
+ChatGPT:
+The diff confirms that the calendar actions have been switched over to the Migration 04 RPCs. The RPC names and argument names match the SQL for the main operations:
+
+
+
+Application action
+RPC
+Contract
+
+
+
+createSlot
+create_calendar_slot
+Matches
+
+
+deleteSlot
+delete_calendar_slot
+Matches
+
+
+bookSlot
+book_slot
+Matches
+
+
+confirmBooking
+confirm_booking
+Matches
+
+
+cancelBooking
+cancel_booking
+Matches
+
+
+rescheduleBooking
+reschedule_booking
+Matches
+
+
+Google sync metadata
+record_google_calendar_sync
+Matches
+
+
+There are still issues to fix before applying the migrations:
+
+record_google_calendar_sync is a SECURITY DEFINER function but does not verify that the caller is authorized to update the specified booking.
+The other RPCs authenticate the caller, but their SQL does not visibly enforce company-level ownership or authorization either. We need to compare that with your existing database policies and application model.
+The diff still has a stray blank area where the old rescheduling audit write was removed. The RPC now writes the audit record, so that removal is intentional; the formatting can be cleaned up.
+The previous lint warning about syncStatus appears to have been addressed.
+
+Do not apply migrations 04 and 05 yet. The authorization question is more important than the remaining formatting.
+Next check: inspect the existing security model
+Run this command from the project root:
+printf '\n===== EXISTING RLS AND PERMISSIONS =====\n'
+grep -niE 'create policy|enable row level|grant |revoke |auth\.uid|user_id|owner_id|company_id' \
+  supabase/migrations/01_source_verification_and_security.sql \
+  supabase/migrations/02_calendar_source_and_booking.sql \
+  supabase/migrations/03_google_calendar.sql
+
+printf '\n===== CALENDAR ACTION AUTH HELPERS =====\n'
+sed -n '1,155p' "app/(dashboard)/calendar/actions.ts"
+
+printf '\n===== DIRECT CALENDAR WRITES LEFT =====\n'
+grep -nE '\.(insert|update|delete)\(' "app/(dashboard)/calendar/actions.ts"
+
+Paste the output. This will tell us whether the RPCs need explicit ownership checks or whether the existing database model already enforces the intended access boundaries.
+After that, I'll make the necessary terminal edits and rerun tests, TypeScript, lint, and build. We won't weaken your existing security policies just to make the migrations work.
+
+
+ChatGPT:
+Next check: inspect the existing security model
+Run this command from the project root:
+printf '\n===== EXISTING RLS AND PERMISSIONS =====\n'
+grep -niE 'create policy|enable row level|grant |revoke |auth\.uid|user_id|owner_id|company_id' \
+  supabase/migrations/01_source_verification_and_security.sql \
+  supabase/migrations/02_calendar_source_and_booking.sql \
+  supabase/migrations/03_google_calendar.sql
+
+printf '\n===== CALENDAR ACTION AUTH HELPERS =====\n'
+sed -n '1,155p' "app/(dashboard)/calendar/actions.ts"
+
+printf '\n===== DIRECT CALENDAR WRITES LEFT =====\n'
+grep -nE '\.(insert|update|delete)\(' "app/(dashboard)/calendar/actions.ts"
+
+Paste the output. This will tell us whether the RPCs need explicit ownership checks or whether the existing database model already enforces the intended access boundaries.
+After that, I'll make the necessary terminal edits and rerun tests, TypeScript, lint, and build. We won't weaken your existing security policies just to make the migrations work.
+
+
+You:
+Nah, I approve, let's make the migrations, NOW
+
+
+ChatGPT:
+Understood. Let's proceed now. You have approved applying both migrations.
+I can't execute SQL against your Supabase project directly from this chat, but you can apply them in the Supabase Dashboard.
+Step 1 — Apply Migration 04
+
+Open your Supabase Dashboard.
+
+Select the Ledgerwise project.
+
+Open SQL Editor → New query.
+
+Copy the complete contents of:
+supabase/unapplied/04_transactional_calendar_operations.sql
+
+Add BEGIN; at the very top and COMMIT; at the very bottom. Migration 04 does not currently include its own transaction wrapper.
+
+Execute the query.
+
+
+Expected The seven calendar RPCs are created, direct calendar-table mutations are restricted, and PostgREST is notified to reload its schema.
+Step 2 — Apply Migration 05
+Open another new SQL Editor query and paste the complete contents of:
+supabase/unapplied/05_calendar_security_corrections.sql
+This migration already includes BEGIN; and COMMIT;. Execute it as supplied.
+Important security caveat
+I want to be transparent: the current RPC definitions authenticate callers, but do not visibly enforce company-level ownership. In particular, record_google_calendar_sync does not check booking ownership. Applying these migrations grants authenticated users execution rights to those functions. We should address that authorization boundary immediately afterward.
+Step 3 — Tell me the result
+Run both migrations and tell me whether each one succeeded or paste any SQL error.
+Then we'll verify the functions and permissions in Supabase and run the application checks. Don't apply any other migrations or change your environment variables.
+
+
+You:
+Both migrations succeeded...
+
+
+ChatGPT:
+Excellent — both migrations are now applied.
+Next, let's verify that the eight RPCs exist and their permissions are correct before testing the application.
+Run this in Supabase → SQL Editor → New query:
+select
+  p.proname as function_name,
+  pg_get_function_identity_arguments(p.oid) as arguments,
+  has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated_can_execute,
+  has_function_privilege('anon', p.oid, 'EXECUTE') as anon_can_execute
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in (
+    'create_calendar_slot',
+    'delete_calendar_slot',
+    'book_slot',
+    'confirm_booking',
+    'cancel_booking',
+    'reschedule_booking',
+    'record_google_calendar_sync',
+    'suppress_contact'
+  )
+order by p.proname;
+
+Expected: 8 rows; authenticated_can_execute should be true and anon_can_execute should be false for every function.
+Then run this permissions check:
+select
+  table_name,
+  has_table_privilege('authenticated', format('public.%I', table_name), 'SELECT') as can_select,
+  has_table_privilege('authenticated', format('public.%I', table_name), 'INSERT') as can_insert,
+  has_table_privilege('authenticated', format('public.%I', table_name), 'UPDATE') as can_update,
+  has_table_privilege('authenticated', format('public.%I', table_name), 'DELETE') as can_delete
+from (values
+  ('calendar_slots'),
+  ('bookings'),
+  ('audit_logs'),
+  ('suppressed_contacts')
+) as t(table_name);
+
+After that, run the local checks from your project directory:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+Paste the SQL results first. One important item remains for our security review: the RPCs need proper company/tenant ownership checks, particularly record_google_calendar_sync. Successful migrations don't by themselves resolve that authorization concern.
+
+
+You:
+[
+  {
+    "function_name": "book_slot",
+    "arguments": "p_slot_id uuid, p_company_id uuid, p_conversation_id uuid, p_prospect_name text, p_prospect_email text, p_timezone text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "cancel_booking",
+    "arguments": "p_booking_id uuid, p_reason text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "confirm_booking",
+    "arguments": "p_booking_id uuid",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "create_calendar_slot",
+    "arguments": "p_start_time timestamp with time zone, p_end_time timestamp with time zone, p_timezone text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "delete_calendar_slot",
+    "arguments": "p_slot_id uuid",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "record_google_calendar_sync",
+    "arguments": "p_booking_id uuid, p_status text, p_event_id text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "reschedule_booking",
+    "arguments": "p_booking_id uuid, p_new_slot_id uuid, p_reason text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "suppress_contact",
+    "arguments": "p_email text, p_reason text, p_source_message_id uuid",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  }
+]
+
+
+ChatGPT:
+RPC verification passed
+All 8 RPCs are present, and their permissions match the expected configuration:
+
+Authenticated users: EXECUTE = true for all eight.
+Anonymous users: EXECUTE = false for all eight.
+The function signatures also match the expected arguments.
+
+That's a good result. It confirms the functions were created and the execute grants are correct.
+
+
+ChatGPT:
+RPC verification passed
+All 8 RPCs are present, and their permissions match the expected configuration:
+
+Authenticated users: EXECUTE = true for all eight.
+Anonymous users: EXECUTE = false for all eight.
+The function signatures also match the expected arguments.
+
+That's a good result. It confirms the functions were created and the execute grants are correct.
+Next, paste the result of the table-permissions query from my previous message. We need to confirm that direct writes to calendar_slots, bookings, and suppressed_contacts are blocked while the intended reads and audit-log insert are allowed.
+Then we'll run the four local checks:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+One security item remains after verification: company-level ownership checks inside the SECURITY DEFINER RPCs. We should address that before considering the calendar implementation production-ready.
+
+
+ChatGPT:
+Next, paste the result of the table-permissions query from my previous message. We need to confirm that direct writes to calendar_slots, bookings, and suppressed_contacts are blocked while the intended reads and audit-log insert are allowed.
+Then we'll run the four local checks:
+npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+One security item remains after verification: company-level ownership checks inside the SECURITY DEFINER RPCs. We should address that before considering the calendar implementation production-ready.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ npm test
+npx tsc --noEmit
+npm run lint
+npm run build
+
+ledgerwise-prototype@0.1.0 test
+tsx --test tests/*.test.ts
+
+✔ uses the first model in the chain when it works (63.12736ms)
+✔ falls through to the next provider on a 429 (1.979762ms)
+✔ a rate-limited model is skipped on the next call (1.593882ms)
+✔ a model is retried after its cooldown expires (2.311868ms)
+✔ a Retry-After header sets the cooldown (3.055107ms)
+✔ repeated 429s escalate the cooldown (1.663274ms)
+✔ a success resets the escalation (1.497531ms)
+✔ a 404 (bad model ID) parks the model for a long time (0.585335ms)
+✔ truncated output tries the next model without cooling the first (1.38668ms)
+✔ message tasks never reach Gemini by default, even if it is in the chain (1.029458ms)
+✔ message tasks may use Gemini only when explicitly allowed (0.491806ms)
+✔ oversized input is never sent to Groq (0.583994ms)
+✔ when every model is cooling down it throws without any network call (0.744457ms)
+✔ nothing configured throws and makes no network call (0.292777ms)
+✔ consecutive calls to one provider are spaced out (0.553193ms)
+✔ extractJson strips code fences (2.245769ms)
+✔ extractJson throws on garbage (0.380075ms)
+✔ a valid 30-minute business-hours slot passes (45.228289ms)
+✔ slot durations are limited to 15–120 minutes (69.873879ms)
+✔ slots must fit inside 9:00–17:00 local time (62.566285ms)
+✔ slots must be in the future and use a valid timezone (18.128524ms)
+✔ zoned conversion handles standard and daylight time (18.041491ms)
+✔ only pending, confirmed, and needs-human bookings occupy a slot (0.535203ms)
+✔ booking input requires a name, a valid email, and a timezone (0.677157ms)
+✔ slot range formatting includes the timezone (0.932761ms)
+✔ zoned conversion rejects nonexistent and ambiguous DST times (16.819217ms)
+✔ zoned conversion rejects malformed and impossible local dates (1.139866ms)
+✔ default slot advances by calendar day in New York timezone (2.83208ms)
+✔ opt-out requests suppress and stop all replies (2.640082ms)
+✔ opt-out wins over a pricing question in the same message (0.27646ms)
+✔ bot questions require honest disclosure and allow a safe reply (0.633153ms)
+✔ pricing, legal, sensitive, and human requests escalate (1.707743ms)
+✔ booking intent sets the booking flag and never holds a slot automatically (0.478346ms)
+✔ general replies are allowed to be drafted but still reviewed by a human (0.302838ms)
+✔ bot disclosure is explicit and safe (3.237014ms)
+✔ general fallback is safe and contains no invented facts (2.804696ms)
+✔ reply validation blocks pricing and human claims (4.971743ms)
+✔ reply prompt includes only recent thread messages and verified facts (1.884415ms)
+✔ parseReply accepts JSON and rejects empty output (5.796733ms)
+✔ selectEmailSources keeps only human-verified, usable sources (5.887608ms)
+✔ selectEmailSources caps the number of facts sent to the model (0.670801ms)
+✔ the fallback draft uses verified claims and passes guardrails (1.873128ms)
+✔ pricing, guarantees, pressure, and human claims are blocked (1.058719ms)
+✔ draft validation rejects placeholders and unsafe content (0.61136ms)
+✔ parseEmailDraft accepts JSON and fenced JSON (0.953908ms)
+✔ the prompt carries only supplied facts and the revision note (0.553144ms)
+✔ contact first name handles unknown contacts (0.129046ms)
+✔ Google status never claims operational without explicit verification (2.923403ms)
+✔ sync is a no-op unless explicitly enabled (0.53054ms)
+✔ access token exchange sends a refresh-token grant (74.505499ms)
+✔ sync creates a Google event and returns its id (3.537002ms)
+✔ Google HTTP failures are reported without claiming success (1.078296ms)
+✔ buildGoogleEvent uses the slot times and timezone (0.211142ms)
+✔ events can be updated with PATCH using the new slot details (1.600583ms)
+✔ deletion treats an already-removed event as success (1.540561ms)
+✔ update and delete are no-ops unless sync is enabled (0.552436ms)
+✔ claim types are exactly the closed set of seven (8.103216ms)
+✔ accepts us_ecommerce (2.30891ms)
+✔ accepts category (0.531635ms)
+✔ accepts size_fit (0.178934ms)
+✔ accepts growth_signal (0.196611ms)
+✔ accepts pain_signal (0.157491ms)
+✔ accepts disqualifier (1.59349ms)
+✔ accepts contact (0.279439ms)
+✔ rejects claim_type "size" (0.655126ms)
+✔ rejects claim_type "other" (0.744897ms)
+✔ rejects claim_type "pain_sigal" (0.223746ms)
+✔ rejects claim_type "" (0.439918ms)
+✔ disqualifier rows are accepted (negative test set is kept) (0.250577ms)
+✔ disqualifier rows still need a source (0.261626ms)
+✔ retrieved_at must be a real calendar date (0.244343ms)
+✔ contact must be Name | Role (0.189042ms)
+✔ extracts claims and attaches the actual fetched page URL (1.944295ms)
+✔ ignores any source URL supplied by the AI (0.363706ms)
+✔ returns an empty array when the AI finds no supported claims (1.755338ms)
+✔ rejects malformed JSON (0.433974ms)
+✔ rejects a response without a claims array (0.540556ms)
+✔ rejects malformed claim objects (0.239109ms)
+✔ splits long pages into overlapping chunks (0.311676ms)
+✔ passes webpage text as JSON data rather than XML-like delimiters (0.359905ms)
+✔ CSV output uses the exact importer columns and preserves values (9.453854ms)
+✔ CSV output includes headers when no claims were accepted (0.552535ms)
+✔ report includes totals, sources, rejected claims, and errors (0.797014ms)
+✔ parses a Jina Reader response and preserves the original source URL (13.889528ms)
+✔ uses a fallback title when Reader provides no title (2.959738ms)
+✔ rejects an empty Reader response (0.563643ms)
+✔ discovers same-site links and prioritizes useful pages (6.550355ms)
+✔ ignores duplicate links and removes tracking query strings (0.356933ms)
+✔ rejects non-HTTP and private/local URLs (0.320687ms)
+✔ fetches through Jina Reader and returns the original page URL (143.274556ms)
+✔ reports Reader HTTP errors clearly (0.786874ms)
+✔ rejects IPv4 and IPv6 address literals as research targets (0.703457ms)
+✔ rejects local hostnames with a trailing dot (0.709086ms)
+✔ parses company names, homepages, and optional same-site pages (23.956038ms)
+✔ rejects invalid URLs and extra pages from another website (0.649831ms)
+✔ rejects empty research input (0.150173ms)
+✔ fetches pages, extracts claims, and accepts only verified evidence (1.589817ms)
+✔ continues to the next company when one homepage cannot be fetched (1.080169ms)
+✔ records an extraction failure without losing the company report (0.43615ms)
+✔ runResearch rejects unsafe URLs even when input parsing is bypassed (1.156853ms)
+✔ runResearch rejects extra pages from another hostname (0.604679ms)
+✔ accepts a claim when its evidence appears on the fetched page (2.891095ms)
+✔ matches evidence despite case and whitespace differences (0.381369ms)
+✔ rejects evidence that does not appear on the page (0.596613ms)
+✔ rejects unsupported claim types (0.354412ms)
+✔ rejects a source URL that was not fetched (0.564471ms)
+✔ rejects evidence outside the permitted length (0.262975ms)
+✔ accepts a contact only when name and role appear in the evidence (0.909077ms)
+✔ rejects a contact whose name or role is absent from the evidence (0.498283ms)
+✔ rejects a contact email that is not on the page (5.818863ms)
+✔ rejects duplicate claims (0.871632ms)
+✔ accepts no more than three claims of the same type (0.473982ms)
+✔ shipped config has no weights set yet (1.503606ms)
+✔ blank weights: criteria evaluated, no points, no total (0.395699ms)
+✔ partial weights: still no total (0.268124ms)
+✔ full weights: total sums points of met criteria (0.162272ms)
+✔ unmet criterion says unknown and carries no sources (0.256339ms)
+✔ every met criterion is traceable to at least one source (0.143585ms)
+✔ disqualifiers are surfaced and never count as criterion evidence (0.227196ms)
+✔ newly imported sources are pending review and are not human-verified (1.720222ms)
+✔ verify, reject, and reset patches set the correct review metadata (0.252597ms)
+✔ rejection requires a non-empty note (0.469717ms)
+✔ status transition guards (0.195605ms)
+✔ only verified, reviewed, structurally valid sources are email-usable (0.423067ms)
+✔ structural validation does not imply human verification (0.135451ms)
+✔ a recipient email needs a verified contact source containing it (0.485654ms)
+✔ status labels are explicit (0.143755ms)
+✔ email normalization trims and lowercases (1.028629ms)
+✔ email validation accepts normal addresses and rejects malformed ones (0.248525ms)
+✔ trimText enforces required text and maximum length (0.149888ms)
+ℹ tests 130
+ℹ suites 0
+ℹ pass 130
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1765.567296
+
+ledgerwise-prototype@0.1.0 lint
+eslint
+
+
+ledgerwise-prototype@0.1.0 build
+next build
+
+▲ Next.js 16.4.6 (Turbopack)
+
+Environments: .env.local
+✓ Running next.config.ts took 27ms
+
+Experiments (use with caution):
+· serverActions
+Creating an optimized production build ...
+
+
+✓ Compiled successfully in 505ms
+  Running TypeScript ...
+  Finished TypeScript in 2.1s ...
+  Collecting page data using 7 workers ...
+✓ Collecting page data using 7 workers in 1267ms
+  Generating static pages using 7 workers (0/12) ...
+  Generating static pages using 7 workers (3/12)
+  Generating static pages using 7 workers (6/12)
+  Generating static pages using 7 workers (9/12)
+✓ Generating static pages using 7 workers (12/12) in 403ms
+  Finalizing page optimization ...
+✓ Finalizing page optimization in 4ms
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /auth/signout
+├ ƒ /calendar
+├ ƒ /conversations
+├ ƒ /conversations/[id]
+├ ƒ /emails
+├ ƒ /emails/[id]
+├ ○ /login
+├ ƒ /prospects
+├ ƒ /prospects/[id]
+├ ƒ /prospects/import
+└ ƒ /prospects/review
+ƒ Proxy (Middleware)
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+
+ChatGPT:
+All local checks passed
+That's a clean run:
+
+
+
+Check
+Result
+
+
+
+npm test
+130 passed, 0 failed
+
+
+npx tsc --noEmit
+Passed
+
+
+npm run lint
+Passed, no warnings shown
+
+
+npm run build
+Passed
+
+
+The production build compiled successfully, TypeScript completed, and all 12 static pages were generated. No dependency or build errors are visible.
+
+
+ChatGPT:
+All local checks passed
+That's a clean run:
+
+
+
+Check
+Result
+
+
+
+npm test
+130 passed, 0 failed
+
+
+npx tsc --noEmit
+Passed
+
+
+npm run lint
+Passed, no warnings shown
+
+
+npm run build
+Passed
+
+
+The production build compiled successfully, TypeScript completed, and all 12 static pages were generated. No dependency or build errors are visible.
+Next, let's close the remaining security gap before moving on.
+We still need two things:
+
+The table-permissions query result from Supabase. It wasn't included in your last message.
+The current calendar action diff, so we can preserve your implementation while hardening authorization.
+
+From your project directory, run:
+git status --short
+git diff -- "app/(dashboard)/calendar/actions.ts"
+
+Also, in Supabase SQL Editor, run the table-permissions query from earlier and paste its result.
+After that, we'll implement company-level authorization inside the RPCs—especially record_google_calendar_sync—and add tests for cross-company access. The current passing tests and build are a strong baseline, but they don't yet verify database-level tenant isolation.
+
+
+ChatGPT:
+Next, let's close the remaining security gap before moving on.
+We still need two things:
+
+The table-permissions query result from Supabase. It wasn't included in your last message.
+The current calendar action diff, so we can preserve your implementation while hardening authorization.
+
+From your project directory, run:
+git status --short
+git diff -- "app/(dashboard)/calendar/actions.ts"
+
+Also, in Supabase SQL Editor, run the table-permissions query from earlier and paste its result.
+After that, we'll implement company-level authorization inside the RPCs—especially record_google_calendar_sync—and add tests for cross-company access. The current passing tests and build are a strong baseline, but they don't yet verify database-level tenant isolation.
+
+
+You:
+OK now, what phase are we at ?
+
+
+ChatGPT:
+We're in the final implementation phase, specifically transitioning from the calendar implementation to security hardening and end-to-end validation.
+Based on your original implementation handoff, here's our actual progress:
+Ledgerwise progress
+
+
+
+Work area
+Status
+
+
+
+Existing codebase inspection
+Completed
+
+
+Calendar transactional RPC integration
+Implemented
+
+
+Database migrations 04 and 05
+Applied
+
+
+RPC existence and permissions verification
+Passed
+
+
+Unit tests (130 tests)
+Passed
+
+
+TypeScript
+Passed
+
+
+ESLint
+Passed
+
+
+Production build
+Passed
+
+
+Table-permissions verification
+Pending
+
+
+Tenant/company authorization hardening
+Pending
+
+
+End-to-end workflow validation
+Pending
+
+
+Deployment readiness
+Pending
+
+
+Documentation and AI-session exports
+Deferred
+
+
+Tutorial video
+Deferred
+
+
+What phase are we entering?
+Security hardening + end-to-end workflow completion.
+Our next priorities:
+
+Verify database table permissions.
+Fix company-level authorization in the calendar RPCs.
+Test calendar operations against the actual Supabase database.
+Validate the complete prospect-to-booking workflow.
+Address any remaining deployment blockers.
+
+After that, we'll move to final submission preparation.
+Important: We're making good progress, but Ledgerwise is not submission-ready yet. Passing the local tests and production build does not prove the live application works end to end.
+We're past the initial setup and core calendar implementation. Now we need to finish the remaining critical functionality rather than spend more time on broad planning.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/ledgerwise-prototype]
+└─$ git status --short
+git diff -- "app/(dashboard)/calendar/actions.ts"
+ M app/(dashboard)/calendar/actions.ts
+?? supabase/.temp/
+diff --git a/app/(dashboard)/calendar/actions.ts b/app/(dashboard)/calendar/actions.ts
+index 4afb3bd..07e0dc0 100644
+--- a/app/(dashboard)/calendar/actions.ts
++++ b/app/(dashboard)/calendar/actions.ts
+@@ -3,11 +3,9 @@
+ import { revalidatePath } from "next/cache";
+ import { createClient } from "@/lib/supabase/server";
+ import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+-import { writeAudit } from "@/lib/server/audit";
+ import { isSuppressed } from "@/lib/suppression";
+ import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+ import {
+
+OCCUPYING_BOOKING_STATUSES,
+validateBookingInput,
+:...skipping...
+diff --git a/app/(dashboard)/calendar/actions.ts b/app/(dashboard)/calendar/actions.ts
+index 4afb3bd..07e0dc0 100644
+--- a/app/(dashboard)/calendar/actions.ts
++++ b/app/(dashboard)/calendar/actions.ts
+@@ -3,11 +3,9 @@
+ import { revalidatePath } from "next/cache";
+ import { createClient } from "@/lib/supabase/server";
+ import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+-import { writeAudit } from "@/lib/server/audit";
+ import { isSuppressed } from "@/lib/suppression";
+ import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
+ import {
+OCCUPYING_BOOKING_STATUSES,
+validateBookingInput,
+validateSlotInput,
+ } from "@/lib/calendar/time";
+@@ -108,30 +106,18 @@ async function recordGoogleSync(
+result: { status: "not_configured" | "synced" | "failed"; eventId?: string },
+deleted = false
+ ): Promise {
+if (result.status === "not_configured") return;
+if (result.status === "synced") {
+await supabase
+ .from("bookings")
+
+
+ .update(
+
+
+   deleted
+
+
+     ? {
+
+
+         google_event_id: null,
+
+
+         calendar_sync_status: "deleted",
+
+
+         calendar_synced_at: new Date().toISOString(),
+
+
+       }
+
+
+     : {
+
+
+         ...(result.eventId ? { google_event_id: result.eventId } : {}),
+
+
+         calendar_sync_status: "synced",
+
+
+         calendar_synced_at: new Date().toISOString(),
+
+
+       }
+
+
+ )
+
+
+ .eq("id", bookingId);
+
+
+return;
+}
+await supabase
+.from("bookings")
+.update({ calendar_sync_status: "failed" })
+.eq("id", bookingId);
+
+
+const status =
+result.status === "not_configured"
+ ? "not_configured"
+
+
+ : deleted && result.status === "synced"
+
+
+   ? "deleted"
+
+
+   : result.status;
+
+
+const { error } = await supabase.rpc("record_google_calendar_sync", {
+p_booking_id: bookingId,
+p_status: status,
+p_event_id: result.status === "synced" && !deleted ? result.eventId ?? null : null,
+});
+if (error) console.error("Calendar sync metadata could not be recorded:", error.message);
+ }
+
+ async function checkSuppressed(
+@@ -157,33 +143,6 @@ async function checkSuppressed(
+   }
+ }
+-async function checkSlotFree(
+
+supabase: ServerSupabase,
+slot: SlotRow,
+ignoreBookingId?: string
+-): Promise<{ ok: boolean; error?: string }> {
+const { data: overlappingSlots, error: slotError } = await supabase
+.from("calendar_slots")
+.select("id")
+.lt("start_time", slot.end_time)
+.gt("end_time", slot.start_time);
+if (slotError) return { ok: false, error: slotError.message };
+
+const slotIds = Array.from(
+new Set([slot.id, ...(overlappingSlots ?? []).map((row) => row.id)])
+);
+const { data, error } = await supabase
+.from("bookings")
+.select("id")
+.in("slot_id", slotIds)
+.in("status", [...OCCUPYING_BOOKING_STATUSES]);
+if (error) return { ok: false, error: error.message };
+const conflict = (data ?? []).find((row) => row.id !== ignoreBookingId);
+if (conflict) {
+return { ok: false, error: "That time is already held by another booking." };
+}
+return { ok: true };
+-}
+
+ export async function createSlot(input: {
+   startTime: string;
+@@ -197,43 +156,21 @@ export async function createSlot(input: {
+   const validation = validateSlotInput(input);
+   if (!validation.ok) return { ok: false, error: validation.errors.join(" ") };
+
+const { data, error } = await supabase
+.from("calendar_slots")
+.insert({
+ start_time: input.startTime,
+
+
+ end_time: input.endTime,
+
+
+ timezone: input.timezone,
+
+
+ source: "internal",
+
+
+ external_id: null,
+
+
+ is_available: true,
+
+
+ fetched_at: new Date().toISOString(),
+
+
+})
+.select("id")
+.single();
+
+
+const { data, error } = await supabase.rpc("create_calendar_slot", {
+p_start_time: input.startTime,
+p_end_time: input.endTime,
+p_timezone: input.timezone,
+});
+if (error || !data) {
+  return {
+ok: false,
+
+
+ error:
+
+
+   error?.message ??
+
+
+   "The slot could not be created. Apply migration 02 if the source check rejects 'internal'.",
+
+
+
+
+ error: error?.message ?? "The slot could not be created.",
+
+   };
+ }
+
+
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "calendar_slot_created",
+entityType: "calendar_slots",
+entityId: data.id,
+detail: {
+ start_time: input.startTime,
+
+
+ end_time: input.endTime,
+
+
+ timezone: input.timezone,
+
+
+ source: "internal",
+
+
+},
+});
+
+
+const slotId = data as string;
+revalidateCalendar();
+
+
+
+return { ok: true, slotId: data.id, message: "Internal slot created." };
+
+
+return { ok: true, slotId, message: "Internal slot created." };
+ }
+
+ export async function deleteSlot(slotId: string): Promise {
+@@ -245,36 +182,12 @@ export async function deleteSlot(slotId: string): Promise
+   const loaded = await loadSlot(supabase, slotId);
+   if (!loaded.slot) return { ok: false, error: loaded.error };
+
+const { data: active, error } = await supabase
+.from("bookings")
+.select("id")
+.eq("slot_id", slotId)
+.in("status", [...OCCUPYING_BOOKING_STATUSES])
+.limit(1);
+if (error) return { ok: false, error: error.message };
+if ((active ?? []).length > 0) {
+return {
+ ok: false,
+
+
+ error: "Cancel or reschedule the active booking before deleting this slot.",
+
+
+};
+}
+
+const { error: deleteError } = await supabase
+.from("calendar_slots")
+.delete()
+.eq("id", slotId);
+
+
+const { data: deleted, error: deleteError } = await supabase.rpc(
+"delete_calendar_slot",
+{ p_slot_id: slotId }
+);
+if (deleteError) return { ok: false, error: deleteError.message };
+
+
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "calendar_slot_deleted",
+entityType: "calendar_slots",
+entityId: slotId,
+detail: {
+ start_time: loaded.slot.start_time,
+
+
+ end_time: loaded.slot.end_time,
+
+
+},
+});
+
+
+if (!deleted) return { ok: false, error: "The slot could not be deleted." };
+revalidateCalendar();
+return { ok: true, slotId, message: "Slot deleted." };
+
+
+@@ -292,43 +205,49 @@ export async function bookSlot(input: {
+   const user = await getSessionUser(supabase);
+   if (!user) return { ok: false, error: "Not signed in." };
+   if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
+
+if (input.companyId && !isUuid(input.companyId)) {
+return { ok: false, error: "Invalid company ID." };
+}
+if (input.conversationId && !isUuid(input.conversationId)) {
+return { ok: false, error: "Invalid conversation ID." };
+}
+
+
+let companyId = input.companyId && isUuid(input.companyId) ? input.companyId : null;
+const conversationId =
+input.conversationId && isUuid(input.conversationId) ? input.conversationId : null;
+
+
+let companyId = input.companyId ?? null;
+
+const conversationId = input.conversationId ?? null;
+let prospectName = input.prospectName;
+let prospectEmail = normalizeEmail(input.prospectEmail);
+if (conversationId) {
+
+
+
+const { data: conversation } = await supabase
+
+
+const { data: conversation, error: conversationError } = await supabase
+  .from("conversations")
+  .select("id,company_id,contact_email,status")
+  .eq("id", conversationId)
+  .maybeSingle();
+if (conversationError) return { ok: false, error: conversationError.message };
+if (!conversation) return { ok: false, error: "Conversation not found." };
+if (conversation.status === "suppressed") {
+
+
+ return {
+
+
+   ok: false,
+
+
+   error: "This contact is suppressed. A booking cannot be created.",
+
+
+ };
+
+
+
+
+ return { ok: false, error: "This contact is suppressed. A booking cannot be created." };
+
+
+}
+
+if (companyId && companyId !== conversation.company_id) {
+
+ return { ok: false, error: "Company does not match the conversation." };
+
+   }
+   companyId = companyId ?? conversation.company_id;
+   if (!prospectEmail) prospectEmail = normalizeEmail(conversation.contact_email);
+ }
+ if (companyId) {
+
+
+
+const { data: company } = await supabase
+
+
+const { data: company, error: companyError } = await supabase
+  .from("companies")
+  .select("name,contact_name,contact_email")
+  .eq("id", companyId)
+  .maybeSingle();
+
+
+if (company) {
+ if (!prospectName.trim() && company.contact_name !== "unknown") {
+
+
+   prospectName = company.contact_name;
+
+
+ }
+
+
+ if (!prospectEmail && company.contact_email) {
+
+
+   prospectEmail = normalizeEmail(company.contact_email);
+
+
+ }
+
+
+
+
+if (companyError) return { ok: false, error: companyError.message };
+if (!company) return { ok: false, error: "Company not found." };
+if (!prospectName.trim() && company.contact_name !== "unknown") {
+ prospectName = company.contact_name;
+
+
+}
+if (!prospectEmail && company.contact_email) {
+ prospectEmail = normalizeEmail(company.contact_email);
+
+   }
+ }
+
+@@ -339,9 +258,7 @@ export async function bookSlot(input: {
+   if (!suppression.ok) return { ok: false, error: suppression.error };
+   const cleanProspectName = trimText(prospectName, 200);
+
+if (!cleanProspectName) {
+return { ok: false, error: "A prospect name is required." };
+}
+
+
+if (!cleanProspectName) return { ok: false, error: "A prospect name is required." };
+const validation = validateBookingInput({
+  prospectName: cleanProspectName,
+
+
+@@ -352,58 +269,25 @@ export async function bookSlot(input: {
+   const loaded = await loadSlot(supabase, input.slotId);
+   if (!loaded.slot) return { ok: false, error: loaded.error };
+
+const { slot } = loaded;
+if (!slot.is_available) {
+return { ok: false, error: "That slot is marked unavailable." };
+}
+
+
+const slot = loaded.slot;
+if (!slot.is_available) return { ok: false, error: "That slot is marked unavailable." };
+if (Date.parse(slot.end_time) <= Date.now()) {
+  return { ok: false, error: "That slot is in the past." };
+}
+
+
+const free = await checkSlotFree(supabase, slot);
+if (!free.ok) return { ok: false, error: free.error };
+
+const { data: inserted, error } = await supabase
+.from("bookings")
+.insert({
+ company_id: companyId,
+
+
+ conversation_id: conversationId,
+
+
+ slot_id: input.slotId,
+
+
+ prospect_name: cleanProspectName,
+
+
+ prospect_email: prospectEmail,
+
+
+ timezone: input.timezone,
+
+
+ status: "pending",
+
+
+})
+.select("id")
+.single();
+
+if (error || !inserted) {
+if (error?.code === "23505") {
+ return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+
+
+}
+
+
+// The RPC repeats the critical checks under the shared database transaction lock.
+const { data: createdBookingId, error } = await supabase.rpc("book_slot", {
+p_slot_id: input.slotId,
+p_company_id: companyId,
+p_conversation_id: conversationId,
+p_prospect_name: cleanProspectName,
+p_prospect_email: prospectEmail,
+p_timezone: input.timezone,
+});
+if (error || !createdBookingId) {
+  return { ok: false, error: error?.message ?? "The booking could not be created." };
+}
+
+
+
+if (conversationId) {
+await supabase
+ .from("conversations")
+
+
+ .update({ status: "human_takeover", booking_request: false })
+
+
+ .eq("id", conversationId);
+
+
+}
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_created",
+entityType: "bookings",
+entityId: inserted.id,
+detail: {
+ slot_id: input.slotId,
+
+
+ company_id: companyId,
+
+
+ conversation_id: conversationId,
+
+
+ prospect_email: prospectEmail,
+
+
+ status: "pending",
+
+
+},
+});
+
+
+const bookingId = createdBookingId as string;
+const google = await syncBookingToGoogle({
+  summary: Ledgerwise call: ${cleanProspectName},
+
+
+@@ -417,14 +301,13 @@ export async function bookSlot(input: {
+     endTime: slot.end_time,
+     timezone: slot.timezone,
+   });
+
+await recordGoogleSync(supabase, inserted.id, google);
+
+
+await recordGoogleSync(supabase, bookingId, google);
+revalidateCalendar();
+
+
+
+revalidatePath(/conversations/${conversationId ?? ""});
+
+
+if (conversationId) revalidatePath(/conversations/${conversationId});
+return {
+  ok: true,
+
+
+bookingId: inserted.id,
+
+
+bookingId,
+slotId: input.slotId,
+message:
+  google.status === "synced"
+@@ -457,30 +340,19 @@ export async function confirmBooking(
+};
+   }
+
+
+const { data: updated, error } = await supabase
+.from("bookings")
+.update({ status: "confirmed" })
+.eq("id", bookingId)
+.eq("status", booking.status)
+.select("id")
+.maybeSingle();
+
+
+const { data: updated, error } = await supabase.rpc("confirm_booking", {
+p_booking_id: bookingId,
+});
+if (error) return { ok: false, error: error.message };
+
+
+if (!updated) {
+return {
+ ok: false,
+
+
+ error: "The booking changed while you were confirming it. Refresh and try again.",
+
+
+};
+}
+
+
+if (!updated) return { ok: false, error: "The booking could not be confirmed." };
+let syncNote = "";
+
+
+
+let syncStatus = "not_attempted";
+if (!booking.google_event_id && booking.slot_id) {
+  const loadedSlot = await loadSlot(supabase, booking.slot_id);
+  if (loadedSlot.slot) {
+const google = await syncBookingToGoogle(
+  bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+);
+ syncStatus = google.status;
+ await recordGoogleSync(supabase, bookingId, google);
+ syncNote =
+   google.status === "synced"
+
+
+
+@@ -491,18 +363,6 @@ export async function confirmBooking(
+     }
+   }
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_confirmed",
+entityType: "bookings",
+entityId: bookingId,
+detail: {
+ previous_status: booking.status,
+
+
+ slot_id: booking.slot_id,
+
+
+ google_sync_status: booking.google_event_id ? "already_linked" : syncStatus,
+
+
+},
+});
+ revalidateCalendar();
+ return { ok: true, bookingId, message: Booking confirmed.${syncNote} };
+
+ }
+@@ -530,29 +390,18 @@ export async function cancelBooking(
+     return { ok: false, error: "This booking is already cancelled or rescheduled." };
+   }
+
+const { data: updated, error } = await supabase
+.from("bookings")
+.update({ status: "cancelled" })
+.eq("id", bookingId)
+.eq("status", booking.status)
+.select("id")
+.maybeSingle();
+
+
+const { data: updated, error } = await supabase.rpc("cancel_booking", {
+p_booking_id: bookingId,
+p_reason: cleanReason,
+});
+if (error) return { ok: false, error: error.message };
+
+
+if (!updated) {
+return {
+ ok: false,
+
+
+ error: "The booking changed while you were cancelling it. Refresh and try again.",
+
+
+};
+}
+
+
+if (!updated) return { ok: false, error: "The booking could not be cancelled." };
+let syncNote = "";
+if (booking.google_event_id) {
+  const google = await deleteGoogleEvent(booking.google_event_id);
+  if (google.status === "not_configured") {
+
+
+
+ await supabase
+
+
+   .from("bookings")
+
+
+   .update({ calendar_sync_status: "failed" })
+
+
+   .eq("id", bookingId);
+
+
+
+
+ await recordGoogleSync(supabase, bookingId, { status: "failed" });
+ syncNote =
+   " The internal booking is cancelled, but the Google event could not be removed because sync is not operational.";
+
+   } else {
+@@ -564,19 +413,6 @@ export async function cancelBooking(
+   }
+ }
+
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_cancelled",
+entityType: "bookings",
+entityId: bookingId,
+detail: {
+ previous_status: booking.status,
+
+
+ slot_id: booking.slot_id,
+
+
+ reason: cleanReason,
+
+
+ google_event_id: booking.google_event_id,
+
+
+},
+});
+ revalidateCalendar();
+ return {
+   ok: true,
+
+@@ -630,28 +466,13 @@ export async function rescheduleBooking(
+     return { ok: false, error: "The new slot is in the past." };
+   }
+
+const free = await checkSlotFree(supabase, loadedSlot.slot, bookingId);
+if (!free.ok) return { ok: false, error: free.error };
+
+const { data: updated, error } = await supabase
+.from("bookings")
+.update({ slot_id: newSlotId, status: "pending" })
+.eq("id", bookingId)
+.eq("status", booking.status)
+.select("id")
+.maybeSingle();
+if (error) {
+if (error.code === "23505") {
+ return { ok: false, error: "That slot was just taken. Refresh and choose another." };
+
+
+}
+return { ok: false, error: error.message };
+}
+if (!updated) {
+return {
+ ok: false,
+
+
+ error: "The booking changed while you were rescheduling it. Refresh and try again.",
+
+
+};
+}
+
+
+const { data: updated, error } = await supabase.rpc("reschedule_booking", {
+
+p_booking_id: bookingId,
+
+p_new_slot_id: newSlotId,
+
+p_reason: cleanReason,
+
+});
+
+if (error) return { ok: false, error: error.message };
+
+if (!updated) return { ok: false, error: "The booking could not be rescheduled." };
+const google = booking.google_event_id
+  ? await updateGoogleEvent(
+
+
+@@ -662,10 +483,7 @@ export async function rescheduleBooking(
+         bookingEventInput(booking, loadedSlot.slot, loadedSlot.slot.timezone)
+       );
+   if (google.status === "not_configured" && booking.google_event_id) {
+
+await supabase
+ .from("bookings")
+
+
+ .update({ calendar_sync_status: "failed" })
+
+
+ .eq("id", bookingId);
+
+
+
+
+await recordGoogleSync(supabase, bookingId, { status: "failed" });
+
+   } else {
+     await recordGoogleSync(supabase, bookingId, google);
+   }
+@@ -678,19 +496,7 @@ export async function rescheduleBooking(
+           ? " The Google event was not updated because sync is not operational."
+           : "";
+
+await writeAudit(supabase, {
+actorId: user.id,
+action: "booking_rescheduled",
+entityType: "bookings",
+entityId: bookingId,
+detail: {
+ old_slot_id: booking.slot_id,
+
+
+ new_slot_id: newSlotId,
+
+
+ previous_status: booking.status,
+
+
+ reason: cleanReason,
+
+
+ google_sync: google.status,
+
+
+},
+});
+
+
+
+
+   revalidateCalendar();
+   return {
+(END)
+SQL:
+[
+  {
+    "table_name": "calendar_slots",
+    "can_select": true,
+    "can_insert": false,
+    "can_update": false,
+    "can_delete": false
+  },
+  {
+    "table_name": "bookings",
+    "can_select": true,
+    "can_insert": false,
+    "can_update": false,
+    "can_delete": false
+  },
+  {
+    "table_name": "audit_logs",
+    "can_select": true,
+    "can_insert": true,
+    "can_update": false,
+    "can_delete": false
+  },
+  {
+    "table_name": "suppressed_contacts",
+    "can_select": true,
+    "can_insert": false,
+    "can_update": true,
+    "can_delete": true
+  }
+]
+[
+  {
+    "function_name": "book_slot",
+    "arguments": "p_slot_id uuid, p_company_id uuid, p_conversation_id uuid, p_prospect_name text, p_prospect_email text, p_timezone text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "cancel_booking",
+    "arguments": "p_booking_id uuid, p_reason text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "confirm_booking",
+    "arguments": "p_booking_id uuid",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "create_calendar_slot",
+    "arguments": "p_start_time timestamp with time zone, p_end_time timestamp with time zone, p_timezone text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "delete_calendar_slot",
+    "arguments": "p_slot_id uuid",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "record_google_calendar_sync",
+    "arguments": "p_booking_id uuid, p_status text, p_event_id text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "reschedule_booking",
+    "arguments": "p_booking_id uuid, p_new_slot_id uuid, p_reason text",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  },
+  {
+    "function_name": "suppress_contact",
+    "arguments": "p_email text, p_reason text, p_source_message_id uuid",
+    "authenticated_can_execute": true,
+    "anon_can_execute": false
+  }
+]
+
+
+ChatGPT:
+Good, we have the missing verification results. The calendar tables have the intended restrictions: authenticated users can read slots and bookings, but cannot directly insert, update, or delete them. Audit-log permissions also match the expected setup.
+However, suppressed_contacts has a permissions issue worth investigating:
+
+can_select = true — expected.
+can_insert = false — expected.
+can_update = true — unexpected.
+can_delete = true — unexpected.
+
+Migration 05 revoked direct inserts, but the effective privileges show that update and delete are still granted. We should not treat suppression integrity as fully secured yet.
+
+
+ChatGPT:
+Good, we have the missing verification results. The calendar tables have the intended restrictions: authenticated users can read slots and bookings, but cannot directly insert, update, or delete them. Audit-log permissions also match the expected setup.
+However, suppressed_contacts has a permissions issue worth investigating:
+
+can_select = true — expected.
+can_insert = false — expected.
+can_update = true — unexpected.
+can_delete = true — unexpected.
+
+Migration 05 revoked direct inserts, but the effective privileges show that update and delete are still granted. We should not treat suppression integrity as fully secured yet.
+Let's inspect exactly where those privileges come from before changing anything.
+Run this in Supabase SQL Editor:
+-- Effective table grants
+select
+  grantee,
+  privilege_type,
+  is_grantable
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name = 'suppressed_contacts'
+order by grantee, privilege_type;
+
+-- Row-level security policies
+select
+  policyname,
+  permissive,
+  roles,
+  cmd,
+  qual,
+  with_check
+from pg_policies
+where schemaname = 'public'
+  and tablename = 'suppressed_contacts';
+
+A second point from your code diff: the calendar actions now call the RPCs correctly, but the database functions still need proper authorization checks. Authentication alone does not establish that a user is authorized to modify a particular company's booking.
+We'll address both issues together, with a focused security migration rather than disturbing the working calendar implementation.
+One small note: supabase/.temp/ is currently untracked in Git. Leave it alone for now; don't stage it.
+
+
+ChatGPT:
+Let's inspect exactly where those privileges come from before changing anything.
+Run this in Supabase SQL Editor:
+-- Effective table grants
+select
+  grantee,
+  privilege_type,
+  is_grantable
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name = 'suppressed_contacts'
+order by grantee, privilege_type;
+
+-- Row-level security policies
+select
+  policyname,
+  permissive,
+  roles,
+  cmd,
+  qual,
+  with_check
+from pg_policies
+where schemaname = 'public'
+  and tablename = 'suppressed_contacts';
+
+A second point from your code diff: the calendar actions now call the RPCs correctly, but the database functions still need proper authorization checks. Authentication alone does not establish that a user is authorized to modify a particular company's booking.
+We'll address both issues together, with a focused security migration rather than disturbing the working calendar implementation.
+One small note: supabase/.temp/ is currently untracked in Git. Leave it alone for now; don't stage it.
+
+
+You:
+[
+  {
+    "policyname": "auth_select_suppressed_contacts",
+    "permissive": "PERMISSIVE",
+    "roles": "{authenticated}",
+    "cmd": "SELECT",
+    "qual": "true",
+    "with_check": null
+  }
+]
+
+
+ChatGPT:
+Good — the RLS policy output shows exactly one policy on suppressed_contacts:
+
+SELECT is allowed for authenticated.
+There are no UPDATE or DELETE policies.
+
+That means ordinary authenticated users are blocked from updating or deleting rows through RLS, even though the earlier privilege check reported those table privileges as granted. Still, we should remove the unnecessary SQL grants as defense in depth.
+I’m missing the output from the first query, which identifies who received those grants. Please run this query by itself in Supabase SQL Editor and paste the result:
+select
+  grantee,
+  privilege_type,
+  is_grantable
+from information_schema.role_table_grants
+where table_schema = 'public'
+  and table_name = 'suppressed_contacts'
+order by grantee, privilege_type;
+
+Once we see the grantees, we can prepare a precise security migration without changing the working calendar implementation.
+
+
+You:
+[
+  {
+    "grantee": "anon",
+    "privilege_type": "DELETE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "anon",
+    "privilege_type": "REFERENCES",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "anon",
+    "privilege_type": "SELECT",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "anon",
+    "privilege_type": "TRIGGER",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "anon",
+    "privilege_type": "TRUNCATE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "anon",
+    "privilege_type": "UPDATE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "authenticated",
+    "privilege_type": "DELETE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "authenticated",
+    "privilege_type": "REFERENCES",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "authenticated",
+    "privilege_type": "SELECT",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "authenticated",
+    "privilege_type": "TRIGGER",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "authenticated",
+    "privilege_type": "TRUNCATE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "authenticated",
+    "privilege_type": "UPDATE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "DELETE",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "INSERT",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "REFERENCES",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "SELECT",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "TRIGGER",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "TRUNCATE",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "postgres",
+    "privilege_type": "UPDATE",
+    "is_grantable": "YES"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "DELETE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "INSERT",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "REFERENCES",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "SELECT",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "TRIGGER",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "TRUNCATE",
+    "is_grantable": "NO"
+  },
+  {
+    "grantee": "service_role",
+    "privilege_type": "UPDATE",
+    "is_grantable": "NO"
+  }
+]
+
+
+ChatGPT:
+This confirms the issue. Both anon and authenticated have explicit grants on suppressed_contacts for:
+
+UPDATE and DELETE
+TRUNCATE — particularly important because TRUNCATE is not governed by row-level security
+REFERENCES and TRIGGER
+SELECT
+
+The absence of UPDATE and DELETE RLS policies currently blocks ordinary row-level updates and deletes, but the extra grants are unnecessary and weaken the database's least-privilege setup.
+Proposed correction
+I recommend revoking all direct table privileges from anon and authenticated, then granting back only SELECT to authenticated.
+BEGIN;
+
+REVOKE ALL PRIVILEGES
+ON TABLE public.suppressed_contacts
+FROM anon, authenticated;
+
+GRANT SELECT
+ON TABLE public.suppressed_contacts
+TO authenticated;
+
+COMMIT;
+
+This preserves service_role and the table owner's privileges. The existing auth_select_suppressed_contacts policy remains in place.
+I have not applied this change. Do you approve this exact SQL correction?
+After that, we'll tackle the more important remaining issue: adding company/tenant authorization inside the calendar RPCs themselves, so an authenticated user cannot modify another company's bookings simply by supplying a UUID.
+
+If you want, I can:
+
+Explain the refactor of booking slot logic
+Describe the calendar slot lifecycle
+Summarize Google Calendar sync integration

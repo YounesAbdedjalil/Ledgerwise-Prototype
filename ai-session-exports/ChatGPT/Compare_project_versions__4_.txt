@@ -1,0 +1,3333 @@
+Compare project versions (4)
+============================
+
+ChatGPT:
+Here's a prompt you can give Claude. It includes the current Ledgerwise context, the discovery eligibility changes we've made, and the specific issue with the agent failing to fetch 30 companies.
+# Ledgerwise — Debug and Fix Autonomous Company Discovery (30-Company Target)
+You are helping me debug and improve Ledgerwise, an AI SDR platform built with Next.js, TypeScript, Tailwind CSS v4, and Supabase.
+I want you to focus on one specific problem: the autonomous company-discovery agent is not successfully fetching 30 qualified companies.
+1. Project context
+Ledgerwise is an AI SDR platform for a fictional US bookkeeping firm targeting e-commerce businesses.
+The discovery workflow should:
+
+Search for potential US e-commerce businesses.
+Fetch and research their official websites.
+Extract and verify relevant evidence.
+Evaluate whether each candidate meets our target customer criteria.
+Import qualified companies into the Prospects database.
+
+The intended target is 30 qualified companies, not merely 30 URLs or search results.
+2. Ideal customer profile (ICP)
+A company should generally meet these criteria:
+
+A genuine e-commerce brand or online retail business.
+Sells physical products through its own online storefront.
+Has a demonstrable US business presence or US e-commerce operations.
+Ideally has approximately $1M–$10M in revenue.
+Ideally has 5–50 employees.
+Has identifiable decision-makers, preferably a founder, CEO, COO, or finance leader.
+May exhibit growth signals or bookkeeping/accounting complexity.
+
+Important exclusions
+Do NOT qualify:
+
+Bookkeeping or accounting firms.
+Fractional CFO businesses.
+Consultants or consulting firms.
+Marketing, web-development, or other agencies.
+SaaS companies and software platforms.
+Lead-generation companies.
+Directories and marketplaces that merely list businesses.
+Companies that talk about e-commerce but do not themselves operate an online store.
+
+A previous false positive was https://ecomcfo.co/. It is a CFO/bookkeeping consultancy, not an e-commerce store. The discovery agent incorrectly returned it.
+3. Changes already implemented
+We recently introduced an e-commerce eligibility filter.
+New file
+lib/research/eligibility.ts
+It evaluates first-party website pages for:
+
+Transaction evidence (Add to Cart, Checkout, Buy Now, etc.).
+Product catalogue evidence (product variants, collections, SKUs, stock status, etc.).
+E-commerce platform evidence (Shopify, WooCommerce, BigCommerce, Magento, etc.).
+Service-provider signals (bookkeeping, accounting, fractional CFO, consulting, agencies, SaaS, etc.).
+
+The filter requires multiple storefront signals and rejects service businesses.
+Modified file
+lib/research/runner.ts
+It now supports:
+requireEcommerceEligibility?: boolean
+When enabled, it rejects candidates whose first-party website pages do not provide sufficient evidence of an actual e-commerce storefront.
+Modified file
+app/api/prospects/discover/route.ts
+Autonomous discovery enables:
+requireEcommerceEligibility: true
+Manual CSV imports should remain unaffected.
+US-market evidence gate
+We also added a gate in lib/research/runner.ts:
+if (
+  deps.requireEcommerceEligibility &&
+  !verification.accepted.some((claim) => claim.claim_type === "us_ecommerce")
+) {
+  report.errors.push(
+    "Autonomous discovery rejected this candidate: no verified first-party evidence of US business presence or US e-commerce operations."
+  );
+  return { rows: [], report };
+}
+
+This requires at least one verified us_ecommerce claim before a candidate can be imported through autonomous discovery.
+Test status
+After these changes, the test suite reported:
+
+151 tests passed.
+0 failures.
+npx tsc --noEmit completed without errors.
+git diff --check completed cleanly.
+
+Do not assume these tests prove the discovery pipeline can actually find 30 companies. They only establish that the existing automated tests pass.
+4. The actual problem to investigate
+The discovery agent is not successfully fetching 30 companies.
+I need you to determine exactly why.
+Potential areas to investigate:
+
+Search query coverage and quality.
+Tavily API search limits and pagination.
+Candidate deduplication.
+URL normalization.
+Search-result filtering.
+Blocked-domain rules.
+Website fetch failures and timeouts.
+The number of pages fetched per company.
+Eligibility-filter strictness.
+Evidence extraction and verification failures.
+The US-market evidence gate.
+Candidate limits and batch-size restrictions.
+Whether the agent stops after a small number of candidates.
+Whether rejected candidates are replaced with new searches.
+Whether the endpoint's response/report accurately explains why candidates were rejected.
+
+Do not immediately weaken the eligibility filter. We need 30 legitimate e-commerce prospects, not 30 arbitrary companies.
+5. What I want you to do
+First, inspect the actual implementation and trace the complete discovery pipeline from:
+app/api/prospects/discover/route.ts
+through:
+
+Search and candidate collection.
+Research runner.
+Website extraction.
+E-commerce eligibility.
+Evidence verification.
+US-market verification.
+Import into Supabase.
+
+Then identify the exact bottleneck.
+I want a practical fix that allows the agent to keep searching for replacement candidates when candidates are rejected, rather than stopping prematurely.
+The target should be:
+Up to 30 successfully qualified and imported companies per discovery run, subject to reasonable execution-time and API limits.
+If fewer than 30 can be found, the agent should report:
+
+How many candidates were discovered.
+How many websites were successfully fetched.
+How many passed storefront eligibility.
+How many passed US-market verification.
+How many were rejected and why.
+How many were imported.
+Whether the search or API limits prevented reaching 30.
+
+Do not fabricate companies or qualification evidence.
+6. Important technical constraints
+
+Preserve the existing application architecture.
+Do not break manual CSV importing.
+Do not weaken the ICP or allow service businesses through.
+Keep research freemium-only; do not introduce paid enrichment subscriptions.
+Do not introduce unnecessary dependencies.
+Do not modify database schema or apply migrations unless absolutely necessary and explicitly justified.
+Do not expose API keys or request that I share .env.local.
+Preserve existing local changes. Do not reset Git, overwrite unrelated work, or discard modifications.
+Do not commit, push, or deploy anything.
+
+7. How I want you to work
+I want you to be practical and implementation-focused.
+
+Inspect the relevant files before proposing changes.
+Explain the actual bottleneck with evidence from the code.
+Implement the smallest coherent fix.
+Add or update tests covering the failure and the fix.
+Run the relevant tests, TypeScript checks, and lint checks.
+Give me the exact terminal commands to test the discovery endpoint locally.
+Explain how to verify that the agent can reach 30 qualified companies.
+
+Do not give me a generic list of possible causes. Trace the actual code and fix the problem.
+Primary objective: Make Ledgerwise's discovery agent reliably find and import up to 30 genuine US e-commerce companies without admitting agencies, consultants, SaaS businesses, or other false positives.
+One important instruction: have Claude inspect the current local working tree before editing anything. The project already contains uncommitted changes, so he must preserve them rather than applying a broad replacement from an older ZIP.
+
+
+You:
+Also the command line to zip the root folder without node_modules, env and all non-necessary for development
+
+
+ChatGPT:
+Run this from the directory containing ledgerwise-prototype:
+cd "$HOME/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI"
+
+zip -r ledgerwise-for-claude.zip ledgerwise-prototype \
+  -x 'ledgerwise-prototype/node_modules/*' \
+     'ledgerwise-prototype/.next/*' \
+     'ledgerwise-prototype/.git/*' \
+     'ledgerwise-prototype/.env' \
+     'ledgerwise-prototype/.env.*' \
+     'ledgerwise-prototype/**/.env' \
+     'ledgerwise-prototype/**/.env.*' \
+     'ledgerwise-prototype/.vercel/*' \
+     'ledgerwise-prototype/.turbo/*' \
+     'ledgerwise-prototype/coverage/*' \
+     'ledgerwise-prototype/dist/*' \
+     'ledgerwise-prototype/build/*' \
+     'ledgerwise-prototype/out/*' \
+     'ledgerwise-prototype/.cache/*' \
+     'ledgerwise-prototype/supabase/.temp/*' \
+     'ledgerwise-prototype/supabase/schema_snapshot.sql' \
+     'ledgerwise-prototype/*.log' \
+     'ledgerwise-prototype/**/.DS_Store'
+
+This preserves the source code, tests, configuration, package files, and Supabase migrations while excluding dependencies, generated build files, Git history, environment files, and local Supabase temporary data.
+Before sending it to Claude
+Check the archive:
+unzip -l ledgerwise-for-claude.zip | less
+
+Check that no environment files or dependency folders slipped in:
+unzip -l ledgerwise-for-claude.zip | grep -E 'node_modules|\.env|supabase/\.temp|schema_snapshot'
+
+Ideally, that last command prints nothing.
+Ready for Claude
+Upload ledgerwise-for-claude.zip to Claude alongside the prompt above. Tell Claude that the archive contains your current working files, including uncommitted changes, and that it must work from this version—not an older ZIP.
+One important detail: The ZIP deliberately excludes .git, so Claude can inspect the current code but won't see your Git history or know which files were modified locally unless you tell it.
+
+
+You:
+┌──(younes㉿younes)-[~/…/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI]
+└─$ git add -A
+fatal: not a git repository (or any of the parent directories): .git
+There is already a git folder, why ?
+
+
+ChatGPT:
+You're currently in:
+~/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI
+
+But your actual Git repository is one directory deeper:
+~/Documents/UNSCALE/ledgerwise-prototype/ChatGPT Uploads/Updated UI/ledgerwise-prototype
+
+The .git folder belongs to that inner project directory, not Updated UI.
+Fix
+Run:
+cd ledgerwise-prototype
+git status
+
+You should now see your modified and untracked files.
+Then, if you intend to stage everything:
+git add -A
+
+Important: git add -A stages all changes, including untracked files. It does not commit them.
+You can verify the repository root at any time with:
+git rev-parse --show-toplevel
+
+
+
+You:
+OK, Claude fixed the research agent, it now brings 30 companies into the list, it takes him about 13-16 minutes though
+But as long as it works, it is good imo
+Now, which phase are we at in the project ?
+
+
+ChatGPT:
+We're now in the finalization and validation phase of Ledgerwise.
+The core product is largely implemented. Claude fixing the research agent is a significant milestone because we now have the ability to populate the prospect list with the required 30 companies.
+I would consider the discovery milestone complete, with one performance issue to revisit later: 13–16 minutes for 30 companies.
+Where we are in the project
+Here's the current roadmap:
+
+  
+    **Phase 0 — Project setup and authentication**
+
+<span class="ce-badge ce-badge-success">Complete</span>
+
+Project infrastructure, Supabase connection, authentication and dashboard setup.
+
+  
+  
+    **Phase 1 — Research and prospect discovery**
+
+<span class="ce-badge ce-badge-success">Core functionality complete</span>
+
+Autonomous discovery, website research, evidence extraction, verification and importing prospects. The agent now reaches 30 companies.
+
+  
+  
+    **Phase 2 — Qualification and scoring**
+
+<span class="ce-badge ce-badge-warning">Validation pending</span>
+
+Verify the scoring criteria, evidence quality, score accuracy and qualification decisions. We need to ensure the right companies receive the right scores.
+
+  
+  
+    **Phase 3 — Email and outreach**
+
+<span class="ce-badge ce-badge-success">Implemented</span>
+
+Email drafting, personalization, approval workflow and sending infrastructure. Live sending still requires proper integration verification.
+
+  
+  
+    **Phase 4 — Conversations and replies**
+
+<span class="ce-badge ce-badge-success">Core functionality implemented</span>
+
+Conversation management, reply handling and human takeover. Full inbound mailbox synchronization remains unfinished.
+
+  
+  
+    **Phase 5 — Calendar and booking**
+
+<span class="ce-badge ce-badge-success">Core functionality implemented</span>
+
+Internal calendar workflow is implemented. Google Calendar integration still needs verification.
+
+  
+  
+    **Phase 6 — Dashboard and user interface**
+
+<span class="ce-badge ce-badge-success">Implemented</span>
+
+Main dashboard, navigation, prospects, emails and settings.
+
+  
+  
+    **Phase 7 — Quality assurance and end-to-end validation**
+
+<span class="ce-badge ce-badge-warning">Current phase</span>
+
+Test the complete SDR workflow, verify data integrity, check authentication, validate integrations and fix remaining bugs.
+
+  
+  
+    **Phase 8 — Submission preparation**
+
+<span class="ce-badge ce-badge-default">Remaining</span>
+
+README, `HOW_I_WORKED.md`, AI-session export, public GitHub repository, reviewer access and Loom demonstration.
+
+  
+
+
+What I recommend doing next
+I wouldn't spend time optimizing the research agent's speed just yet. If it reliably produces 30 qualified companies in 13–16 minutes, we can accept that for the prototype.
+I'd proceed in this order:
+
+Validate the 30 discovered companies. Check that they genuinely meet the e-commerce ICP and aren't service providers or false positives.
+Validate qualification scoring. Check the evidence behind scores and confirm the scoring weights behave correctly.
+Run the complete SDR workflow. Discovery → research → qualification → personalized email → approval → sending → reply → calendar.
+Run final technical checks. Tests, TypeScript, lint, production build and authentication.
+Prepare the submission. Documentation, repository, AI-session export and Loom.
+
+My assessment
+We're past the stage of building the basic application. We're now making sure that what we've built actually works reliably enough to demonstrate and submit.
+The next concrete milestone should be validating the 30 companies and their qualification scores.
+Once that is done, we can move into full end-to-end testing.
+
+
+You:
+You are a senior full-stack engineer reviewing the Google Calendar integration of
+a Next.js + Supabase prototype called Ledgerwise (an AI SDR tool for a US
+bookkeeping firm; a human sales team approves everything). I will attach the
+relevant files. Read them before answering. If something I describe disagrees
+with the files, trust the files and tell me.
+Goal
+Find out exactly what is missing or wrong before Google Calendar sync can be
+called real, then give me an ordered plan to finish it. Do not assume anything
+works just because the code exists.
+Files I'm attaching
+
+docs/GOOGLE_CALENDAR.md, docs/SCOPE.md, docs/SECURITY.md
+lib/calendar/google.ts, lib/calendar/time.ts
+app/(dashboard)/calendar/actions.ts, app/(dashboard)/calendar/page.tsx
+components/calendar/* (BookSlotForm, BookingActions, SlotCreator)
+supabase/migrations/20261114_02_calendar_source_and_booking.sql
+supabase/migrations/20261114_03_google_calendar.sql
+supabase/unapplied/20261114_04_transactional_calendar_operations.sql
+supabase/unapplied/20261114_05_calendar_security_corrections.sql
+supabase/unapplied/README.md, docs/MIGRATION_INSTRUCTIONS.md
+tests/google-calendar.test.ts, tests/calendar-time.test.ts
+app/(dashboard)/settings/integrations/page.tsx
+
+What the code does today (from my reading, verify it)
+
+An internal calendar (calendar_slots, bookings tables) is the source of truth.
+Google sync is optional. It needs GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+GOOGLE_REFRESH_TOKEN, GOOGLE_CALENDAR_ID, plus two manual switches:
+GOOGLE_CALENDAR_VERIFIED=1 and GOOGLE_CALENDAR_SYNC=1.
+lib/calendar/google.ts exchanges the refresh token for an access token on every
+call, then creates, patches or deletes events through the Calendar v3 REST API.
+There is NO OAuth connect/callback flow. The refresh token must be created by
+hand.
+If Google sync fails, the internal booking stays and the status is "failed".
+
+Two problems I already suspect (confirm or refute each, with evidence)
+
+calendar/actions.ts calls these Supabase RPCs: create_calendar_slot,
+delete_calendar_slot, book_slot, confirm_booking, cancel_booking,
+reschedule_booking, record_google_calendar_sync. In the files I'm giving you,
+those functions are defined ONLY in supabase/unapplied/...04... , and
+supabase/unapplied/README.md says the app does NOT call them yet and applying
+them would break slot creation and booking. That README may be out of date.
+Work out: if migration 04/05 are not applied to my database, which calendar
+features fail? If they ARE applied, what else (grants, revoked direct writes)
+changes? Which state should I be in, and what is the safe order to get there?
+docs/GOOGLE_CALENDAR.md and the integrations page refer to
+docs/PROVIDER_SETUP.md, which is not in the project. Tell me what it should
+contain for Google specifically.
+
+Questions to answer
+A. Gap analysis. List every gap between "code exists" and "works end to end in
+   production", grouped as: must-fix, should-fix, nice-to-have. Cover at least:
+
+database state (migrations applied or not, RPCs, RLS/grants)
+Google Cloud setup (project, Calendar API enabled, OAuth consent screen,
+scopes: what is the minimum, is calendar.events enough?)
+getting a refresh token safely. I believe that in "Testing" publishing
+status, refresh tokens expire after about 7 days. Confirm this and tell me
+the right approach for a single-team internal tool (e.g. Workspace
+internal app vs. service account vs. a proper OAuth flow).
+correctness: timezones and DST, duplicate events on retry (idempotency),
+what happens when the Google call succeeds but recording the event ID in
+the database fails (is an orphan event possible and how would cancel
+behave?), and a missing Google 404/410 on PATCH.
+security: where tokens live, what is logged, whether prospect emails or
+names are sent to Google and whether that matches docs/SECURITY.md.
+missing features worth considering: free/busy check before offering slots,
+attendee invites, Google Meet link, two-way sync (events deleted in Google),
+per-user calendars vs one shared calendar.
+B. Step-by-step setup guide for a first-time user: Google Cloud Console clicks,
+   consent screen choices, how to generate the refresh token (give exact steps,
+   for example via the OAuth Playground or a small script), where each value goes
+   in .env.local and on Vercel, and how to flip the two flags only after a real
+   test.
+C. A concrete verification checklist I can run by hand, covering create, update
+   (reschedule), delete (cancel), a Google-side failure, and a retry. For each
+   step say what I should see in Google Calendar AND in the database
+   (google_event_id, calendar_sync_status, calendar_synced_at).
+D. A prioritized implementation plan: small tasks, each with the file to change,
+   what to change, and how to test it. Include the proposed code for anything
+   that is missing, and keep changes small and reviewable.
+
+Rules
+
+The internal calendar must stay the source of truth. A Google failure must
+never roll back or block an internal booking.
+Never describe Google Calendar as operational until it has been tested against
+a real Google account. Mark anything you cannot confirm from the files as
+"unverified".
+Do not send any pricing or promises in event text. Keep prospect data in
+events to the minimum needed.
+Be specific. Quote file names and function names. Do not give generic advice.
+If you need a file I didn't attach, ask for it by name instead of guessing.
+
+Output format
+
+A one-paragraph verdict: how close is this to working, and what is the single
+biggest blocker.
+Findings for problems 1 and 2 above.
+Gap table (must / should / nice) with file references.
+Setup guide (B), verification checklist (C), implementation plan (D).
+
+
+
+ChatGPT:
+Absolutely. I'll review this as a code and database audit, not assume that the integration works simply because the implementation exists.
+I don't see the attachments in your message yet. Please upload the files listed in your request. You can make things easier by putting them into one ZIP archive.
+Once they're available, I'll read the actual files and produce your requested report in this order:
+
+Verdict: How close Google Calendar is to genuine end-to-end operation, and the biggest blocker.
+Migration 04/05 investigation: Whether the application and migrations agree, what breaks in each database state, and the safe migration sequence.
+Missing docs/PROVIDER_SETUP.md: Exact Google-specific setup documentation it needs.
+Gap analysis: Must-fix, should-fix, and nice-to-have, with file and function references.
+First-time Google setup: Google Cloud configuration, OAuth consent, refresh-token generation, environment variables, and Vercel configuration.
+Manual verification checklist: Create, reschedule, cancel, failure, and retry, including expected Google Calendar and database states.
+Prioritized implementation plan: Small, reviewable changes with proposed code and tests where appropriate.
+
+I'll pay particular attention to the migration discrepancy and whether Google Calendar can create orphan events when the API succeeds but the database update fails.
+I will not label Google Calendar operational until a real Google account test confirms it.
+
+
+You:
+📎 [Attached file: ledgerwise-for-claude.zip — ZIP, 318 KB]
+Here it is
+
+
+ChatGPT:
+Ledgerwise Google Calendar integration audit
+1. Verdict
+Not yet production-ready
+The project has a reasonably complete one-way Google Calendar synchronization implementation, but it is not yet a verified integration. The internal calendar is correctly designed as the source of truth, and the application handles Google API failures without intentionally rolling back internal bookings. However, there is a critical mismatch between the application and the migration documentation: calendar/actions.ts already calls seven RPC functions defined in migration 04, while supabase/unapplied/README.md claims the application does not call them. If migration 04 is absent from the live database, calendar mutations will fail. If it is present, its direct-write revocations make the RPC path essential. Beyond that, the most serious correctness problem is the possibility of orphaned Google events: Google can successfully create an event, but if saving its ID to Supabase fails, Ledgerwise loses the reference needed to update or delete it.
+My assessment: the integration is structurally close, but database state, recovery/idempotency, real OAuth verification and security configuration must be resolved before enabling it.
+I inspected the supplied ZIP, including the calendar implementation, migrations, tests and documentation. I distinguish below between what the files prove and what still requires checking against the actual Supabase database or a real Google account.
+
+
+ChatGPT:
+2. Findings on the two suspected problems
+Problem 1 — Migration 04/05 versus the application
+Confirmed code/documentation mismatch
+Your suspicion is correct. The README is stale relative to the supplied application code.
+In app/(dashboard)/calendar/actions.ts, the application calls all seven functions:
+
+
+
+Function
+Called by
+Defined in migration 04
+
+
+
+create_calendar_slot
+createSlot()
+Yes
+
+
+delete_calendar_slot
+deleteSlot()
+Yes
+
+
+book_slot
+bookSlot()
+Yes
+
+
+confirm_booking
+confirmBooking()
+Yes
+
+
+cancel_booking
+cancelBooking()
+Yes
+
+
+reschedule_booking
+rescheduleBooking()
+Yes
+
+
+record_google_calendar_sync
+recordGoogleSync()
+Yes
+
+
+The calls are visible at lines 115, 159, 185, 279, 343, 393 and 469 respectively.
+But supabase/unapplied/README.md says:
+
+The app does NOT call them yet.
+
+That statement is contradicted by the actual source code.
+What happens if migration 04 is absent?
+
+Creating a slot fails.
+Deleting a slot fails.
+Creating a booking fails.
+Confirming a booking fails.
+Cancelling a booking fails.
+Rescheduling a booking fails.
+Recording Google synchronization metadata fails.
+
+The read-only calendar page may still display existing slots and bookings if migrations 02 and 03 are present, but the mutation workflow cannot work correctly.
+A particularly important detail: bookSlot() calls book_slot before calling Google. Therefore, if the RPC is missing, no new Google event is attempted either.
+What happens if migration 04 is present?
+The application and database design become consistent:
+
+Calendar mutations go through SECURITY DEFINER functions.
+The functions use auth.uid() to require an authenticated caller.
+A shared transaction-scoped advisory lock serializes calendar mutations.
+Direct INSERT, UPDATE and DELETE privileges on calendar_slots and bookings are revoked from authenticated and anon.
+Authenticated users retain SELECT access.
+The seven RPCs receive EXECUTE permission for authenticated.
+
+This is a deliberate security design, not a reason to restore direct table writes.
+Migration 04 also revokes direct audit-log mutations and grants authenticated users SELECT, INSERT. The application has other audit-log insertions, including lib/server/audit.ts and the prospect-import actions, so these permissions and the RLS policies must remain compatible.
+Migration 05 matters too.
+20261114_05_calendar_security_corrections.sql:
+
+Removes direct authenticated inserts into suppressed_contacts.
+Requires suppression to go through suppress_contact.
+Requires audit inserts to use actor_id = auth.uid().
+Makes suppression use the same advisory lock as calendar operations.
+
+That shared lock is important: without migration 05, a suppression operation and a booking operation can race. A booking could pass its suppression check while an opt-out is being recorded.
+lib/suppression.ts already uses the suppress_contact RPC, so migration 05 is consistent with the current application.
+Which database state should you be in?
+The intended state for this code is:
+
+
+
+Migration
+Intended state
+
+
+
+01 — Source verification and security
+Applied
+
+
+02 — Calendar source and booking
+Applied
+
+
+03 — Google Calendar metadata
+Applied
+
+
+04 — Transactional calendar operations
+Applied
+
+
+05 — Calendar security corrections
+Applied
+
+
+However, the ZIP cannot establish what is actually installed in your Supabase database. The unapplied directory is a project-file classification, not a live database inspection.
+Do not blindly run migrations 04 and 05 again or assume they are missing. First inspect the database.
+Run this in Supabase SQL Editor:
+-- 1. Check that all seven calendar RPCs exist
+select
+  p.proname,
+  pg_get_function_identity_arguments(p.oid) as arguments,
+  p.prosecdef as security_definer,
+  has_function_privilege(
+    'authenticated',
+    p.oid,
+    'EXECUTE'
+  ) as authenticated_can_execute
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in (
+    'create_calendar_slot',
+    'delete_calendar_slot',
+    'book_slot',
+    'confirm_booking',
+    'cancel_booking',
+    'reschedule_booking',
+    'record_google_calendar_sync'
+  )
+order by p.proname;
+
+-- 2. Check direct table permissions
+select
+  has_table_privilege(
+    'authenticated',
+    'public.calendar_slots',
+    'INSERT'
+  ) as can_insert_slots,
+  has_table_privilege(
+    'authenticated',
+    'public.calendar_slots',
+    'UPDATE'
+  ) as can_update_slots,
+  has_table_privilege(
+    'authenticated',
+    'public.calendar_slots',
+    'DELETE'
+  ) as can_delete_slots,
+  has_table_privilege(
+    'authenticated',
+    'public.bookings',
+    'INSERT'
+  ) as can_insert_bookings,
+  has_table_privilege(
+    'authenticated',
+    'public.bookings',
+    'UPDATE'
+  ) as can_update_bookings,
+  has_table_privilege(
+    'authenticated',
+    'public.bookings',
+    'DELETE'
+  ) as can_delete_bookings;
+
+-- 3. Check required Google metadata columns
+select
+  table_name,
+  column_name,
+  data_type
+from information_schema.columns
+where table_schema = 'public'
+  and (
+    (table_name = 'bookings' and column_name in (
+      'google_event_id',
+      'calendar_sync_status',
+      'calendar_synced_at'
+    ))
+    or
+    (table_name = 'calendar_slots' and column_name = 'google_calendar_id')
+  )
+order by table_name, column_name;
+
+Expected for the final design:
+
+Seven RPCs exist.
+Each is SECURITY DEFINER.
+Authenticated users can execute them.
+Direct mutation privileges on calendar_slots and bookings are false.
+All four Google metadata columns exist.
+
+If any RPC is missing, or its execution permission is false, the database is not in the intended state.
+Safe application order: verify 01–03, inspect existing data and permissions, then apply/reconcile 04, verify all seven RPCs and grants, then apply/reconcile 05 and test suppression plus booking concurrency. Test this on a staging database before touching the live one.
+One further detail: migration 04 does not contain an explicit BEGIN/COMMIT wrapper, unlike migration 05. I would review its execution as a single controlled database change and verify the entire set of functions and grants afterward.
+Problem 2 — Missing docs/PROVIDER_SETUP.md
+Confirmed missing file
+I checked the archive contents. There is no docs/PROVIDER_SETUP.md.
+Yet app/(dashboard)/settings/integrations/page.tsx explicitly tells the operator to follow that file. The integrations page also only checks whether the Google environment variables and both flags are present. It does not validate the OAuth grant or make a test request.
+The missing document should contain:
+
+Google Cloud project creation.
+Google Calendar API activation.
+OAuth consent configuration.
+OAuth client creation.
+How to obtain a refresh token with offline access.
+How to identify the correct Calendar ID.
+Where the four credentials and two flags belong.
+A real create/update/delete test before enabling normal synchronization.
+Troubleshooting for expired/revoked refresh tokens, insufficient permissions and invalid calendar IDs.
+
+I'll provide the exact setup sequence below.
+
+
+ChatGPT:
+3. Gap analysis
+The distinction here is between the existing code and what is actually proven to work.
+Must-fix before calling it operational
+
+
+
+Gap
+Evidence in the supplied files
+Required correction
+
+
+
+Database migration state unknown
+Migrations 04/05 are under supabase/unapplied/, while actions.ts calls their functions
+Inspect live RPCs, privileges, columns and policies. Reconcile the migration state before testing.
+
+
+OAuth has no connection flow
+lib/calendar/google.ts only exchanges a pre-existing refresh token
+Obtain a durable refresh token safely, or implement an OAuth connection/callback flow.
+
+
+No real provider verification
+googleCalendarStatus() trusts two environment flags
+Add an actual connection/event lifecycle test. The flags are operator attestations, not proof of connectivity.
+
+
+Duplicate creation possible
+syncBookingToGoogle() always sends a new POST
+Use a deterministic event ID and safe conflict recovery.
+
+
+Orphan events possible
+recordGoogleSync() only logs an error if the metadata RPC fails
+Ensure a successful Google creation can be recovered even if Supabase fails to save its event ID.
+
+
+Missing-event reschedule recovery
+googleMutation() treats 404/410 as failure for PATCH
+Detect a missing event and recreate it safely, recording its new ID.
+
+
+No reliable retry workflow
+confirmBooking() retries only under certain booking states; no dedicated sync retry action or durable job exists
+Add a manual retry initially, then a durable retry/outbox mechanism for production.
+
+
+Prospect PII sent to Google
+bookSlot() and bookingEventInput() send the prospect's full name and email in event text
+Minimize event content and explicitly document what leaves Supabase.
+
+
+Should-fix before a wider deployment
+
+
+
+Gap
+Current position
+Recommendation
+
+
+
+Timezone and DST
+lib/calendar/time.ts has a good IANA timezone conversion and explicitly rejects ambiguous/nonexistent DST times. Unit tests cover both transitions.
+Keep this implementation. Add real Google tests for dates around DST transitions and verify that the displayed time matches the internal slot.
+
+
+Google calendar availability
+Slots are checked against Ledgerwise's own database, not the Google calendar's existing events.
+Add a FreeBusy check before offering a slot if the connected calendar is also used for other appointments.
+
+
+Calendar permissions
+No code checks whether the configured calendar ID is writable.
+Validate the target calendar and permissions during connection verification.
+
+
+Token lifecycle
+Refresh token is a static environment variable. No refresh-token revocation or reconnection UX exists.
+Add clear failure states and a documented reauthorization procedure.
+
+
+Sync state semantics
+record_google_calendar_sync updates calendar_synced_at on failed and not-configured states too.
+Treat it as the last sync attempt, or rename it. Consider separate last_attempt_at and last_success_at.
+
+
+Synchronous API calls
+Booking actions wait for Google API calls, each with a 20-second timeout.
+Move retries to a background worker or scheduled job once the prototype needs dependable recovery.
+
+
+Database concurrency
+Migration 04 serializes mutations using an advisory lock; migration 05 makes suppression use the same lock.
+Test concurrent booking, rescheduling and opt-out operations against a real database.
+
+
+Nice-to-have
+
+
+
+Feature
+Current position
+Recommendation
+
+
+
+Attendee invitations
+No attendees property is sent.
+Add only when the team explicitly wants Google Calendar invitations sent to prospects.
+
+
+Google Meet
+No conferenceData is created.
+Add a unique Meet conference per appointment if remote calls are required.
+
+
+Two-way sync
+Google-side changes are not imported into Ledgerwise.
+Consider push notifications and incremental synchronization only if Google-side edits should affect internal bookings.
+
+
+Per-user calendars
+One GOOGLE_CALENDAR_ID is configured globally.
+Keep one shared sales calendar for this single-team prototype. Per-user calendars require a different authorization and ownership model.
+
+
+Calendar settings UI
+Credentials and flags are configured manually.
+Eventually replace manual environment-variable management with an administrator connection screen.
+
+
+Specific correctness findings
+Timezones and DST — mostly good.
+zonedDateTimeToIso() converts a local wall-clock time to a UTC instant, and rejects DST gaps and overlaps rather than silently selecting the wrong instant. buildGoogleEvent() then sends the UTC timestamp plus its IANA timezone.
+That is the correct general approach for timed events. I do not see an obvious timezone conversion defect in these files. The remaining uncertainty is real-account behavior, not the basic conversion logic.
+Duplicate events and orphan events — a real defect.
+The sequence in bookSlot() is:
+
+Create the internal booking using book_slot.
+Call syncBookingToGoogle().
+Call recordGoogleSync() to save the Google event ID.
+
+If step 2 succeeds and step 3 fails, the internal booking remains, but the database has no google_event_id.
+Then:
+
+cancelBooking() skips Google deletion because it only deletes when booking.google_event_id exists.
+confirmBooking() may try creating another event if the booking is still pending and has no event ID.
+rescheduleBooking() also creates an event if there is no event ID.
+
+A retry can therefore create a duplicate, while cancellation can leave the original event behind.
+This is not hypothetical behavior: the current code has no idempotency key, deterministic event ID or reconciliation mechanism.
+PATCH 404/410 — confirmed defect.
+googleMutation() treats 404 and 410 as success only when method === "DELETE".
+For a missing event during rescheduling:
+
+PATCH returns failed.
+recordGoogleSync() receives a failed result.
+The existing event ID is preserved because the RPC only replaces it when a new non-null ID is supplied.
+Future reschedule attempts keep trying to patch the same missing event.
+
+That needs a recovery path.
+Security and event content — needs attention.
+The actual event content is more revealing than the documentation suggests:
+
+summary: Ledgerwise call: Jane Doe
+description: prospect name, prospect email, company UUID and a Ledgerwise note.
+
+No prices or pricing promises are sent. No attendee list is sent, so the current code does not invite the prospect or send them an invitation.
+However, the prospect's name and email are sent to Google's Calendar API and stored in the external calendar. docs/SECURITY.md says Google Calendar is optional and that credentials belong in environment variables, but it does not explicitly describe this transfer of prospect data.
+I recommend changing the event to something like:
+{
+  summary: "Ledgerwise sales call",
+  description: `Internal booking reference: ${bookingId}`,
+}
+
+If the sales team needs a human-readable identifier, use the company name only after deciding that this disclosure is acceptable. The email address is not necessary for event synchronization.
+The token handling is comparatively restrained:
+
+google.ts reads credentials from server-side environment variables.
+It does not send credentials to the browser.
+It does not log access tokens or refresh tokens.
+It reports HTTP status codes rather than printing the raw Google response body.
+recordGoogleSync() logs a Supabase error message, but not the Google credentials.
+
+The main security concern is therefore the data included in the event, plus the fact that the refresh token is a long-lived secret held in environment configuration.
+Google OAuth scope: is calendar.events enough?
+Yes, for the current implementation
+The current integration only needs to create, update and delete events. Google lists https://www.googleapis.com/auth/calendar.events as an accepted scope for all three relevant event operations. It does not need the much broader calendar scope. 
+For the current integration, request:
+https://www.googleapis.com/auth/calendar.events
+
+If you later add availability checks, request an additional FreeBusy scope rather than broadening to full calendar access without a reason.
+
+4. First-time Google setup guide
+Recommended account arrangement
+For this single-team internal prototype, I recommend one dedicated sales calendar, owned by one account, with Ledgerwise synchronizing to that calendar.
+There are three viable authorization approaches:
+
+
+
+Approach
+Best fit
+Assessment
+
+
+
+Google Workspace internal OAuth app
+Team members use the same Workspace organization
+Recommended
+
+
+External OAuth app in production
+A consumer Gmail account or users outside one Workspace organization
+Works, but requires attention to Google's verification rules for sensitive scopes
+
+
+Service account with a shared calendar
+A single shared calendar, no prospect invitations
+Viable alternative; requires sharing the calendar with the service account
+
+
+For an internal Workspace app, select the Internal audience. This is only available when the Cloud project belongs to a Google Workspace organization. Internal apps are restricted to users in that organization. 
+A service account can be appropriate for a shared calendar if you share that calendar with its service-account email and give it permission to modify events. Do not introduce domain-wide delegation just to create events on one shared calendar. Google specifically notes that service accounts need domain-wide delegation to populate event attendees. 
+Important: the seven-day refresh-token issue
+Your suspicion is correct, with an important qualification.
+Google states that an OAuth application configured as External and left in Testing issues refresh tokens that expire after seven days when the requested scopes go beyond basic profile information. calendar.events is beyond those basic profile scopes, so this limitation applies. 
+That means an external Testing app is unsuitable for unattended long-term synchronization.
+For Ledgerwise:
+
+If you have Workspace, prefer an Internal app.
+If you use a personal Gmail account, do not assume Testing will provide a permanent token.
+For an External app, investigate publishing to Production and the applicable OAuth verification requirements.
+A service account with a shared calendar avoids the user refresh-token lifecycle altogether, but changes the calendar ownership and sharing arrangement.
+
+Even production refresh tokens can be revoked or expire under other conditions, so the application still needs to handle reauthorization. 
+Step 1 — Create a Google Cloud project
+
+Open Google Cloud Console.
+Select the project selector at the top.
+Choose New Project.
+Name it Ledgerwise Calendar.
+Select the Workspace organization if applicable.
+Create the project and make sure it is selected.
+
+Step 2 — Enable Google Calendar API
+
+Open APIs & Services → Library.
+Search for Google Calendar API.
+Open it.
+Click Enable.
+
+Direct link: Google Calendar API library.
+Step 3 — Configure OAuth consent
+Open Google Auth Platform.
+
+Go to Branding.
+Enter the application name, support email and developer contact email.
+Go to Audience.
+Choose:
+Internal if all users belong to your Workspace organization.
+External otherwise.
+
+
+If External and Testing, add your Google account under Test users.
+Go to Data Access.
+Add:
+
+https://www.googleapis.com/auth/calendar.events
+
+Google recommends requesting the narrowest scopes needed. 
+Step 4 — Create OAuth credentials
+
+Open Google Auth Platform → Clients, or APIs & Services → Credentials, depending on the current Console layout.
+Select Create Client.
+Choose Web application.
+Give it the name Ledgerwise Calendar Client.
+For the OAuth Playground method below, add this Authorized Redirect URI:
+
+https://developers.google.com/oauthplayground
+
+
+Create the client.
+Copy the Client ID and Client Secret.
+
+Keep both private.
+Step 5 — Generate a refresh token using OAuth Playground
+Open Google OAuth 2.0 Playground.
+
+Click the settings icon.
+Enable Use your own OAuth credentials.
+Paste the Client ID and Client Secret from Step 4.
+Set access type to Offline if that option is shown.
+In Step 1, enter:
+
+https://www.googleapis.com/auth/calendar.events
+
+
+Authorize the APIs.
+Sign in using the account that owns or has write access to the target calendar.
+Approve the requested access.
+In Step 2, exchange the authorization code for tokens.
+Copy the refresh token from the response.
+
+The refresh token must be kept secret. Do not paste it into this chat, a GitHub issue, or a public file.
+Google documents offline access as the mechanism for obtaining refresh tokens that let a server obtain new access tokens without the user being present. 
+Step 6 — Find your Calendar ID
+Open Google Calendar.
+
+Open the calendar's settings.
+Select Settings and sharing for the intended calendar.
+Find Integrate calendar.
+Copy its Calendar ID.
+
+For the primary calendar of the authenticated account, the Calendar API also accepts primary. 
+Step 7 — Add the environment variables
+In your local project, edit .env.local:
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REFRESH_TOKEN=your-refresh-token
+GOOGLE_CALENDAR_ID=your-calendar-id
+
+GOOGLE_CALENDAR_VERIFIED=0
+GOOGLE_CALENDAR_SYNC=0
+
+Do not add NEXT_PUBLIC_ to any Google secret.
+On Vercel:
+
+Open the Ledgerwise project.
+Go to Settings → Environment Variables.
+Add the same six variables.
+Keep the two switches at 0 for now.
+Select the intended environments.
+Redeploy after adding or changing environment variables.
+
+Important implementation issue: googleCalendarStatus() requires both switches to equal 1 before syncBookingToGoogle() will make a real API call. Therefore, the current application cannot perform its own first real test while both flags remain 0.
+I would add a separate verification script before changing the flags. It should use getGoogleAccessToken() directly, create a temporary event, patch it, delete it, and report the results without setting either flag.
+Only after all three operations succeed should you change:
+GOOGLE_CALENDAR_VERIFIED=1
+GOOGLE_CALENDAR_SYNC=1
+
+Restart the local server or redeploy Vercel so the new environment is loaded.
+
+
+ChatGPT:
+
+5. Manual verification checklist
+First, create a dedicated test calendar or use a clearly identified test event. Do not test by modifying a real sales appointment.
+Before the test, make sure migrations 01–05 are in the intended state and that the RPC permission checks pass.
+Database query to inspect a booking
+Use this after each operation, replacing the booking UUID:
+select
+  id,
+  status,
+  slot_id,
+  google_event_id,
+  calendar_sync_status,
+  calendar_synced_at
+from public.bookings
+where id = 'YOUR-BOOKING-UUID';
+
+For each successful Google operation, compare the database row with the event in Google Calendar.
+Test 1 — Create
+
+Create a future internal slot.
+Book it with a test contact.
+Check the internal booking.
+Open the configured Google Calendar.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking exists with pending status
+
+
+Google Calendar
+One new event at the correct date, time and timezone
+
+
+google_event_id
+Populated with the Google event ID
+
+
+calendar_sync_status
+synced
+
+
+calendar_synced_at
+Set to the time of the sync attempt
+
+
+Confirm the Google event ID corresponds to the event you see in Google Calendar.
+Test 2 — Update / reschedule
+
+Create another available slot at a different time.
+Reschedule the booking to that slot.
+Check the original Google event.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking references the new slot
+
+
+Google Calendar
+The existing event moves to the new time
+
+
+google_event_id
+Remains the same
+
+
+calendar_sync_status
+synced
+
+
+calendar_synced_at
+Updated
+
+
+There should still be exactly one event, not a second event.
+Test 3 — Delete / cancel
+
+Cancel the booking.
+Check the Google Calendar.
+Query the booking again.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking status becomes cancelled
+
+
+Google Calendar
+Linked event is removed
+
+
+google_event_id
+NULL
+
+
+calendar_sync_status
+deleted
+
+
+calendar_synced_at
+Updated
+
+
+Test 4 — Force a Google-side failure
+Use a test-only invalid calendar ID in a local environment, or temporarily revoke the test account's access to the calendar.
+
+Keep the internal calendar database available.
+Attempt to create a booking.
+Inspect the returned action result.
+Query the booking.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking still exists
+
+
+Google Calendar
+No event created
+
+
+google_event_id
+NULL
+
+
+calendar_sync_status
+failed
+
+
+calendar_synced_at
+Updated if metadata recording succeeds
+
+
+The action should report that the internal booking succeeded but Google synchronization failed.
+This test is particularly important because a Google failure must not roll back an internal booking.
+Test 5 — Retry
+
+Restore the correct calendar ID or permissions.
+Retry synchronization.
+Check that the event appears exactly once.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Same internal booking
+
+
+Google Calendar
+Exactly one event
+
+
+google_event_id
+Populated
+
+
+calendar_sync_status
+synced
+
+
+calendar_synced_at
+Updated
+
+
+The current code does not guarantee this last test will pass. The retry can create duplicates because event creation is not idempotent. That is why I would fix the duplicate/orphan problem before treating the checklist as a release test.
+Test 6 — Simulate a missing Google event
+This tests the PATCH 404/410 defect:
+
+Create and sync a booking.
+Manually delete the Google event.
+Reschedule the internal booking.
+Inspect the result.
+
+Current behavior: the PATCH fails, the booking remains rescheduled internally, and the database retains the old Google event ID with a failed status.
+Desired behavior: Ledgerwise detects the missing event, creates a replacement event, saves its new ID, and reports synced.
+
+6. Prioritized implementation plan
+I would do this in small batches, in this order.
+Priority 1 — Establish and document the correct database state
+Blocking
+Files:
+
+supabase/unapplied/README.md
+supabase/unapplied/20261114_04_transactional_calendar_operations.sql
+supabase/unapplied/20261114_05_calendar_security_corrections.sql
+docs/MIGRATION_INSTRUCTIONS.md
+
+Changes:
+
+Run the SQL inspection queries above.
+Confirm migrations 01–03 are applied.
+Confirm migration 04 functions and grants.
+Confirm migration 05 suppression and audit policies.
+Correct the README to say the current application already uses these RPCs.
+Record the actual migration state in the project documentation.
+
+Do not remove the unapplied directory until you have confirmed what the live database contains. The files' location alone does not establish whether they were run manually.
+Tests:
+
+Create and delete an unused slot.
+Book a slot.
+Confirm, reschedule and cancel a booking.
+Confirm a suppressed contact cannot be booked.
+Confirm a signed-out user cannot execute the RPCs.
+
+Priority 2 — Add deterministic event IDs
+Blocking
+File: lib/calendar/google.ts
+The current POST has no stable identifier, so every retry can create another event.
+Google permits the client to specify an event ID when inserting an event, subject to its ID format requirements. A stable ID can therefore make retries recoverable. 
+I recommend deriving a deterministic ID from the internal booking UUID:
+import { createHash } from "node:crypto";
+
+export function googleEventIdForBooking(bookingId: string): string {
+  return createHash("sha256")
+    .update(`ledgerwise-calendar:${bookingId}`)
+    .digest("hex");
+}
+
+The hexadecimal characters are valid within Google's documented base32hex character set.
+Change syncBookingToGoogle() so the POST body includes:
+{
+  ...buildGoogleEvent(input),
+  id: googleEventIdForBooking(bookingId),
+  extendedProperties: {
+    private: {
+      ledgerwiseBookingId: bookingId,
+    },
+  },
+}
+
+This requires adding bookingId to the event input.
+On a 409 Conflict, do not blindly report failure or create a different ID. Fetch the event using the deterministic ID, check its private booking reference, and treat it as the already-created event if it belongs to that booking.
+This addresses the case where Google created the event but the response was lost or the database update failed.
+Tests:
+
+Two create attempts for the same booking must result in one event.
+A simulated lost response followed by retry must recover the existing event.
+A conflicting ID belonging to another booking must not be accepted.
+
+Priority 3 — Recover from missing events during PATCH
+File: lib/calendar/google.ts
+Add an explicit missing-event result instead of treating every non-success response as a generic failure.
+For example:
+type GoogleMutationResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced" }
+  | { status: "not_found" }
+  | { status: "failed"; error: string };
+
+In googleMutation():
+if (method === "PATCH" && (response.status === 404 || response.status === 410)) {
+  return { status: "not_found" };
+}
+
+Then in rescheduleBooking():
+
+Try to patch the linked event.
+If it is missing, create a replacement with the deterministic booking event ID.
+Save the resulting event ID and status.
+If recovery fails, retain the internal booking and report a failed sync.
+
+Do not clear an existing ID for a generic network failure: the event may still exist.
+Tests:
+
+PATCH 404 causes a replacement create.
+PATCH 410 causes a replacement create.
+Replacement success stores the new event ID.
+Replacement failure leaves the internal booking intact.
+
+Priority 4 — Make Google synchronization recoverable when Supabase fails
+Files:
+
+app/(dashboard)/calendar/actions.ts
+lib/calendar/google.ts
+A new migration, for example supabase/unapplied/20261115_06_google_calendar_sync_recovery.sql
+
+This is the most important production reliability improvement.
+The present recordGoogleSync() only logs a metadata-write failure. It has no recovery mechanism.
+I recommend adding a small synchronization job/outbox table with:
+
+booking_id
+operation (create, update, delete)
+status (pending, processing, synced, failed)
+attempt_count
+last_error
+next_attempt_at
+created_at
+updated_at
+
+The internal booking mutation and outbox record should be written in the same database transaction.
+Then a worker processes the outbox:
+
+Reads pending work.
+Calls Google.
+Saves the event ID and sync status.
+Marks the job complete.
+Retries failures with backoff.
+
+The Google API must remain outside the database transaction. Do not hold a database lock open while waiting for Google.
+This preserves your rule: the internal booking is authoritative, and Google failures never roll it back.
+For the prototype, a manually triggered retry action is a smaller first step. For production reliability, use the outbox.
+Priority 5 — Minimize Google event data
+Files:
+
+app/(dashboard)/calendar/actions.ts
+docs/SECURITY.md
+docs/GOOGLE_CALENDAR.md
+
+Replace the current event description containing the prospect email and company UUID with a minimal internal reference.
+For example:
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: "Ledgerwise sales call",
+    description: `Internal booking reference: ${booking.id}`,
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+
+Then update the security documentation to state explicitly:
+
+What information is sent to Google.
+That the integration does not currently invite prospects.
+That Google is a separate external data processor.
+Where the OAuth refresh token is stored.
+How access can be revoked.
+
+Priority 6 — Create the missing provider documentation and real verification script
+Files:
+
+docs/PROVIDER_SETUP.md — new.
+docs/GOOGLE_CALENDAR.md
+scripts/verify-google-calendar.mjs — new.
+app/(dashboard)/settings/integrations/page.tsx
+
+The verification script should:
+
+Load .env.local using @next/env.
+Obtain an access token using getGoogleAccessToken().
+Create a temporary event.
+Patch its title.
+Delete it.
+Verify the responses.
+Print success/failure without printing credentials.
+Attempt cleanup if an earlier step fails.
+
+This avoids the circular problem where both flags must be enabled before the application can test Google.
+Only after the script succeeds should you set GOOGLE_CALENDAR_VERIFIED=1 and GOOGLE_CALENDAR_SYNC=1.
+Also change the integrations page's wording so it distinguishes:
+
+Credentials present.
+OAuth test passed.
+Sync enabled.
+
+The current page reports environment-variable presence only; it should never be presented as a provider health check.
+Priority 7 — Add availability checking
+Files:
+
+lib/calendar/google.ts
+app/(dashboard)/calendar/actions.ts
+Possibly lib/calendar/time.ts
+
+If the team uses the connected Google calendar for meetings outside Ledgerwise, the internal slots can conflict with those meetings.
+Add a Google FreeBusy request before making slots available or before offering them for booking.
+This is not required to make one-way event synchronization work, but it is required if Ledgerwise is expected to avoid conflicts with existing Google appointments.
+Use the narrow FreeBusy scope if implementing this.
+Priority 8 — Optional meeting and two-way functionality
+Only after the above is stable:
+
+Add attendees if the business wants prospect invitations.
+Add Google Meet using conferenceData.createRequest and conferenceDataVersion=1.
+Add Google push notifications or incremental sync if Google-side event changes must update Ledgerwise.
+Consider per-user calendars only if the product becomes a multi-user sales team with separate calendars.
+
+Google supports conference creation through the event resource, but requires a unique conference request per event to avoid sharing meeting details accidentally. 
+
+
+
+ChatGPT:
+Ledgerwise Google Calendar integration audit
+1. Verdict
+Not yet production-ready
+The project has a reasonably complete one-way Google Calendar synchronization implementation, but it is not yet a verified integration. The internal calendar is correctly designed as the source of truth, and the application handles Google API failures without intentionally rolling back internal bookings. However, there is a critical mismatch between the application and the migration documentation: calendar/actions.ts already calls seven RPC functions defined in migration 04, while supabase/unapplied/README.md claims the application does not call them. If migration 04 is absent from the live database, calendar mutations will fail. If it is present, its direct-write revocations make the RPC path essential. Beyond that, the most serious correctness problem is the possibility of orphaned Google events: Google can successfully create an event, but if saving its ID to Supabase fails, Ledgerwise loses the reference needed to update or delete it.
+My assessment: the integration is structurally close, but database state, recovery/idempotency, real OAuth verification and security configuration must be resolved before enabling it.
+I inspected the supplied ZIP, including the calendar implementation, migrations, tests and documentation. I distinguish below between what the files prove and what still requires checking against the actual Supabase database or a real Google account.
+2. Findings on the two suspected problems
+Problem 1 — Migration 04/05 versus the application
+Confirmed code/documentation mismatch
+Your suspicion is correct. The README is stale relative to the supplied application code.
+In app/(dashboard)/calendar/actions.ts, the application calls all seven functions:
+
+
+
+Function
+Called by
+Defined in migration 04
+
+
+
+create_calendar_slot
+createSlot()
+Yes
+
+
+delete_calendar_slot
+deleteSlot()
+Yes
+
+
+book_slot
+bookSlot()
+Yes
+
+
+confirm_booking
+confirmBooking()
+Yes
+
+
+cancel_booking
+cancelBooking()
+Yes
+
+
+reschedule_booking
+rescheduleBooking()
+Yes
+
+
+record_google_calendar_sync
+recordGoogleSync()
+Yes
+
+
+The calls are visible at lines 115, 159, 185, 279, 343, 393 and 469 respectively.
+But supabase/unapplied/README.md says:
+
+The app does NOT call them yet.
+
+That statement is contradicted by the actual source code.
+What happens if migration 04 is absent?
+
+Creating a slot fails.
+Deleting a slot fails.
+Creating a booking fails.
+Confirming a booking fails.
+Cancelling a booking fails.
+Rescheduling a booking fails.
+Recording Google synchronization metadata fails.
+
+The read-only calendar page may still display existing slots and bookings if migrations 02 and 03 are present, but the mutation workflow cannot work correctly.
+A particularly important detail: bookSlot() calls book_slot before calling Google. Therefore, if the RPC is missing, no new Google event is attempted either.
+What happens if migration 04 is present?
+The application and database design become consistent:
+
+Calendar mutations go through SECURITY DEFINER functions.
+The functions use auth.uid() to require an authenticated caller.
+A shared transaction-scoped advisory lock serializes calendar mutations.
+Direct INSERT, UPDATE and DELETE privileges on calendar_slots and bookings are revoked from authenticated and anon.
+Authenticated users retain SELECT access.
+The seven RPCs receive EXECUTE permission for authenticated.
+
+This is a deliberate security design, not a reason to restore direct table writes.
+Migration 04 also revokes direct audit-log mutations and grants authenticated users SELECT, INSERT. The application has other audit-log insertions, including lib/server/audit.ts and the prospect-import actions, so these permissions and the RLS policies must remain compatible.
+Migration 05 matters too.
+20261114_05_calendar_security_corrections.sql:
+
+Removes direct authenticated inserts into suppressed_contacts.
+Requires suppression to go through suppress_contact.
+Requires audit inserts to use actor_id = auth.uid().
+Makes suppression use the same advisory lock as calendar operations.
+
+That shared lock is important: without migration 05, a suppression operation and a booking operation can race. A booking could pass its suppression check while an opt-out is being recorded.
+lib/suppression.ts already uses the suppress_contact RPC, so migration 05 is consistent with the current application.
+Which database state should you be in?
+The intended state for this code is:
+
+
+
+Migration
+Intended state
+
+
+
+01 — Source verification and security
+Applied
+
+
+02 — Calendar source and booking
+Applied
+
+
+03 — Google Calendar metadata
+Applied
+
+
+04 — Transactional calendar operations
+Applied
+
+
+05 — Calendar security corrections
+Applied
+
+
+However, the ZIP cannot establish what is actually installed in your Supabase database. The unapplied directory is a project-file classification, not a live database inspection.
+Do not blindly run migrations 04 and 05 again or assume they are missing. First inspect the database.
+Run this in Supabase SQL Editor:
+-- 1. Check that all seven calendar RPCs exist
+select
+  p.proname,
+  pg_get_function_identity_arguments(p.oid) as arguments,
+  p.prosecdef as security_definer,
+  has_function_privilege(
+    'authenticated',
+    p.oid,
+    'EXECUTE'
+  ) as authenticated_can_execute
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in (
+    'create_calendar_slot',
+    'delete_calendar_slot',
+    'book_slot',
+    'confirm_booking',
+    'cancel_booking',
+    'reschedule_booking',
+    'record_google_calendar_sync'
+  )
+order by p.proname;
+
+-- 2. Check direct table permissions
+select
+  has_table_privilege(
+    'authenticated',
+    'public.calendar_slots',
+    'INSERT'
+  ) as can_insert_slots,
+  has_table_privilege(
+    'authenticated',
+    'public.calendar_slots',
+    'UPDATE'
+  ) as can_update_slots,
+  has_table_privilege(
+    'authenticated',
+    'public.calendar_slots',
+    'DELETE'
+  ) as can_delete_slots,
+  has_table_privilege(
+    'authenticated',
+    'public.bookings',
+    'INSERT'
+  ) as can_insert_bookings,
+  has_table_privilege(
+    'authenticated',
+    'public.bookings',
+    'UPDATE'
+  ) as can_update_bookings,
+  has_table_privilege(
+    'authenticated',
+    'public.bookings',
+    'DELETE'
+  ) as can_delete_bookings;
+
+-- 3. Check required Google metadata columns
+select
+  table_name,
+  column_name,
+  data_type
+from information_schema.columns
+where table_schema = 'public'
+  and (
+    (table_name = 'bookings' and column_name in (
+      'google_event_id',
+      'calendar_sync_status',
+      'calendar_synced_at'
+    ))
+    or
+    (table_name = 'calendar_slots' and column_name = 'google_calendar_id')
+  )
+order by table_name, column_name;
+
+Expected for the final design:
+
+Seven RPCs exist.
+Each is SECURITY DEFINER.
+Authenticated users can execute them.
+Direct mutation privileges on calendar_slots and bookings are false.
+All four Google metadata columns exist.
+
+If any RPC is missing, or its execution permission is false, the database is not in the intended state.
+Safe application order: verify 01–03, inspect existing data and permissions, then apply/reconcile 04, verify all seven RPCs and grants, then apply/reconcile 05 and test suppression plus booking concurrency. Test this on a staging database before touching the live one.
+One further detail: migration 04 does not contain an explicit BEGIN/COMMIT wrapper, unlike migration 05. I would review its execution as a single controlled database change and verify the entire set of functions and grants afterward.
+Problem 2 — Missing docs/PROVIDER_SETUP.md
+Confirmed missing file
+I checked the archive contents. There is no docs/PROVIDER_SETUP.md.
+Yet app/(dashboard)/settings/integrations/page.tsx explicitly tells the operator to follow that file. The integrations page also only checks whether the Google environment variables and both flags are present. It does not validate the OAuth grant or make a test request.
+The missing document should contain:
+
+Google Cloud project creation.
+Google Calendar API activation.
+OAuth consent configuration.
+OAuth client creation.
+How to obtain a refresh token with offline access.
+How to identify the correct Calendar ID.
+Where the four credentials and two flags belong.
+A real create/update/delete test before enabling normal synchronization.
+Troubleshooting for expired/revoked refresh tokens, insufficient permissions and invalid calendar IDs.
+
+I'll provide the exact setup sequence below.
+3. Gap analysis
+The distinction here is between the existing code and what is actually proven to work.
+Must-fix before calling it operational
+
+
+
+Gap
+Evidence in the supplied files
+Required correction
+
+
+
+Database migration state unknown
+Migrations 04/05 are under supabase/unapplied/, while actions.ts calls their functions
+Inspect live RPCs, privileges, columns and policies. Reconcile the migration state before testing.
+
+
+OAuth has no connection flow
+lib/calendar/google.ts only exchanges a pre-existing refresh token
+Obtain a durable refresh token safely, or implement an OAuth connection/callback flow.
+
+
+No real provider verification
+googleCalendarStatus() trusts two environment flags
+Add an actual connection/event lifecycle test. The flags are operator attestations, not proof of connectivity.
+
+
+Duplicate creation possible
+syncBookingToGoogle() always sends a new POST
+Use a deterministic event ID and safe conflict recovery.
+
+
+Orphan events possible
+recordGoogleSync() only logs an error if the metadata RPC fails
+Ensure a successful Google creation can be recovered even if Supabase fails to save its event ID.
+
+
+Missing-event reschedule recovery
+googleMutation() treats 404/410 as failure for PATCH
+Detect a missing event and recreate it safely, recording its new ID.
+
+
+No reliable retry workflow
+confirmBooking() retries only under certain booking states; no dedicated sync retry action or durable job exists
+Add a manual retry initially, then a durable retry/outbox mechanism for production.
+
+
+Prospect PII sent to Google
+bookSlot() and bookingEventInput() send the prospect's full name and email in event text
+Minimize event content and explicitly document what leaves Supabase.
+
+
+Should-fix before a wider deployment
+
+
+
+Gap
+Current position
+Recommendation
+
+
+
+Timezone and DST
+lib/calendar/time.ts has a good IANA timezone conversion and explicitly rejects ambiguous/nonexistent DST times. Unit tests cover both transitions.
+Keep this implementation. Add real Google tests for dates around DST transitions and verify that the displayed time matches the internal slot.
+
+
+Google calendar availability
+Slots are checked against Ledgerwise's own database, not the Google calendar's existing events.
+Add a FreeBusy check before offering a slot if the connected calendar is also used for other appointments.
+
+
+Calendar permissions
+No code checks whether the configured calendar ID is writable.
+Validate the target calendar and permissions during connection verification.
+
+
+Token lifecycle
+Refresh token is a static environment variable. No refresh-token revocation or reconnection UX exists.
+Add clear failure states and a documented reauthorization procedure.
+
+
+Sync state semantics
+record_google_calendar_sync updates calendar_synced_at on failed and not-configured states too.
+Treat it as the last sync attempt, or rename it. Consider separate last_attempt_at and last_success_at.
+
+
+Synchronous API calls
+Booking actions wait for Google API calls, each with a 20-second timeout.
+Move retries to a background worker or scheduled job once the prototype needs dependable recovery.
+
+
+Database concurrency
+Migration 04 serializes mutations using an advisory lock; migration 05 makes suppression use the same lock.
+Test concurrent booking, rescheduling and opt-out operations against a real database.
+
+
+Nice-to-have
+
+
+
+Feature
+Current position
+Recommendation
+
+
+
+Attendee invitations
+No attendees property is sent.
+Add only when the team explicitly wants Google Calendar invitations sent to prospects.
+
+
+Google Meet
+No conferenceData is created.
+Add a unique Meet conference per appointment if remote calls are required.
+
+
+Two-way sync
+Google-side changes are not imported into Ledgerwise.
+Consider push notifications and incremental synchronization only if Google-side edits should affect internal bookings.
+
+
+Per-user calendars
+One GOOGLE_CALENDAR_ID is configured globally.
+Keep one shared sales calendar for this single-team prototype. Per-user calendars require a different authorization and ownership model.
+
+
+Calendar settings UI
+Credentials and flags are configured manually.
+Eventually replace manual environment-variable management with an administrator connection screen.
+
+
+Specific correctness findings
+Timezones and DST — mostly good.
+zonedDateTimeToIso() converts a local wall-clock time to a UTC instant, and rejects DST gaps and overlaps rather than silently selecting the wrong instant. buildGoogleEvent() then sends the UTC timestamp plus its IANA timezone.
+That is the correct general approach for timed events. I do not see an obvious timezone conversion defect in these files. The remaining uncertainty is real-account behavior, not the basic conversion logic.
+Duplicate events and orphan events — a real defect.
+The sequence in bookSlot() is:
+
+Create the internal booking using book_slot.
+Call syncBookingToGoogle().
+Call recordGoogleSync() to save the Google event ID.
+
+If step 2 succeeds and step 3 fails, the internal booking remains, but the database has no google_event_id.
+Then:
+
+cancelBooking() skips Google deletion because it only deletes when booking.google_event_id exists.
+confirmBooking() may try creating another event if the booking is still pending and has no event ID.
+rescheduleBooking() also creates an event if there is no event ID.
+
+A retry can therefore create a duplicate, while cancellation can leave the original event behind.
+This is not hypothetical behavior: the current code has no idempotency key, deterministic event ID or reconciliation mechanism.
+PATCH 404/410 — confirmed defect.
+googleMutation() treats 404 and 410 as success only when method === "DELETE".
+For a missing event during rescheduling:
+
+PATCH returns failed.
+recordGoogleSync() receives a failed result.
+The existing event ID is preserved because the RPC only replaces it when a new non-null ID is supplied.
+Future reschedule attempts keep trying to patch the same missing event.
+
+That needs a recovery path.
+Security and event content — needs attention.
+The actual event content is more revealing than the documentation suggests:
+
+summary: Ledgerwise call: Jane Doe
+description: prospect name, prospect email, company UUID and a Ledgerwise note.
+
+No prices or pricing promises are sent. No attendee list is sent, so the current code does not invite the prospect or send them an invitation.
+However, the prospect's name and email are sent to Google's Calendar API and stored in the external calendar. docs/SECURITY.md says Google Calendar is optional and that credentials belong in environment variables, but it does not explicitly describe this transfer of prospect data.
+I recommend changing the event to something like:
+{
+  summary: "Ledgerwise sales call",
+  description: `Internal booking reference: ${bookingId}`,
+}
+
+If the sales team needs a human-readable identifier, use the company name only after deciding that this disclosure is acceptable. The email address is not necessary for event synchronization.
+The token handling is comparatively restrained:
+
+google.ts reads credentials from server-side environment variables.
+It does not send credentials to the browser.
+It does not log access tokens or refresh tokens.
+It reports HTTP status codes rather than printing the raw Google response body.
+recordGoogleSync() logs a Supabase error message, but not the Google credentials.
+
+The main security concern is therefore the data included in the event, plus the fact that the refresh token is a long-lived secret held in environment configuration.
+Google OAuth scope: is calendar.events enough?
+Yes, for the current implementation
+The current integration only needs to create, update and delete events. Google lists https://www.googleapis.com/auth/calendar.events as an accepted scope for all three relevant event operations. It does not need the much broader calendar scope. 
+For the current integration, request:
+https://www.googleapis.com/auth/calendar.events
+
+If you later add availability checks, request an additional FreeBusy scope rather than broadening to full calendar access without a reason.
+
+4. First-time Google setup guide
+Recommended account arrangement
+For this single-team internal prototype, I recommend one dedicated sales calendar, owned by one account, with Ledgerwise synchronizing to that calendar.
+There are three viable authorization approaches:
+
+
+
+Approach
+Best fit
+Assessment
+
+
+
+Google Workspace internal OAuth app
+Team members use the same Workspace organization
+Recommended
+
+
+External OAuth app in production
+A consumer Gmail account or users outside one Workspace organization
+Works, but requires attention to Google's verification rules for sensitive scopes
+
+
+Service account with a shared calendar
+A single shared calendar, no prospect invitations
+Viable alternative; requires sharing the calendar with the service account
+
+
+For an internal Workspace app, select the Internal audience. This is only available when the Cloud project belongs to a Google Workspace organization. Internal apps are restricted to users in that organization. 
+A service account can be appropriate for a shared calendar if you share that calendar with its service-account email and give it permission to modify events. Do not introduce domain-wide delegation just to create events on one shared calendar. Google specifically notes that service accounts need domain-wide delegation to populate event attendees. 
+Important: the seven-day refresh-token issue
+Your suspicion is correct, with an important qualification.
+Google states that an OAuth application configured as External and left in Testing issues refresh tokens that expire after seven days when the requested scopes go beyond basic profile information. calendar.events is beyond those basic profile scopes, so this limitation applies. 
+That means an external Testing app is unsuitable for unattended long-term synchronization.
+For Ledgerwise:
+
+If you have Workspace, prefer an Internal app.
+If you use a personal Gmail account, do not assume Testing will provide a permanent token.
+For an External app, investigate publishing to Production and the applicable OAuth verification requirements.
+A service account with a shared calendar avoids the user refresh-token lifecycle altogether, but changes the calendar ownership and sharing arrangement.
+
+Even production refresh tokens can be revoked or expire under other conditions, so the application still needs to handle reauthorization. 
+Step 1 — Create a Google Cloud project
+
+Open Google Cloud Console.
+Select the project selector at the top.
+Choose New Project.
+Name it Ledgerwise Calendar.
+Select the Workspace organization if applicable.
+Create the project and make sure it is selected.
+
+Step 2 — Enable Google Calendar API
+
+Open APIs & Services → Library.
+Search for Google Calendar API.
+Open it.
+Click Enable.
+
+Direct link: Google Calendar API library.
+Step 3 — Configure OAuth consent
+Open Google Auth Platform.
+
+Go to Branding.
+Enter the application name, support email and developer contact email.
+Go to Audience.
+Choose:
+Internal if all users belong to your Workspace organization.
+External otherwise.
+
+
+If External and Testing, add your Google account under Test users.
+Go to Data Access.
+Add:
+
+https://www.googleapis.com/auth/calendar.events
+
+Google recommends requesting the narrowest scopes needed. 
+Step 4 — Create OAuth credentials
+
+Open Google Auth Platform → Clients, or APIs & Services → Credentials, depending on the current Console layout.
+Select Create Client.
+Choose Web application.
+Give it the name Ledgerwise Calendar Client.
+For the OAuth Playground method below, add this Authorized Redirect URI:
+
+https://developers.google.com/oauthplayground
+
+
+Create the client.
+Copy the Client ID and Client Secret.
+
+Keep both private.
+Step 5 — Generate a refresh token using OAuth Playground
+Open Google OAuth 2.0 Playground.
+
+Click the settings icon.
+Enable Use your own OAuth credentials.
+Paste the Client ID and Client Secret from Step 4.
+Set access type to Offline if that option is shown.
+In Step 1, enter:
+
+https://www.googleapis.com/auth/calendar.events
+
+
+Authorize the APIs.
+Sign in using the account that owns or has write access to the target calendar.
+Approve the requested access.
+In Step 2, exchange the authorization code for tokens.
+Copy the refresh token from the response.
+
+The refresh token must be kept secret. Do not paste it into this chat, a GitHub issue, or a public file.
+Google documents offline access as the mechanism for obtaining refresh tokens that let a server obtain new access tokens without the user being present. 
+Step 6 — Find your Calendar ID
+Open Google Calendar.
+
+Open the calendar's settings.
+Select Settings and sharing for the intended calendar.
+Find Integrate calendar.
+Copy its Calendar ID.
+
+For the primary calendar of the authenticated account, the Calendar API also accepts primary. 
+Step 7 — Add the environment variables
+In your local project, edit .env.local:
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REFRESH_TOKEN=your-refresh-token
+GOOGLE_CALENDAR_ID=your-calendar-id
+
+GOOGLE_CALENDAR_VERIFIED=0
+GOOGLE_CALENDAR_SYNC=0
+
+Do not add NEXT_PUBLIC_ to any Google secret.
+On Vercel:
+
+Open the Ledgerwise project.
+Go to Settings → Environment Variables.
+Add the same six variables.
+Keep the two switches at 0 for now.
+Select the intended environments.
+Redeploy after adding or changing environment variables.
+
+Important implementation issue: googleCalendarStatus() requires both switches to equal 1 before syncBookingToGoogle() will make a real API call. Therefore, the current application cannot perform its own first real test while both flags remain 0.
+I would add a separate verification script before changing the flags. It should use getGoogleAccessToken() directly, create a temporary event, patch it, delete it, and report the results without setting either flag.
+Only after all three operations succeed should you change:
+GOOGLE_CALENDAR_VERIFIED=1
+GOOGLE_CALENDAR_SYNC=1
+
+Restart the local server or redeploy Vercel so the new environment is loaded.
+
+5. Manual verification checklist
+First, create a dedicated test calendar or use a clearly identified test event. Do not test by modifying a real sales appointment.
+Before the test, make sure migrations 01–05 are in the intended state and that the RPC permission checks pass.
+Database query to inspect a booking
+Use this after each operation, replacing the booking UUID:
+select
+  id,
+  status,
+  slot_id,
+  google_event_id,
+  calendar_sync_status,
+  calendar_synced_at
+from public.bookings
+where id = 'YOUR-BOOKING-UUID';
+
+For each successful Google operation, compare the database row with the event in Google Calendar.
+Test 1 — Create
+
+Create a future internal slot.
+Book it with a test contact.
+Check the internal booking.
+Open the configured Google Calendar.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking exists with pending status
+
+
+Google Calendar
+One new event at the correct date, time and timezone
+
+
+google_event_id
+Populated with the Google event ID
+
+
+calendar_sync_status
+synced
+
+
+calendar_synced_at
+Set to the time of the sync attempt
+
+
+Confirm the Google event ID corresponds to the event you see in Google Calendar.
+Test 2 — Update / reschedule
+
+Create another available slot at a different time.
+Reschedule the booking to that slot.
+Check the original Google event.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking references the new slot
+
+
+Google Calendar
+The existing event moves to the new time
+
+
+google_event_id
+Remains the same
+
+
+calendar_sync_status
+synced
+
+
+calendar_synced_at
+Updated
+
+
+There should still be exactly one event, not a second event.
+Test 3 — Delete / cancel
+
+Cancel the booking.
+Check the Google Calendar.
+Query the booking again.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking status becomes cancelled
+
+
+Google Calendar
+Linked event is removed
+
+
+google_event_id
+NULL
+
+
+calendar_sync_status
+deleted
+
+
+calendar_synced_at
+Updated
+
+
+Test 4 — Force a Google-side failure
+Use a test-only invalid calendar ID in a local environment, or temporarily revoke the test account's access to the calendar.
+
+Keep the internal calendar database available.
+Attempt to create a booking.
+Inspect the returned action result.
+Query the booking.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Booking still exists
+
+
+Google Calendar
+No event created
+
+
+google_event_id
+NULL
+
+
+calendar_sync_status
+failed
+
+
+calendar_synced_at
+Updated if metadata recording succeeds
+
+
+The action should report that the internal booking succeeded but Google synchronization failed.
+This test is particularly important because a Google failure must not roll back an internal booking.
+Test 5 — Retry
+
+Restore the correct calendar ID or permissions.
+Retry synchronization.
+Check that the event appears exactly once.
+
+Expected:
+
+
+
+Location
+Expected result
+
+
+
+Ledgerwise
+Same internal booking
+
+
+Google Calendar
+Exactly one event
+
+
+google_event_id
+Populated
+
+
+calendar_sync_status
+synced
+
+
+calendar_synced_at
+Updated
+
+
+The current code does not guarantee this last test will pass. The retry can create duplicates because event creation is not idempotent. That is why I would fix the duplicate/orphan problem before treating the checklist as a release test.
+Test 6 — Simulate a missing Google event
+This tests the PATCH 404/410 defect:
+
+Create and sync a booking.
+Manually delete the Google event.
+Reschedule the internal booking.
+Inspect the result.
+
+Current behavior: the PATCH fails, the booking remains rescheduled internally, and the database retains the old Google event ID with a failed status.
+Desired behavior: Ledgerwise detects the missing event, creates a replacement event, saves its new ID, and reports synced.
+
+6. Prioritized implementation plan
+I would do this in small batches, in this order.
+Priority 1 — Establish and document the correct database state
+Blocking
+Files:
+
+supabase/unapplied/README.md
+supabase/unapplied/20261114_04_transactional_calendar_operations.sql
+supabase/unapplied/20261114_05_calendar_security_corrections.sql
+docs/MIGRATION_INSTRUCTIONS.md
+
+Changes:
+
+Run the SQL inspection queries above.
+Confirm migrations 01–03 are applied.
+Confirm migration 04 functions and grants.
+Confirm migration 05 suppression and audit policies.
+Correct the README to say the current application already uses these RPCs.
+Record the actual migration state in the project documentation.
+
+Do not remove the unapplied directory until you have confirmed what the live database contains. The files' location alone does not establish whether they were run manually.
+Tests:
+
+Create and delete an unused slot.
+Book a slot.
+Confirm, reschedule and cancel a booking.
+Confirm a suppressed contact cannot be booked.
+Confirm a signed-out user cannot execute the RPCs.
+
+Priority 2 — Add deterministic event IDs
+Blocking
+File: lib/calendar/google.ts
+The current POST has no stable identifier, so every retry can create another event.
+Google permits the client to specify an event ID when inserting an event, subject to its ID format requirements. A stable ID can therefore make retries recoverable. 
+I recommend deriving a deterministic ID from the internal booking UUID:
+import { createHash } from "node:crypto";
+
+export function googleEventIdForBooking(bookingId: string): string {
+  return createHash("sha256")
+    .update(`ledgerwise-calendar:${bookingId}`)
+    .digest("hex");
+}
+
+The hexadecimal characters are valid within Google's documented base32hex character set.
+Change syncBookingToGoogle() so the POST body includes:
+{
+  ...buildGoogleEvent(input),
+  id: googleEventIdForBooking(bookingId),
+  extendedProperties: {
+    private: {
+      ledgerwiseBookingId: bookingId,
+    },
+  },
+}
+
+This requires adding bookingId to the event input.
+On a 409 Conflict, do not blindly report failure or create a different ID. Fetch the event using the deterministic ID, check its private booking reference, and treat it as the already-created event if it belongs to that booking.
+This addresses the case where Google created the event but the response was lost or the database update failed.
+Tests:
+
+Two create attempts for the same booking must result in one event.
+A simulated lost response followed by retry must recover the existing event.
+A conflicting ID belonging to another booking must not be accepted.
+
+Priority 3 — Recover from missing events during PATCH
+File: lib/calendar/google.ts
+Add an explicit missing-event result instead of treating every non-success response as a generic failure.
+For example:
+type GoogleMutationResult =
+  | { status: "not_configured"; error?: string }
+  | { status: "synced" }
+  | { status: "not_found" }
+  | { status: "failed"; error: string };
+
+In googleMutation():
+if (method === "PATCH" && (response.status === 404 || response.status === 410)) {
+  return { status: "not_found" };
+}
+
+Then in rescheduleBooking():
+
+Try to patch the linked event.
+If it is missing, create a replacement with the deterministic booking event ID.
+Save the resulting event ID and status.
+If recovery fails, retain the internal booking and report a failed sync.
+
+Do not clear an existing ID for a generic network failure: the event may still exist.
+Tests:
+
+PATCH 404 causes a replacement create.
+PATCH 410 causes a replacement create.
+Replacement success stores the new event ID.
+Replacement failure leaves the internal booking intact.
+
+Priority 4 — Make Google synchronization recoverable when Supabase fails
+Files:
+
+app/(dashboard)/calendar/actions.ts
+lib/calendar/google.ts
+A new migration, for example supabase/unapplied/20261115_06_google_calendar_sync_recovery.sql
+
+This is the most important production reliability improvement.
+The present recordGoogleSync() only logs a metadata-write failure. It has no recovery mechanism.
+I recommend adding a small synchronization job/outbox table with:
+
+booking_id
+operation (create, update, delete)
+status (pending, processing, synced, failed)
+attempt_count
+last_error
+next_attempt_at
+created_at
+updated_at
+
+The internal booking mutation and outbox record should be written in the same database transaction.
+Then a worker processes the outbox:
+
+Reads pending work.
+Calls Google.
+Saves the event ID and sync status.
+Marks the job complete.
+Retries failures with backoff.
+
+The Google API must remain outside the database transaction. Do not hold a database lock open while waiting for Google.
+This preserves your rule: the internal booking is authoritative, and Google failures never roll it back.
+For the prototype, a manually triggered retry action is a smaller first step. For production reliability, use the outbox.
+Priority 5 — Minimize Google event data
+Files:
+
+app/(dashboard)/calendar/actions.ts
+docs/SECURITY.md
+docs/GOOGLE_CALENDAR.md
+
+Replace the current event description containing the prospect email and company UUID with a minimal internal reference.
+For example:
+function bookingEventInput(
+  booking: BookingRow,
+  slot: SlotRow,
+  timezone: string
+): GoogleEventInput {
+  return {
+    summary: "Ledgerwise sales call",
+    description: `Internal booking reference: ${booking.id}`,
+    startTime: slot.start_time,
+    endTime: slot.end_time,
+    timezone,
+  };
+}
+
+Then update the security documentation to state explicitly:
+
+What information is sent to Google.
+That the integration does not currently invite prospects.
+That Google is a separate external data processor.
+Where the OAuth refresh token is stored.
+How access can be revoked.
+
+Priority 6 — Create the missing provider documentation and real verification script
+Files:
+
+docs/PROVIDER_SETUP.md — new.
+docs/GOOGLE_CALENDAR.md
+scripts/verify-google-calendar.mjs — new.
+app/(dashboard)/settings/integrations/page.tsx
+
+The verification script should:
+
+Load .env.local using @next/env.
+Obtain an access token using getGoogleAccessToken().
+Create a temporary event.
+Patch its title.
+Delete it.
+Verify the responses.
+Print success/failure without printing credentials.
+Attempt cleanup if an earlier step fails.
+
+This avoids the circular problem where both flags must be enabled before the application can test Google.
+Only after the script succeeds should you set GOOGLE_CALENDAR_VERIFIED=1 and GOOGLE_CALENDAR_SYNC=1.
+Also change the integrations page's wording so it distinguishes:
+
+Credentials present.
+OAuth test passed.
+Sync enabled.
+
+The current page reports environment-variable presence only; it should never be presented as a provider health check.
+Priority 7 — Add availability checking
+Files:
+
+lib/calendar/google.ts
+app/(dashboard)/calendar/actions.ts
+Possibly lib/calendar/time.ts
+
+If the team uses the connected Google calendar for meetings outside Ledgerwise, the internal slots can conflict with those meetings.
+Add a Google FreeBusy request before making slots available or before offering them for booking.
+This is not required to make one-way event synchronization work, but it is required if Ledgerwise is expected to avoid conflicts with existing Google appointments.
+Use the narrow FreeBusy scope if implementing this.
+Priority 8 — Optional meeting and two-way functionality
+Only after the above is stable:
+
+Add attendees if the business wants prospect invitations.
+Add Google Meet using conferenceData.createRequest and conferenceDataVersion=1.
+Add Google push notifications or incremental sync if Google-side event changes must update Ledgerwise.
+Consider per-user calendars only if the product becomes a multi-user sales team with separate calendars.
+
+Google supports conference creation through the event resource, but requires a unique conference request per event to avoid sharing meeting details accidentally. 
+
+Proposed first-time verification script
+This is the small script I would add before enabling the two flags. It uses the existing token helper but deliberately bypasses the sync-enabled check, so it can verify the real Google account without falsely marking the integration verified.
+Create scripts/verify-google-calendar.mjs:
+import { loadEnvConfig } from "@next/env";
+import { randomUUID } from "node:crypto";
+
+loadEnvConfig(process.cwd());
+
+const required = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+];
+
+for (const key of required) {
+  if (!process.env[key]) {
+    throw new Error(`Missing environment variable: ${key}`);
+  }
+}
+
+async function main() {
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!tokenResponse.ok) {
+    throw new Error(`Token exchange failed: HTTP ${tokenResponse.status}`);
+  }
+
+  const { access_token } = await tokenResponse.json();
+
+  if (!access_token) {
+    throw new Error("Google returned no access token.");
+  }
+
+  const calendarId = encodeURIComponent(
+    process.env.GOOGLE_CALENDAR_ID
+  );
+
+  const baseUrl =
+    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`;
+
+  const headers = {
+    Authorization: `Bearer ${access_token}`,
+    "Content-Type": "application/json",
+  };
+
+  const eventId = randomUUID().replaceAll("-", "").toLowerCase();
+
+  const now = Date.now();
+  const start = new Date(now + 10 * 60_000);
+  const end = new Date(now + 40 * 60_000);
+
+  const event = {
+    id: eventId,
+    summary: "Ledgerwise Google Calendar verification",
+    description: "Temporary integration test. Safe to delete.",
+    start: {
+      dateTime: start.toISOString(),
+      timeZone: "UTC",
+    },
+    end: {
+      dateTime: end.toISOString(),
+      timeZone: "UTC",
+    },
+  };
+
+  let created = false;
+
+  try {
+    const createResponse = await fetch(baseUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(event),
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(`Event creation failed: HTTP ${createResponse.status}`);
+    }
+
+    const createdEvent = await createResponse.json();
+    created = true;
+
+    console.log("PASS: Event created.");
+
+    const updateResponse = await fetch(
+      `${baseUrl}/${encodeURIComponent(createdEvent.id)}`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          summary: "Ledgerwise Google Calendar verification — updated",
+        }),
+      }
+    );
+
+    if (!updateResponse.ok) {
+      throw new Error(`Event update failed: HTTP ${updateResponse.status}`);
+    }
+
+    console.log("PASS: Event updated.");
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/${encodeURIComponent(createdEvent.id)}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    );
+
+    if (!deleteResponse.ok && deleteResponse.status !== 404 &&
+        deleteResponse.status !== 410) {
+      throw new Error(`Event deletion failed: HTTP ${deleteResponse.status}`);
+    }
+
+    created = false;
+    console.log("PASS: Event deleted.");
+    console.log("Google Calendar create/update/delete verification succeeded.");
+  } finally {
+    // Clean up if update or another step failed after creation.
+    if (created) {
+      await fetch(`${baseUrl}/${encodeURIComponent(eventId)}`, {
+        method: "DELETE",
+        headers,
+      }).catch(() => {});
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+
+Run it from the project root:
+node scripts/verify-google-calendar.mjs
+
+The generated event ID uses lowercase hexadecimal characters, which satisfy Google's permitted event ID character set. 
+This is a first-pass verification script, not a replacement for the application's eventual OAuth connection flow or its automated integration tests.
+Additional database check for migration 05
+I would also run this after the earlier SQL checks:
+select
+  has_function_privilege(
+    'authenticated',
+    'public.suppress_contact(text,text,uuid)',
+    'EXECUTE'
+  ) as can_execute_suppress_contact,
+  has_table_privilege(
+    'authenticated',
+    'public.suppressed_contacts',
+    'INSERT'
+  ) as can_direct_insert_suppressed,
+  has_table_privilege(
+    'authenticated',
+    'public.audit_logs',
+    'INSERT'
+  ) as can_insert_audit_logs;
+
+Expected:
+
+can_execute_suppress_contact = true
+can_direct_insert_suppressed = false
+can_insert_audit_logs = true
+
+That confirms the intended permission model at the privilege level. The relevant RLS policies should also be inspected.
+
+7. Final priority order
+Here is the order I would actually follow on Ledgerwise:
+
+  
+    **1. Establish database state**
+    Blocking
+  
+  Verify migrations 01–05, RPC existence, permissions and columns.
+  
+  
+    **2. Fix event idempotency**
+    Blocking
+  
+  Prevent duplicate events and recover from lost Google responses.
+  
+  
+    **3. Fix missing-event recovery**
+    Blocking
+  
+  Handle PATCH 404/410 and recreate missing events.
+  
+  
+    **4. Add reliable retry/recovery**
+    Blocking
+  
+  Prevent orphaned events and recover when Supabase metadata writes fail.
+  
+  
+    **5. Minimize external event data**
+    Before real prospect use
+  
+  Remove unnecessary prospect email and company identifiers.
+  
+  
+    **6. Document and verify Google OAuth**
+    Before enabling sync
+  
+  Add `PROVIDER_SETUP.md`, the verification script and real-account tests.
+  
+  
+    **7. Add FreeBusy**
+    Next improvement
+  
+  Avoid conflicts with appointments already in Google Calendar.
+  
+  
+    **8. Meet, attendees and two-way sync**
+    Future scope
+  
+  Only add these if the sales workflow requires them.
+
+
+Final assessment
+There are three different levels of readiness:
+
+
+
+Level
+Assessment
+
+
+
+Internal calendar functionality
+Implemented in code; actual database state still needs confirmation
+
+
+Google API synchronization code
+Implemented, but not verified against a real Google account
+
+
+Production-reliable Google integration
+Not yet achieved
+
+
+The good news is that you do not need to rebuild the calendar integration. The existing architecture is sensible: internal bookings first, optional Google synchronization second.
+The most important work is making synchronization recoverable and proving that the database permissions match the current application.
+My recommendation: do not spend time implementing Google Meet, invitations or two-way synchronization yet. Finish priorities 1–6 first. That gives Ledgerwise a credible, testable, one-way Google Calendar integration without expanding the project's scope unnecessarily.
+For reference, the official Google documentation used for the OAuth and API-specific findings:
+
+Google OAuth 2.0 — refresh-token expiration
+Google Calendar API — authorization scopes
+Google Calendar API — creating events
+Google Calendar API — updating events
+
+
+
+ChatGPT:
+Proposed first-time verification script
+This is the small script I would add before enabling the two flags. It uses the existing token helper but deliberately bypasses the sync-enabled check, so it can verify the real Google account without falsely marking the integration verified.
+Create scripts/verify-google-calendar.mjs:
+import { loadEnvConfig } from "@next/env";
+import { randomUUID } from "node:crypto";
+
+loadEnvConfig(process.cwd());
+
+const required = [
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GOOGLE_REFRESH_TOKEN",
+  "GOOGLE_CALENDAR_ID",
+];
+
+for (const key of required) {
+  if (!process.env[key]) {
+    throw new Error(`Missing environment variable: ${key}`);
+  }
+}
+
+async function main() {
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!tokenResponse.ok) {
+    throw new Error(`Token exchange failed: HTTP ${tokenResponse.status}`);
+  }
+
+  const { access_token } = await tokenResponse.json();
+
+  if (!access_token) {
+    throw new Error("Google returned no access token.");
+  }
+
+  const calendarId = encodeURIComponent(
+    process.env.GOOGLE_CALENDAR_ID
+  );
+
+  const baseUrl =
+    `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`;
+
+  const headers = {
+    Authorization: `Bearer ${access_token}`,
+    "Content-Type": "application/json",
+  };
+
+  const eventId = randomUUID().replaceAll("-", "").toLowerCase();
+
+  const now = Date.now();
+  const start = new Date(now + 10 * 60_000);
+  const end = new Date(now + 40 * 60_000);
+
+  const event = {
+    id: eventId,
+    summary: "Ledgerwise Google Calendar verification",
+    description: "Temporary integration test. Safe to delete.",
+    start: {
+      dateTime: start.toISOString(),
+      timeZone: "UTC",
+    },
+    end: {
+      dateTime: end.toISOString(),
+      timeZone: "UTC",
+    },
+  };
+
+  let created = false;
+
+  try {
+    const createResponse = await fetch(baseUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(event),
+    });
+
+    if (!createResponse.ok) {
+      throw new Error(`Event creation failed: HTTP ${createResponse.status}`);
+    }
+
+    const createdEvent = await createResponse.json();
+    created = true;
+
+    console.log("PASS: Event created.");
+
+    const updateResponse = await fetch(
+      `${baseUrl}/${encodeURIComponent(createdEvent.id)}`,
+      {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({
+          summary: "Ledgerwise Google Calendar verification — updated",
+        }),
+      }
+    );
+
+    if (!updateResponse.ok) {
+      throw new Error(`Event update failed: HTTP ${updateResponse.status}`);
+    }
+
+    console.log("PASS: Event updated.");
+
+    const deleteResponse = await fetch(
+      `${baseUrl}/${encodeURIComponent(createdEvent.id)}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    );
+
+    if (!deleteResponse.ok && deleteResponse.status !== 404 &&
+        deleteResponse.status !== 410) {
+      throw new Error(`Event deletion failed: HTTP ${deleteResponse.status}`);
+    }
+
+    created = false;
+    console.log("PASS: Event deleted.");
+    console.log("Google Calendar create/update/delete verification succeeded.");
+  } finally {
+    // Clean up if update or another step failed after creation.
+    if (created) {
+      await fetch(`${baseUrl}/${encodeURIComponent(eventId)}`, {
+        method: "DELETE",
+        headers,
+      }).catch(() => {});
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error(error.message);
+  process.exitCode = 1;
+});
+
+Run it from the project root:
+node scripts/verify-google-calendar.mjs
+
+The generated event ID uses lowercase hexadecimal characters, which satisfy Google's permitted event ID character set. 
+This is a first-pass verification script, not a replacement for the application's eventual OAuth connection flow or its automated integration tests.
+Additional database check for migration 05
+I would also run this after the earlier SQL checks:
+select
+  has_function_privilege(
+    'authenticated',
+    'public.suppress_contact(text,text,uuid)',
+    'EXECUTE'
+  ) as can_execute_suppress_contact,
+  has_table_privilege(
+    'authenticated',
+    'public.suppressed_contacts',
+    'INSERT'
+  ) as can_direct_insert_suppressed,
+  has_table_privilege(
+    'authenticated',
+    'public.audit_logs',
+    'INSERT'
+  ) as can_insert_audit_logs;
+
+Expected:
+
+can_execute_suppress_contact = true
+can_direct_insert_suppressed = false
+can_insert_audit_logs = true
+
+That confirms the intended permission model at the privilege level. The relevant RLS policies should also be inspected.
+
+7. Final priority order
+Here is the order I would actually follow on Ledgerwise:
+
+  
+    **1. Establish database state**
+    Blocking
+  
+  Verify migrations 01–05, RPC existence, permissions and columns.
+  
+  
+    **2. Fix event idempotency**
+    Blocking
+  
+  Prevent duplicate events and recover from lost Google responses.
+  
+  
+    **3. Fix missing-event recovery**
+    Blocking
+  
+  Handle PATCH 404/410 and recreate missing events.
+  
+  
+    **4. Add reliable retry/recovery**
+    Blocking
+  
+  Prevent orphaned events and recover when Supabase metadata writes fail.
+  
+  
+    **5. Minimize external event data**
+    Before real prospect use
+  
+  Remove unnecessary prospect email and company identifiers.
+  
+  
+    **6. Document and verify Google OAuth**
+    Before enabling sync
+  
+  Add `PROVIDER_SETUP.md`, the verification script and real-account tests.
+  
+  
+    **7. Add FreeBusy**
+    Next improvement
+  
+  Avoid conflicts with appointments already in Google Calendar.
+  
+  
+    **8. Meet, attendees and two-way sync**
+    Future scope
+  
+  Only add these if the sales workflow requires them.
+
+
+Final assessment
+There are three different levels of readiness:
+
+
+
+Level
+Assessment
+
+
+
+Internal calendar functionality
+Implemented in code; actual database state still needs confirmation
+
+
+Google API synchronization code
+Implemented, but not verified against a real Google account
+
+
+Production-reliable Google integration
+Not yet achieved
+
+
+The good news is that you do not need to rebuild the calendar integration. The existing architecture is sensible: internal bookings first, optional Google synchronization second.
+The most important work is making synchronization recoverable and proving that the database permissions match the current application.
+My recommendation: do not spend time implementing Google Meet, invitations or two-way synchronization yet. Finish priorities 1–6 first. That gives Ledgerwise a credible, testable, one-way Google Calendar integration without expanding the project's scope unnecessarily.
+For reference, the official Google documentation used for the OAuth and API-specific findings:
+
+Google OAuth 2.0 — refresh-token expiration
+Google Calendar API — authorization scopes
+Google Calendar API — creating events
+Google Calendar API — updating events
+
+
+
+You:
+I assure you that both migrations 04 and 05 were applied, it is just the md wasn't corrected and the folder is still left as it is
+
+
+ChatGPT:
+That clarifies things. I'll take your confirmation as authoritative: migrations 04 and 05 are already applied to your Supabase database. The unapplied folder and its README are simply outdated project housekeeping.
+That changes my assessment of the integration.
+Corrected database assessment
+Database migrations applied
+Your intended architecture is already in place:
+
+Migration 04 provides the seven transactional calendar RPCs used by calendar/actions.ts.
+Direct authenticated writes to calendar_slots and bookings are revoked.
+Calendar mutations go through the database RPCs.
+Migration 05 applies the additional suppression and audit security corrections.
+The application code is consistent with that architecture.
+
+So migration 04/05 application is no longer a blocking task in our implementation plan.
+What should we correct?
+
+Update supabase/unapplied/README.md to explain that migrations 04 and 05 have been applied.
+Update docs/MIGRATION_INSTRUCTIONS.md to reflect the actual database state.
+Decide whether to move the two SQL files into supabase/migrations/ for repository consistency.
+
+One important detail: if you applied them manually through Supabase SQL Editor rather than through the Supabase CLI, we should check whether their versions are recorded in the migration history before moving them. We don't want a future supabase db push to attempt to apply them again.
+Revised priorities
+The actual remaining Google Calendar priorities are now:
+
+Idempotency: prevent duplicate Google events on retries.
+Orphan recovery: handle Google succeeding while Supabase fails to record the event ID.
+PATCH 404/410: recreate events that have disappeared from Google.
+Real OAuth verification: test the actual account and calendar.
+Data minimization: remove unnecessary prospect information from event descriptions.
+Documentation: create docs/PROVIDER_SETUP.md.
+
+The database migration issue moves to documentation and migration-history housekeeping.
+This is good news: we don't need another calendar database implementation phase. We can concentrate on making the existing Google synchronization reliable.
+
+
+You:
+Nah, focus on the calendar
+
+
+ChatGPT:
+Agreed. We'll leave migration documentation and housekeeping aside.
+We'll focus exclusively on getting Ledgerwise's Google Calendar integration genuinely operational and reliable.
+I suggest we work through these four tasks in order:
+
+  
+    **Prevent duplicate events**
+
+Modify `lib/calendar/google.ts` to use deterministic Google event IDs and recover safely from retries.
+
+Success condition: retrying a booking never creates a second event.
+
+  
+  
+    **Fix orphaned events and synchronization recovery**
+
+Modify `app/(dashboard)/calendar/actions.ts` and the synchronization logic.
+
+Success condition: if Google creates an event but Supabase fails to record its ID, Ledgerwise can recover it. Cancellation must not silently leave an orphan.
+
+  
+  
+    **Fix missing Google events**
+
+Handle `404` and `410` during PATCH operations.
+
+Success condition: rescheduling recreates a deleted Google event instead of remaining permanently failed.
+
+  
+  
+    **Verify the real Google integration**
+
+Configure OAuth, test create/update/delete against a real account, then enable synchronization.
+
+Success condition: a real booking completes the full lifecycle successfully.
+
+  
+
+
+After those, we'll address event-data privacy and the missing provider setup documentation.
+Let's start with Task 1
+I want to work against your current project files, especially since Claude recently changed the research agent and we don't want to overwrite unrelated changes.
+Run this from the Ledgerwise project root:
+sed -n '1,280p' lib/calendar/google.ts
+
+Send me the output.
+We'll inspect the current implementation and make the idempotency fix first, with focused tests before moving to Task 2.
+
+
+You:
+Google Calendar
+Optional event synchronization. The internal Ledgerwise calendar remains the source of truth.
+Needs setup
+Endpoint: https://console.cloud.google.com/apis/credentials
+GOOGLE_CLIENT_IDGOOGLE_CLIENT_SECRETGOOGLE_REFRESH_TOKENGOOGLE_CALENDAR_IDGOOGLE_CALENDAR_VERIFIED=1GOOGLE_CALENDAR_SYNC=1
+There are these problems currently with Calendar
+
+
+ChatGPT:
+Understood. This is the Google Calendar setup section from your project documentation.
+One thing I notice immediately: the environment variables are concatenated together. They should be listed separately:
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REFRESH_TOKEN=
+GOOGLE_CALENDAR_ID=
+GOOGLE_CALENDAR_VERIFIED=1
+GOOGLE_CALENDAR_SYNC=1
+
+But let's focus on the actual Calendar problems rather than changing documentation prematurely.
+What problems are you currently experiencing with Calendar? List them all, even if they seem unrelated. I'll turn them into a concrete implementation and testing plan, then we'll fix them one by one.
+
+
+You:
+🖼️ [Uploaded image: image(8).png — PNG, 142 KB]
+When testing the app, at the Calendar Tab, this is what I encounter
+
+
+ChatGPT:
+The screenshot reveals two separate issues with the Calendar tab. One concerns Google Calendar integration; the other concerns the internal booking calendar.
+Let's separate them so we don't fix the wrong thing.
+1. Google Calendar is not operational
+Not configured
+The application explicitly reports:
+
+Not configured (missing GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN, GOOGLE_CALENDAR_ID).
+
+This means the application cannot authenticate with Google Calendar because it isn't detecting those four environment variables.
+The first thing to establish is whether they're actually present in your local environment.
+2. Your internal calendar has no available slots
+No future slots
+The screenshot also says:
+
+No free future internal slots.
+No future slots in the Internal slots section.
+No bookings yet.
+
+This is a separate issue. Your internal calendar is currently empty.
+You should be able to create a slot without Google Calendar credentials. The internal calendar is designed to work independently.
+Let's diagnose both
+First, let's check whether your Google credentials are configured without exposing their values.
+From your project root, run:
+for key in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_REFRESH_TOKEN GOOGLE_CALENDAR_ID GOOGLE_CALENDAR_VERIFIED GOOGLE_CALENDAR_SYNC; do
+  if grep -qE "^${key}=.+" .env.local 2>/dev/null; then
+    echo "$key: PRESENT"
+  else
+    echo "$key: MISSING"
+  fi
+done
+
+This only displays whether each variable exists. It will not print your credentials.
+Send me the output.
+Then we'll address the Google configuration and test the internal calendar slot creation separately. I don't want to enable Google synchronization before we've verified that OAuth actually works.
+
+
+You:
+Let's configure Google Calendar first
+
+
+ChatGPT:
+Great. We'll configure Google Calendar step by step and verify the connection before enabling synchronization in Ledgerwise.
+Your integration uses OAuth 2.0 with a refresh token and a single Google Calendar ID. It does not currently have an in-app Google sign-in flow, so we'll configure the OAuth credentials manually.
+We'll do this in four stages:
+
+Configure Google Cloud and enable the Calendar API.
+Create an OAuth client and obtain a refresh token.
+Add the credentials to Ledgerwise's .env.local.
+Verify that Ledgerwise can actually access Google Calendar.
+
+Important: Never paste your client secret or refresh token into this chat. I'll show you where to enter them locally.
+
+
+ChatGPT:
+Great. We'll configure Google Calendar step by step and verify the connection before enabling synchronization in Ledgerwise.
+Your integration uses OAuth 2.0 with a refresh token and a single Google Calendar ID. It does not currently have an in-app Google sign-in flow, so we'll configure the OAuth credentials manually.
+We'll do this in four stages:
+
+Configure Google Cloud and enable the Calendar API.
+Create an OAuth client and obtain a refresh token.
+Add the credentials to Ledgerwise's .env.local.
+Verify that Ledgerwise can actually access Google Calendar.
+
+Important: Never paste your client secret or refresh token into this chat. I'll show you where to enter them locally.
+Stage 1 — Google Cloud setup
+Open the Google Cloud Console.
+1. Create a Google Cloud project
+If you don't already have a dedicated project for this integration:
+
+Open the project selector at the top.
+Click New Project.
+Name it Ledgerwise Calendar.
+Click Create and select the new project.
+
+2. Enable Google Calendar API
+
+🖼️
+Generated image
+Google Cloud Console API Library Google Calendar API enable button screenshot
+
+
+Open Google Calendar API.
+Make sure Ledgerwise Calendar is selected.
+Click Enable.
+
+Google requires the Calendar API to be enabled in the Cloud project before the application can call it. 
+3. Configure the OAuth consent screen
+Open Google Auth Platform — Branding.
+If prompted to configure the platform, click Get Started.
+Use these settings:
+
+
+
+Setting
+Value
+
+
+
+App name
+Ledgerwise
+
+
+User support email
+Your Google account
+
+
+Audience
+External
+
+
+Developer contact email
+Your Google account
+
+
+Your screenshot shows a Gmail address. If that's the account you'll authorize, External is the appropriate audience for a personal Gmail account.
+Next:
+
+Save the branding details.
+Open Audience.
+Under Test users, add the Google account whose calendar Ledgerwise will manage.
+Save.
+
+4. Configure the Calendar permission
+Open Data Access.
+Click Add or remove scopes and add this exact scope:
+https://www.googleapis.com/auth/calendar.events
+
+This grants Ledgerwise permission to view and modify calendar events, which matches the current integration's create, update and delete operations. 
+Important An External app left in Testing issues refresh tokens that expire after seven days for these scopes. We'll account for that when deciding the final publishing status. 
+
+Stop here for now.
+Tell me once you've:
+
+Created or selected the Google Cloud project.
+Enabled Google Calendar API.
+Configured the OAuth consent screen.
+Added your Google account as a test user.
+Added the Calendar events scope.
+
+Then we'll create the OAuth client and generate the refresh token using your own credentials.
+
+If you want, I can:
+
+Continue with the manual verification checklist
+Provide detailed remediation steps for the critical gaps
+Explain the OAuth token lifecycle and setup importance
+
+
+
+ChatGPT:
+Stage 1 — Google Cloud setup
+Open the Google Cloud Console.
+1. Create a Google Cloud project
+If you don't already have a dedicated project for this integration:
+
+Open the project selector at the top.
+Click New Project.
+Name it Ledgerwise Calendar.
+Click Create and select the new project.
+
+2. Enable Google Calendar API
+
+🖼️
+Generated image
+Google Cloud Console API Library Google Calendar API enable button screenshot
+
+
+Open Google Calendar API.
+Make sure Ledgerwise Calendar is selected.
+Click Enable.
+
+Google requires the Calendar API to be enabled in the Cloud project before the application can call it. 
+3. Configure the OAuth consent screen
+Open Google Auth Platform — Branding.
+If prompted to configure the platform, click Get Started.
+Use these settings:
+
+
+
+Setting
+Value
+
+
+
+App name
+Ledgerwise
+
+
+User support email
+Your Google account
+
+
+Audience
+External
+
+
+Developer contact email
+Your Google account
+
+
+Your screenshot shows a Gmail address. If that's the account you'll authorize, External is the appropriate audience for a personal Gmail account.
+Next:
+
+Save the branding details.
+Open Audience.
+Under Test users, add the Google account whose calendar Ledgerwise will manage.
+Save.
+
+4. Configure the Calendar permission
+Open Data Access.
+Click Add or remove scopes and add this exact scope:
+https://www.googleapis.com/auth/calendar.events
+
+This grants Ledgerwise permission to view and modify calendar events, which matches the current integration's create, update and delete operations. 
+Important An External app left in Testing issues refresh tokens that expire after seven days for these scopes. We'll account for that when deciding the final publishing status. 
+
+Stop here for now.
+Tell me once you've:
+
+Created or selected the Google Cloud project.
+Enabled Google Calendar API.
+Configured the OAuth consent screen.
+Added your Google account as a test user.
+Added the Calendar events scope.
+
+Then we'll create the OAuth client and generate the refresh token using your own credentials.
