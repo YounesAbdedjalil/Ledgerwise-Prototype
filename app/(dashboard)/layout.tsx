@@ -40,6 +40,7 @@ export default async function DashboardLayout({
             <NavLink href="/emails" label="Email review" icon="mail" />
             <NavLink href="/conversations" label="Conversations" icon="messages" />
             <NavLink href="/calendar" label="Calendar & bookings" icon="calendar" />
+            <NavLink href="/settings/integrations" label="Integrations & setup" icon="settings" />
           </nav>
         </div>
 

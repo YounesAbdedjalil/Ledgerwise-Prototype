@@ -8,6 +8,7 @@ import {
   requestDraftRevision,
   saveDraft,
   simulateSendDraft,
+  sendApprovedDraft,
   suppressFromDraft,
   type EmailActionResult,
 } from "@/app/(dashboard)/emails/actions";
@@ -18,6 +19,7 @@ type Props = {
   subject: string;
   body: string;
   revisionNote: string | null;
+  liveSendEnabled: boolean;
 };
 
 export default function DraftEditor({
@@ -26,6 +28,7 @@ export default function DraftEditor({
   subject,
   body,
   revisionNote,
+  liveSendEnabled,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -152,11 +155,29 @@ export default function DraftEditor({
       )}
 
       {status === "approved" && (
-        <div className="rounded border border-blue-200 bg-blue-50 p-3 space-y-2">
+        <div className="rounded border border-blue-200 bg-blue-50 p-3 space-y-3">
           <p className="text-sm text-blue-900">
-            This will be recorded as <b>Simulated send: demo path</b>. No real email
-            is sent.
+            Simulated send records a demo event only. It never sends an email.
           </p>
+          {liveSendEnabled ? (
+            <div className="space-y-1 border-t border-blue-200 pt-3">
+              <p className="text-sm font-medium text-red-800">Live sending is enabled. This sends a real email immediately.</p>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  if (window.confirm("Send this approved email to the prospect now? This action cannot be undone.")) {
+                    run(() => sendApprovedDraft(draftId));
+                  }
+                }}
+                className="rounded bg-red-700 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                Send real email
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-600">Real sending is locked. Configure Resend and explicitly enable EMAIL_LIVE_SEND_ENABLED=1 to unlock it.</p>
+          )}
           <button
             type="button"
             disabled={pending}

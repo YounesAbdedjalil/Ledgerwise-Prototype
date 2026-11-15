@@ -98,7 +98,20 @@ export function parseReaderResponse(
   };
 }
 
-const USEFUL_PATH = /about|company|our-story|team|leadership|contact|career|jobs|press|news|shipping|wholesale|retail|stockist/i;
+const PATH_PRIORITY: Array<{ pattern: RegExp; score: number }> = [
+  { pattern: /about|our-story|our-story|who-we-are|company|mission/i, score: 10 },
+  { pattern: /team|leadership|founder|management|contact/i, score: 9 },
+  { pattern: /press|news|media|announcements|careers|jobs/i, score: 8 },
+  { pattern: /wholesale|retail|stockist|stores|locations/i, score: 7 },
+  { pattern: /shipping|returns|faq|help|support/i, score: 6 },
+  { pattern: /products|collections|catalog|shop/i, score: 5 },
+  { pattern: /blog|journal|stories|articles/i, score: 3 },
+];
+
+function linkPriority(pathname: string): number {
+  const match = PATH_PRIORITY.find(({ pattern }) => pattern.test(pathname));
+  return match?.score ?? 1;
+}
 
 export function discoverSameSiteLinks(
   markdown: string,
@@ -131,7 +144,7 @@ export function discoverSameSiteLinks(
       }
 
       const normalized = candidate.toString();
-      const score = USEFUL_PATH.test(candidate.pathname) ? 1 : 0;
+      const score = linkPriority(candidate.pathname);
 
       if (!found.has(normalized)) {
         found.set(normalized, { url: normalized, score });

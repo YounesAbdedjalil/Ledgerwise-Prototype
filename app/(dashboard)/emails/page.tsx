@@ -85,9 +85,9 @@ export default async function EmailsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Email review</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
-          Drafts use only human-verified sources. Approving records the decision;
-          sending is always labeled <b>Simulated send: demo path</b>. No real email
-          leaves this prototype.
+          Drafts use only human-verified sources. Approval never sends by itself.
+          Simulated sends remain available; real Resend delivery is separately locked
+          until the operator configures a verified sender and explicitly enables it.
         </p>
       </div>
 
@@ -95,7 +95,7 @@ export default async function EmailsPage() {
         <Stat label="Needs review" value={counts.needs_review} tone="text-amber-700" />
         <Stat label="Approved" value={counts.approved} tone="text-green-700" />
         <Stat label="Rejected" value={counts.rejected} tone="text-red-700" />
-        <Stat label="Simulated sends" value={counts.sent} tone="text-blue-700" />
+        <Stat label="Sent / simulated" value={counts.sent} tone="text-blue-700" />
       </div>
 
       {draftError && <p className="text-sm text-red-600">{draftError.message}</p>}

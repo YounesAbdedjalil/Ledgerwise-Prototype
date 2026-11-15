@@ -8,6 +8,7 @@ import { writeAudit } from "@/lib/server/audit";
 import { isSuppressed, suppressContact } from "@/lib/suppression";
 import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
 import { isUsableVerifiedContact } from "@/lib/sources/verification";
+import { sendWithResend } from "@/lib/email/resend";
 import {
   buildEmailPrompt,
   buildEmailSystemPrompt,
@@ -25,6 +26,7 @@ export type EmailActionResult = {
   error?: string;
   draftId?: string;
   conversationId?: string;
+  message?: string;
   usedFallback?: boolean;
 };
 
@@ -729,6 +731,195 @@ export async function simulateSendDraft(
   revalidatePath("/conversations");
   revalidatePath(`/conversations/${conversationId}`);
   return { ok: true, draftId, conversationId };
+}
+
+export async function sendApprovedDraft(
+  draftId: string
+): Promise<EmailActionResult> {
+  const supabase = await createClient();
+  const user = await getSessionUser(supabase);
+  if (!user) return { ok: false, error: "Not signed in." };
+  if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
+  if (process.env.EMAIL_LIVE_SEND_ENABLED !== "1") {
+    return { ok: false, error: "Live sending is disabled. Enable it explicitly after completing the provider setup checklist." };
+  }
+
+  const loaded = await loadDraft(supabase, draftId);
+  if (!loaded.draft) return { ok: false, error: loaded.error };
+  const { draft } = loaded;
+  if (draft.status !== "approved") {
+    return { ok: false, error: "Only an approved draft can be sent." };
+  }
+
+  const { data: company, error: companyError } = await supabase
+    .from("companies")
+    .select(COMPANY_FIELDS)
+    .eq("id", draft.company_id)
+    .maybeSingle();
+  if (companyError) return { ok: false, error: companyError.message };
+  if (!company) return { ok: false, error: "Company not found." };
+
+  const email = company.contact_email ? normalizeEmail(company.contact_email) : "";
+  if (!isValidEmail(email)) return { ok: false, error: "This company has no usable contact email." };
+
+  const suppression = await checkSuppressed(supabase, email);
+  if (!suppression.ok) return { ok: false, error: suppression.error };
+
+  const { data: sourceData, error: sourceError } = await supabase
+    .from("company_sources")
+    .select(SOURCE_FIELDS)
+    .eq("company_id", draft.company_id);
+  if (sourceError) return { ok: false, error: sourceError.message };
+  if (!(sourceData ?? []).some((source) => isUsableVerifiedContact(source as DraftSource, email))) {
+    return { ok: false, error: "The recipient contact source is no longer human-verified. Re-verify it before sending." };
+  }
+
+  const validation = validateEmailDraft({ subject: draft.subject, body: draft.body });
+  if (!validation.ok) return { ok: false, error: "The draft violates a safety rule and cannot be sent." };
+
+  // Recover a provider-accepted send if a previous request stopped before the
+  // Ledgerwise status/message rows were finalized. This prevents blindly sending
+  // again after a transient database failure.
+  const { data: acceptedEvent, error: acceptedEventError } = await supabase
+    .from("email_events")
+    .select("detail")
+    .eq("draft_id", draftId)
+    .eq("event_type", "provider_accepted")
+    .limit(1)
+    .maybeSingle();
+  if (acceptedEventError) return { ok: false, error: acceptedEventError.message };
+
+  let providerMessageId =
+    acceptedEvent?.detail && typeof acceptedEvent.detail.provider_message_id === "string"
+      ? acceptedEvent.detail.provider_message_id
+      : null;
+
+  if (!providerMessageId) {
+    // Stable provider idempotency key also protects concurrent/retried requests.
+    const delivery = await sendWithResend({
+      to: email,
+      subject: draft.subject,
+      text: draft.body,
+      idempotencyKey: `ledgerwise-draft-${draftId}`,
+    });
+    if (!delivery.ok) return { ok: false, error: delivery.error };
+    providerMessageId = delivery.id;
+
+    const { error: acceptedLogError } = await supabase.from("email_events").insert({
+      draft_id: draftId,
+      event_type: "provider_accepted",
+      actor_id: user.id,
+      detail: {
+        provider: "resend",
+        provider_message_id: providerMessageId,
+        idempotency_key: `ledgerwise-draft-${draftId}`,
+        contact_email: email,
+        note: "Provider accepted the email; Ledgerwise finalization may be retried without resending.",
+      },
+    });
+    if (acceptedLogError) {
+      return { ok: false, error: `Resend accepted the email (${providerMessageId}), but Ledgerwise could not record the provider receipt. Do not retry blindly; reconcile this send first.` };
+    }
+  }
+
+  const { data: existingConversation, error: conversationLookupError } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("company_id", draft.company_id)
+    .eq("contact_email", email)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (conversationLookupError) {
+    return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but the conversation lookup failed. Do not retry blindly; reconcile this send first.` };
+  }
+
+  let conversationId = existingConversation?.id as string | undefined;
+  if (!conversationId) {
+    const { data: conversation, error } = await supabase
+      .from("conversations")
+      .insert({ company_id: draft.company_id, contact_email: email, status: "ai_handling" })
+      .select("id")
+      .single();
+    if (error || !conversation) {
+      return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but the conversation could not be created. Do not retry blindly; reconcile this send first.` };
+    }
+    conversationId = conversation.id;
+  }
+
+  const now = new Date().toISOString();
+  const { data: existingMessage, error: messageLookupError } = await supabase
+    .from("messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("sender", "ai")
+    .eq("classification", "first_email")
+    .eq("is_simulated", false)
+    .eq("body", draft.body)
+    .limit(1)
+    .maybeSingle();
+  if (messageLookupError) {
+    return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but Ledgerwise could not verify the conversation record. Retry only after checking the provider receipt.` };
+  }
+
+  if (!existingMessage) {
+    const { error: messageError } = await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      sender: "ai",
+      body: draft.body,
+      classification: "first_email",
+      needs_review: false,
+      guardrail_flags: [],
+      is_simulated: false,
+      created_at: now,
+    });
+    if (messageError) {
+      await writeAudit(supabase, {
+        actorId: user.id,
+        action: "email_provider_sent_message_record_failed",
+        entityType: "email_drafts",
+        entityId: draftId,
+        detail: { provider: "resend", provider_message_id: providerMessageId, error: messageError.message },
+      });
+      return { ok: false, error: `Email was sent (Resend ID ${providerMessageId}), but the conversation message could not be recorded. Retry will not send another provider email; inspect the thread after retrying.` };
+    }
+  }
+
+  const { data: sentDraft, error: updateError } = await supabase
+    .from("email_drafts")
+    .update({ status: "sent", updated_at: now })
+    .eq("id", draftId)
+    .eq("status", "approved")
+    .select("id")
+    .maybeSingle();
+  if (updateError || !sentDraft) {
+    return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but Ledgerwise could not mark the draft as sent. Retry will reuse the provider receipt; do not create a new draft to resend.` };
+  }
+
+  await supabase.from("email_events").insert({
+    draft_id: draftId,
+    event_type: "sent",
+    actor_id: user.id,
+    detail: {
+      provider: "resend",
+      provider_message_id: providerMessageId,
+      conversation_id: conversationId,
+      contact_email: email,
+      idempotency_key: `ledgerwise-draft-${draftId}`,
+    },
+  });
+  await writeAudit(supabase, {
+    actorId: user.id,
+    action: "email_draft_sent",
+    entityType: "email_drafts",
+    entityId: draftId,
+    detail: { provider: "resend", provider_message_id: providerMessageId, company_id: draft.company_id, conversation_id: conversationId, contact_email: email },
+  });
+
+  revalidateEmailPages(draftId);
+  revalidatePath("/conversations");
+  revalidatePath(`/conversations/${conversationId}`);
+  return { ok: true, draftId, conversationId, message: `Email sent through Resend (ID: ${providerMessageId}).` };
 }
 
 // Kept for an explicit human-triggered suppression action on the email screen.

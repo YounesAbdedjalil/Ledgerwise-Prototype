@@ -16,13 +16,12 @@ type TavilyResult = {
   score?: number;
 };
 
+// Keep discovery to a small number of focused basic-search calls so a normal
+// run remains practical on free-tier Tavily quotas.
 const QUERIES = [
-  "US direct to consumer ecommerce brands Shopify official online store",
-  "American ecommerce consumer brands Shopify founded in the United States",
-  "US DTC ecommerce brands growing hiring operations finance accounting",
-  "American online retail brands direct to consumer official website",
-  "US Shopify brands consumer products growing ecommerce companies",
-  "United States ecommerce brands founder owned online retail companies",
+  'US direct-to-consumer ecommerce brands official website Shopify -directory',
+  'United States online retail consumer brands hiring careers expansion official',
+  'American ecommerce brands founder team about us online store',
 ];
 
 const BLOCKED_DOMAINS = [
@@ -56,8 +55,8 @@ async function searchTavily(query: string): Promise<TavilyResult[]> {
     body: JSON.stringify({
       api_key: process.env.TAVILY_API_KEY,
       query,
-      search_depth: "advanced",
-      max_results: 20,
+      search_depth: "basic",
+      max_results: 10,
       include_answer: false,
       include_raw_content: false,
     }),
@@ -139,7 +138,7 @@ export async function POST(request: Request) {
 
     const newCandidates = [...candidates.entries()]
       .filter(([host]) => !existingHosts.has(host))
-      .slice(0, 30)
+      .slice(0, 12)
       .map(([, candidate]) => candidate);
 
     if (!newCandidates.length) {
@@ -159,9 +158,11 @@ export async function POST(request: Request) {
         extraUrls: [],
       })),
       {
-        // Homepage plus one relevant internal page keeps a 30-company run manageable.
+        // The research runner caps each company at eight pages; twelve
+        // companies per request bounds free-tier AI and reader usage.
         discoverLinks: (text, baseUrl) =>
           discoverSameSiteLinks(text, baseUrl, 1),
+        requireEcommerceEligibility: true,
       }
     );
 

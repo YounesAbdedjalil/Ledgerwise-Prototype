@@ -266,3 +266,47 @@ test("runResearch limits concurrent companies and preserves input order", async 
   );
   assert.equal(result.companies.length, 4);
 });
+
+test("discovers a second level of same-site pages without exceeding the page cap", async () => {
+  const requested: string[] = [];
+  const result = await runResearch(
+    [{ companyName: "Deep Example", website: "https://deep.example/", extraUrls: [] }],
+    {
+      fetchPage: async (url) => {
+        requested.push(url);
+        return {
+          url,
+          title: url.endsWith("/") ? "Deep Example" : "Deep Example page",
+          text: `Useful public company information from ${url}.`,
+        };
+      },
+      discoverLinks: (_text, baseUrl) =>
+        baseUrl.endsWith("/")
+          ? ["https://deep.example/about", "https://deep.example/blog"]
+          : ["https://deep.example/team", "https://deep.example/press"],
+      extract: async () => [],
+    },
+  );
+
+  assert.equal(requested.length, 5);
+  assert.deepEqual(result.companies[0].pagesRead, requested);
+});
+
+test("caps a hostile or overly broad link graph at eight pages per company", async () => {
+  let fetchCalls = 0;
+  const result = await runResearch(
+    [{ companyName: "Many Pages", website: "https://many.example/", extraUrls: [] }],
+    {
+      fetchPage: async (url) => {
+        fetchCalls++;
+        return { url, title: "Many Pages", text: "Public company information for research." };
+      },
+      discoverLinks: (_text, baseUrl) =>
+        Array.from({ length: 20 }, (_, i) => `${baseUrl.replace(/\/$/, "")}/page-${i}`),
+      extract: async () => [],
+    },
+  );
+
+  assert.equal(fetchCalls, 8);
+  assert.equal(result.companies[0].pagesRead.length, 8);
+});

@@ -1,6 +1,7 @@
 import { discoverSameSiteLinks, fetchResearchPage, validateResearchUrl } from "./pages";
 import { extractClaims } from "./extract";
 import { verifyClaims, type ProposedClaim, type ResearchPage } from "./verify";
+import { assessEcommerceEligibility } from "./eligibility";
 
 export type ResearchInputEntry = {
   companyName: string;
@@ -47,6 +48,7 @@ type RunnerDeps = {
   discoverLinks?: (text: string, baseUrl: string, maxLinks?: number) => string[];
   now?: () => Date;
   concurrency?: number;
+  requireEcommerceEligibility?: boolean;
 };
 
 function validateHttpUrl(value: string, lineNumber: number): URL {
@@ -184,20 +186,42 @@ export async function runResearch(
       }
     };
 
-    // Read the homepage first so we can discover relevant same-site pages.
+    // Start with the homepage, then prioritize useful internal pages. A second
+    // discovery pass from those pages catches deeper About/Team/Press links.
+    // The hard cap keeps free-tier search/AI usage predictable per company.
+    const MAX_PAGES_PER_COMPANY = 8;
     await readPage(entry.website);
 
-    const discovered = pages.length
-      ? discoverLinks(pages[0].text, entry.website, 3)
+    const homepageLinks = pages.length
+      ? discoverLinks(pages[0].text, entry.website, 6)
       : [];
+    const firstWave = [...new Set([...entry.extraUrls, ...homepageLinks])]
+      .slice(0, MAX_PAGES_PER_COMPANY - pages.length);
+    await Promise.all(firstWave.map(readPage));
 
-    // Fetch additional pages concurrently, after the homepage is available.
-    const additionalUrls = [...new Set([...entry.extraUrls, ...discovered])];
-    await Promise.all(additionalUrls.map(readPage));
+    const secondWave = pages
+      .slice(1)
+      .flatMap((page) => discoverLinks(page.text, page.url, 3))
+      .filter((url) => !visited.has(url));
+    const remaining = Math.max(0, MAX_PAGES_PER_COMPANY - pages.length);
+    await Promise.all([...new Set(secondWave)].slice(0, remaining).map(readPage));
 
     if (!pages.length) {
       report.errors.push("No pages could be read; extraction was skipped");
       return { rows: [], report };
+    }
+
+    if (deps.requireEcommerceEligibility) {
+      const eligibility = assessEcommerceEligibility(pages);
+
+      if (!eligibility.eligible) {
+        report.errors.push(
+          `Autonomous discovery rejected this candidate: ${eligibility.reason} ` +
+          `Storefront signals: ${eligibility.commerceSignals.join(", ") || "none"}. ` +
+          `Service signals: ${eligibility.serviceSignals.join(", ") || "none"}.`
+        );
+        return { rows: [], report };
+      }
     }
 
     let proposals: ProposedClaim[];
@@ -223,6 +247,16 @@ export async function runResearch(
       claim_type: item.claim_type,
       reason: item.reason,
     }));
+
+    if (
+      deps.requireEcommerceEligibility &&
+      !verification.accepted.some((claim) => claim.claim_type === "us_ecommerce")
+    ) {
+      report.errors.push(
+        "Autonomous discovery rejected this candidate: no verified first-party evidence of US business presence or US e-commerce operations."
+      );
+      return { rows: [], report };
+    }
 
     const rows = verification.accepted.map((claim) => ({
       company_name: entry.companyName,

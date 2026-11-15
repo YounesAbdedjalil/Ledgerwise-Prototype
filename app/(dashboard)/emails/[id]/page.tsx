@@ -6,6 +6,7 @@ import { validateEmailDraft, type DraftSource } from "@/lib/email/draft";
 import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
 import EmailStatusBadge from "@/components/emails/StatusBadge";
 import DraftEditor from "@/components/emails/DraftEditor";
+import { isLiveEmailConfigured } from "@/lib/email/resend";
 
 type Company = {
   id: string;
@@ -58,6 +59,10 @@ function eventLabel(type: string): string {
       return "Revision requested";
     case "sent_simulated":
       return "Simulated send";
+    case "provider_accepted":
+      return "Email provider accepted";
+    case "sent":
+      return "Email sent";
     default:
       return type.replaceAll("_", " ");
   }
@@ -146,6 +151,7 @@ export default async function EmailDraftPage({
               subject={draft.subject}
               body={draft.body}
               revisionNote={draft.revision_note}
+              liveSendEnabled={isLiveEmailConfigured()}
             />
           </div>
           <p className="text-xs text-gray-500">

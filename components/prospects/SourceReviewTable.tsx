@@ -10,6 +10,7 @@ import {
 } from "@/app/(dashboard)/prospects/source-actions";
 import { isHttpUrl } from "@/lib/validation";
 import SourceStatusBadge from "./SourceStatusBadge";
+import { getSourceFreshness } from "@/lib/research/freshness";
 
 export type SourceReviewRow = {
   id: string;
@@ -79,6 +80,8 @@ function SourceReviewCard({
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const company = companyOf(row);
+  const freshness = getSourceFreshness(row.retrieved_at);
+  const freshnessLabel = { fresh: "Recent", aging: "Aging", stale: "Stale — re-check", unknown: "Date unknown" }[freshness];
 
   function run(action: () => Promise<SourceActionResult>) {
     setError(null);
@@ -111,6 +114,9 @@ function SourceReviewCard({
               {row.claim_type}
             </span>
             <SourceStatusBadge status={row.verification_status} />
+            <span className={`rounded px-2 py-0.5 text-xs ${freshness === "fresh" ? "bg-green-50 text-green-700" : freshness === "aging" ? "bg-amber-50 text-amber-700" : "bg-red-50 text-red-700"}`}>
+              {freshnessLabel}
+            </span>
             {row.verification_status === "pending_review" && (
               <span className="text-xs text-amber-700">
                 Imported and structurally valid, not yet human-verified.

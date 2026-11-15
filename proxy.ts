@@ -13,11 +13,15 @@ export async function proxy(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(list) {
-          list.forEach(({ name, value }) => request.cookies.set(name, value));
+          list.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+
           response = NextResponse.next({ request });
-          list.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
+
+          list.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
         },
       },
     }
@@ -26,18 +30,36 @@ export async function proxy(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   const path = request.nextUrl.pathname;
 
   if (!user && path !== "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+
+    const redirectResponse = NextResponse.redirect(url);
+
+    // Preserve cookies Supabase refreshed or cleared.
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+
+    return redirectResponse;
   }
+
   if (user && path === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/prospects";
-    return NextResponse.redirect(url);
+
+    const redirectResponse = NextResponse.redirect(url);
+
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie);
+    });
+
+    return redirectResponse;
   }
+
   return response;
 }
 

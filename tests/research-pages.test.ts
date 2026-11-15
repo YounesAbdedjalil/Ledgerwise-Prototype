@@ -145,3 +145,25 @@ test("rejects local hostnames with a trailing dot", () => {
     /Private or local/,
   );
 });
+
+test("prioritizes company, leadership, hiring and operational pages over generic blog pages", () => {
+  const links = discoverSameSiteLinks(
+    [
+      "[Blog](https://example.com/blog)",
+      "[Products](https://example.com/products)",
+      "[Careers](https://example.com/careers)",
+      "[Team](https://example.com/team)",
+      "[About](https://example.com/about)",
+    ].join("\n"),
+    "https://example.com/",
+    5,
+  );
+
+  assert.deepEqual(links, [
+    "https://example.com/about",
+    "https://example.com/team",
+    "https://example.com/careers",
+    "https://example.com/products",
+    "https://example.com/blog",
+  ]);
+});

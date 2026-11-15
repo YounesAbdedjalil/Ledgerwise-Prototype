@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/server/auth";
 import { writeAudit } from "@/lib/server/audit";
-import { CRITERIA } from "@/lib/scoring/config";
+import { getScoringConfig } from "@/lib/scoring/custom";
 import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
 
 export type GenerateScoresResult = {
@@ -22,12 +22,14 @@ export async function generateQualificationScores(): Promise<GenerateScoresResul
   const user = await getSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const totalWeight = CRITERIA.reduce(
+  const scoringConfig = getScoringConfig();
+  const criteria = scoringConfig.criteria;
+  const totalWeight = criteria.reduce(
     (sum, criterion) => sum + (criterion.weight ?? 0),
     0
   );
   if (
-    CRITERIA.some(
+    criteria.some(
       (criterion) =>
         criterion.weight === null ||
         !Number.isInteger(criterion.weight) ||
@@ -73,7 +75,7 @@ export async function generateQualificationScores(): Promise<GenerateScoresResul
 
   const batchTimestamp = new Date().toISOString();
   const scoreRows = companyRows.flatMap((company) => {
-    const score = scoreCompany(sourcesByCompany.get(company.id) ?? []);
+    const score = scoreCompany(sourcesByCompany.get(company.id) ?? [], criteria);
     return score.criteria.map((result) => ({
       company_id: company.id,
       criterion: result.criterion.key,
@@ -103,9 +105,10 @@ export async function generateQualificationScores(): Promise<GenerateScoresResul
       score_rows_created: scoreRows.length,
       scoring_batch: batchTimestamp,
       weights: Object.fromEntries(
-        CRITERIA.map((criterion) => [criterion.key, criterion.weight])
+        criteria.map((criterion) => [criterion.key, criterion.weight])
       ),
       evidence_rule: "Only human-verified sources earn positive points.",
+      scoring_config_source: scoringConfig.source,
     },
   });
 
@@ -118,8 +121,9 @@ export async function generateQualificationScores(): Promise<GenerateScoresResul
     ok: true,
     companiesScored: companyRows.length,
     scoreRowsCreated: scoreRows.length,
-    warning: audit.ok
-      ? undefined
-      : `Scores were saved, but the audit entry failed: ${audit.error}`,
+    warning: [
+      scoringConfig.warning,
+      audit.ok ? undefined : `Scores were saved, but the audit entry failed: ${audit.error}`,
+    ].filter(Boolean).join(" ") || undefined,
   };
 }
