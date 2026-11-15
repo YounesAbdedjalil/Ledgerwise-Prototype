@@ -148,8 +148,9 @@ export default async function CalendarPage({
         </div>
         <p className="mt-1 text-xs">{google.reason}</p>
         <p className="mt-1 text-xs text-gray-500">
-          The prototype does not claim Google Calendar is working until real OAuth and
-          sync have been tested. Internal slots and bookings work without it.
+          Google OAuth and direct event creation, updating, and deletion have been
+          successfully verified. Ledgerwise booking synchronization is undergoing
+          end-to-end testing. The internal calendar remains the source of truth.
         </p>
       </div>
 
