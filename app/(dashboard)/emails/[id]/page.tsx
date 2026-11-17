@@ -6,7 +6,7 @@ import { validateEmailDraft, type DraftSource } from "@/lib/email/draft";
 import SourceStatusBadge from "@/components/prospects/SourceStatusBadge";
 import EmailStatusBadge from "@/components/emails/StatusBadge";
 import DraftEditor from "@/components/emails/DraftEditor";
-import { isLiveEmailConfigured } from "@/lib/email/resend";
+import { isLiveEmailConfigured } from "@/lib/email/brevo";
 
 type Company = {
   id: string;

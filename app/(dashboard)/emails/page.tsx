@@ -86,7 +86,7 @@ export default async function EmailsPage() {
         <h1 className="text-2xl font-semibold">Email review</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
           Drafts use only human-verified sources. Approval never sends by itself.
-          Simulated sends remain available; real Resend delivery is separately locked
+          Simulated sends remain available; real Brevo delivery is separately locked
           until the operator configures a verified sender and explicitly enables it.
         </p>
       </div>

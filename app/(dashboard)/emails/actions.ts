@@ -8,7 +8,7 @@ import { writeAudit } from "@/lib/server/audit";
 import { isSuppressed, suppressContact } from "@/lib/suppression";
 import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
 import { isUsableVerifiedContact } from "@/lib/sources/verification";
-import { sendWithResend } from "@/lib/email/resend";
+import { sendWithBrevo } from "@/lib/email/brevo";
 import {
   buildEmailPrompt,
   buildEmailSystemPrompt,
@@ -796,7 +796,7 @@ export async function sendApprovedDraft(
 
   if (!providerMessageId) {
     // Stable provider idempotency key also protects concurrent/retried requests.
-    const delivery = await sendWithResend({
+    const delivery = await sendWithBrevo({
       to: email,
       subject: draft.subject,
       text: draft.body,
@@ -810,15 +810,15 @@ export async function sendApprovedDraft(
       event_type: "provider_accepted",
       actor_id: user.id,
       detail: {
-        provider: "resend",
+        provider: "brevo",
         provider_message_id: providerMessageId,
         idempotency_key: `ledgerwise-draft-${draftId}`,
         contact_email: email,
-        note: "Provider accepted the email; Ledgerwise finalization may be retried without resending.",
+        note: "Provider accepted the email; Ledgerwise finalization may be retried without sending it again.",
       },
     });
     if (acceptedLogError) {
-      return { ok: false, error: `Resend accepted the email (${providerMessageId}), but Ledgerwise could not record the provider receipt. Do not retry blindly; reconcile this send first.` };
+      return { ok: false, error: `Brevo accepted the email (${providerMessageId}), but Ledgerwise could not record the provider receipt. Do not retry blindly; reconcile this send first.` };
     }
   }
 
@@ -831,7 +831,7 @@ export async function sendApprovedDraft(
     .limit(1)
     .maybeSingle();
   if (conversationLookupError) {
-    return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but the conversation lookup failed. Do not retry blindly; reconcile this send first.` };
+    return { ok: false, error: `Email was accepted by Brevo (${providerMessageId}), but the conversation lookup failed. Do not retry blindly; reconcile this send first.` };
   }
 
   let conversationId = existingConversation?.id as string | undefined;
@@ -842,7 +842,7 @@ export async function sendApprovedDraft(
       .select("id")
       .single();
     if (error || !conversation) {
-      return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but the conversation could not be created. Do not retry blindly; reconcile this send first.` };
+      return { ok: false, error: `Email was accepted by Brevo (${providerMessageId}), but the conversation could not be created. Do not retry blindly; reconcile this send first.` };
     }
     conversationId = conversation.id;
   }
@@ -859,7 +859,7 @@ export async function sendApprovedDraft(
     .limit(1)
     .maybeSingle();
   if (messageLookupError) {
-    return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but Ledgerwise could not verify the conversation record. Retry only after checking the provider receipt.` };
+    return { ok: false, error: `Email was accepted by Brevo (${providerMessageId}), but Ledgerwise could not verify the conversation record. Retry only after checking the provider receipt.` };
   }
 
   if (!existingMessage) {
@@ -879,9 +879,9 @@ export async function sendApprovedDraft(
         action: "email_provider_sent_message_record_failed",
         entityType: "email_drafts",
         entityId: draftId,
-        detail: { provider: "resend", provider_message_id: providerMessageId, error: messageError.message },
+        detail: { provider: "brevo", provider_message_id: providerMessageId, error: messageError.message },
       });
-      return { ok: false, error: `Email was sent (Resend ID ${providerMessageId}), but the conversation message could not be recorded. Retry will not send another provider email; inspect the thread after retrying.` };
+      return { ok: false, error: `Email was sent (Brevo ID ${providerMessageId}), but the conversation message could not be recorded. Retry will not send another provider email; inspect the thread after retrying.` };
     }
   }
 
@@ -893,7 +893,7 @@ export async function sendApprovedDraft(
     .select("id")
     .maybeSingle();
   if (updateError || !sentDraft) {
-    return { ok: false, error: `Email was accepted by Resend (${providerMessageId}), but Ledgerwise could not mark the draft as sent. Retry will reuse the provider receipt; do not create a new draft to resend.` };
+    return { ok: false, error: `Email was accepted by Brevo (${providerMessageId}), but Ledgerwise could not mark the draft as sent. Retry will reuse the provider receipt; do not create a new draft to resend.` };
   }
 
   await supabase.from("email_events").insert({
@@ -901,7 +901,7 @@ export async function sendApprovedDraft(
     event_type: "sent",
     actor_id: user.id,
     detail: {
-      provider: "resend",
+      provider: "brevo",
       provider_message_id: providerMessageId,
       conversation_id: conversationId,
       contact_email: email,
@@ -913,13 +913,13 @@ export async function sendApprovedDraft(
     action: "email_draft_sent",
     entityType: "email_drafts",
     entityId: draftId,
-    detail: { provider: "resend", provider_message_id: providerMessageId, company_id: draft.company_id, conversation_id: conversationId, contact_email: email },
+    detail: { provider: "brevo", provider_message_id: providerMessageId, company_id: draft.company_id, conversation_id: conversationId, contact_email: email },
   });
 
   revalidateEmailPages(draftId);
   revalidatePath("/conversations");
   revalidatePath(`/conversations/${conversationId}`);
-  return { ok: true, draftId, conversationId, message: `Email sent through Resend (ID: ${providerMessageId}).` };
+  return { ok: true, draftId, conversationId, message: `Email sent through Brevo (ID: ${providerMessageId}).` };
 }
 
 // Kept for an explicit human-triggered suppression action on the email screen.

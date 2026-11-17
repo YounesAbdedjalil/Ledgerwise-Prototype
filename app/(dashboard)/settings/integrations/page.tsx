@@ -43,9 +43,9 @@ export default function IntegrationsPage() {
   const supabaseReady = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const aiReady = Boolean(process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY);
   const researchReady = Boolean(process.env.TAVILY_API_KEY);
-  const resendReady = Boolean(
+  const brevoReady = Boolean(
     process.env.EMAIL_LIVE_SEND_ENABLED === "1" &&
-    process.env.RESEND_API_KEY &&
+    process.env.BREVO_API_KEY &&
     process.env.EMAIL_FROM
   );
   const googleReady = Boolean(
@@ -71,7 +71,7 @@ export default function IntegrationsPage() {
         <IntegrationCard name="Supabase" description="Authentication and application database." configured={supabaseReady} variables={["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]} endpoint="https://supabase.com/dashboard" />
         <IntegrationCard name="AI providers" description="Groq and/or Gemini for extraction and message generation." configured={aiReady} variables={["GROQ_API_KEY", "GEMINI_API_KEY", "AI_EXTRACT_CHAIN", "AI_MESSAGE_CHAIN"]} endpoint="https://console.groq.com/keys · https://aistudio.google.com/apikey" />
         <IntegrationCard name="Tavily research" description="Searches for candidate e-commerce companies." configured={researchReady} variables={["TAVILY_API_KEY"]} endpoint="https://app.tavily.com/home" />
-        <IntegrationCard name="Resend email" description="Real outbound email is disabled unless the explicit live-send switch and sender configuration are all present." configured={resendReady} variables={["RESEND_API_KEY", "EMAIL_FROM", "EMAIL_LIVE_SEND_ENABLED=1"]} endpoint="https://resend.com/api-keys · https://api.resend.com/emails" />
+        <IntegrationCard name="Brevo email" description="Real outbound email is disabled unless the explicit live-send switch and verified sender configuration are all present." configured={brevoReady} variables={["BREVO_API_KEY", "EMAIL_FROM", "EMAIL_FROM_NAME (optional)", "EMAIL_REPLY_TO (optional)", "EMAIL_LIVE_SEND_ENABLED=1"]} endpoint="https://app.brevo.com/settings/keys/api · https://api.brevo.com/v3/smtp/email" />
         <IntegrationCard name="Google Calendar" description="Optional event synchronization. The internal Ledgerwise calendar remains the source of truth." configured={googleReady} variables={["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "GOOGLE_REFRESH_TOKEN", "GOOGLE_CALENDAR_ID", "GOOGLE_CALENDAR_VERIFIED=1", "GOOGLE_CALENDAR_SYNC=1"]} endpoint="https://console.cloud.google.com/apis/credentials" />
       </div>
 

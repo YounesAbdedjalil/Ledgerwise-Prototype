@@ -176,7 +176,7 @@ export default function DraftEditor({
               </button>
             </div>
           ) : (
-            <p className="text-xs text-gray-600">Real sending is locked. Configure Resend and explicitly enable EMAIL_LIVE_SEND_ENABLED=1 to unlock it.</p>
+            <p className="text-xs text-gray-600">Real sending is locked. Configure Brevo and explicitly enable EMAIL_LIVE_SEND_ENABLED=1 to unlock it.</p>
           )}
           <button
             type="button"
