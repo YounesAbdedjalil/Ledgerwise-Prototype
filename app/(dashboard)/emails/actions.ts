@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { generate } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { getWritableSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { consumeOrganizationQuota } from "@/lib/server/quota";
 import { writeAudit } from "@/lib/server/audit";
 import { isSuppressed, suppressContact } from "@/lib/suppression";
 import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
@@ -152,7 +153,7 @@ export async function createDraftForCompany(
   companyId: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(companyId)) return { ok: false, error: "Invalid company ID." };
 
@@ -201,6 +202,9 @@ export async function createDraftForCompany(
         "No human-verified sources are available for this company. Verify sources in the review queue first.",
     };
   }
+
+  const quota = await consumeOrganizationQuota(supabase, "ai_generation");
+  if (!quota.allowed) return { ok: false, error: quota.error };
 
   let composed;
   try {
@@ -272,7 +276,7 @@ export async function saveDraft(
   body: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
 
@@ -346,7 +350,7 @@ export async function saveDraft(
 
 export async function approveDraft(draftId: string): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
 
@@ -410,7 +414,7 @@ export async function rejectDraft(
   note: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
 
@@ -470,7 +474,7 @@ export async function requestDraftRevision(
   note: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
 
@@ -521,6 +525,9 @@ export async function requestDraftRevision(
       error: "The verified sources used by this draft are no longer available.",
     };
   }
+
+  const quota = await consumeOrganizationQuota(supabase, "ai_generation");
+  if (!quota.allowed) return { ok: false, error: quota.error };
 
   let composed;
   try {
@@ -591,7 +598,7 @@ export async function simulateSendDraft(
   draftId: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
 
@@ -737,7 +744,7 @@ export async function sendApprovedDraft(
   draftId: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
   if (process.env.EMAIL_LIVE_SEND_ENABLED !== "1") {
@@ -928,7 +935,7 @@ export async function suppressFromDraft(
   reason: string
 ): Promise<EmailActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(draftId)) return { ok: false, error: "Invalid draft ID." };
 

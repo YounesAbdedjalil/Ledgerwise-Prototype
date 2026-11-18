@@ -5,24 +5,44 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const publicSignupEnabled = process.env.NEXT_PUBLIC_SIGNUP_ENABLED === "1";
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setNotice(null);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = creatingAccount
+      ? await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding` },
+        })
+      : await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       setError(error.message);
       setLoading(false);
       return;
     }
-    router.push("/prospects");
+    if (creatingAccount) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setNotice("Check your email to confirm your account, then sign in to create your workspace.");
+        setLoading(false);
+        return;
+      }
+      router.push("/onboarding");
+    } else {
+      router.push("/prospects");
+    }
     router.refresh();
   }
 
@@ -55,18 +75,22 @@ export default function LoginPage() {
             <div className="mt-1 text-xs font-medium uppercase tracking-[.14em] text-slate-400">Business workspace</div>
           </div>
           <div className="mb-8">
-            <div className="text-xs font-bold uppercase tracking-[.16em] text-[#2878c7]">Welcome back</div>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#142b46]">Sign in to your account</h2>
-            <p className="mt-2 text-sm text-slate-500">Enter your credentials to access your workspace.</p>
+            <div className="text-xs font-bold uppercase tracking-[.16em] text-[#2878c7]">{creatingAccount ? "Get started" : "Welcome back"}</div>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-[#142b46]">{creatingAccount ? "Create your account" : "Sign in to your account"}</h2>
+            <p className="mt-2 text-sm text-slate-500">{creatingAccount ? "Create an account, confirm your email, and set up your workspace." : "Enter your credentials to access your workspace."}</p>
           </div>
           <label className="mb-2 text-xs font-semibold text-slate-700" htmlFor="email">Email address</label>
           <input id="email" type="email" required autoComplete="email" placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} className="mb-5 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
           <label className="mb-2 text-xs font-semibold text-slate-700" htmlFor="password">Password</label>
           <input id="password" type="password" required autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} className="mb-5 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-4 focus:ring-blue-100" />
           {error && <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          {notice && <p role="status" className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</p>}
           <button type="submit" disabled={loading} className="mt-1 w-full rounded-xl bg-[#2369a8] px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-[#194f83] focus:outline-none focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-50">
-            {loading ? "Signing in..." : "Sign in"}
+            {loading ? (creatingAccount ? "Creating account..." : "Signing in...") : (creatingAccount ? "Create account" : "Sign in")}
           </button>
+          {publicSignupEnabled && <button type="button" onClick={() => { setCreatingAccount(!creatingAccount); setError(null); setNotice(null); }} className="mt-4 text-sm font-medium text-blue-700 hover:underline">
+            {creatingAccount ? "Already have an account? Sign in" : "New to Ledgerwise? Create an account"}
+          </button>}
           <p className="mt-6 text-center text-xs text-slate-400">Secure access to your Ledgerwise workspace</p>
         </form>
       </div>

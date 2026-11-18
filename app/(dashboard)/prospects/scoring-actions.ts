@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/server/auth";
+import { getWritableSessionUser } from "@/lib/server/auth";
 import { writeAudit } from "@/lib/server/audit";
 import { getScoringConfig } from "@/lib/scoring/custom";
 import { scoreCompany, type SourceRow } from "@/lib/scoring/score";
@@ -19,7 +19,7 @@ type CompanyRow = { id: string; name: string };
 
 export async function generateQualificationScores(): Promise<GenerateScoresResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
 
   const scoringConfig = getScoringConfig();

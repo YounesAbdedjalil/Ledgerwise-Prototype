@@ -56,13 +56,13 @@ function senderLabel(sender: string): string {
 function senderTone(sender: string): string {
   switch (sender) {
     case "prospect":
-      return "bg-gray-50 border-gray-200";
+      return "message-bubble--prospect";
     case "ai":
-      return "bg-blue-50 border-blue-200";
+      return "message-bubble--ai";
     case "human":
-      return "bg-purple-50 border-purple-200";
+      return "message-bubble--human";
     default:
-      return "bg-white border-gray-200";
+      return "message-bubble--prospect";
   }
 }
 

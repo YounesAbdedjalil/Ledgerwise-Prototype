@@ -2,16 +2,39 @@
 
 These migrations are **not executed by the application**. Apply them manually in
 the Supabase SQL Editor, in order. Do not run them against production until you
-have reviewed them.
+have reviewed them. The SaaS tenant migration is a separate, data-affecting
+rollout; follow [SAAS_READINESS.md](./SAAS_READINESS.md) and test on a restored
+staging copy first.
 
 They are additive migrations for the existing prototype schema. The base tables
 (`companies`, `company_sources`, `email_drafts`, `conversations`, `messages`,
 `calendar_slots`, `bookings`, `suppressed_contacts`, `audit_logs`, and the rest)
 must already exist. Do not run them against an empty database.
 
-The application is a single-team prototype. The policies created here are
-`authenticated`-only policies. They do not provide per-user or tenant isolation.
-See `docs/SECURITY.md`.
+Migrations 01-06 describe the prototype's shared authenticated workspace. They
+do not provide per-user or tenant isolation by themselves. Migrations 07-08
+replace that authorization model with organization-scoped access. See
+`docs/SECURITY.md` and `docs/SAAS_READINESS.md`.
+
+## SaaS migration order
+
+The expanded migration sequence is:
+
+1. The existing baseline schema must already be present.
+2. `20261114_01_source_verification_and_security.sql`
+3. `20261114_02_calendar_source_and_booking.sql`
+4. `20261114_03_google_calendar.sql`
+5. `20261114_04_transactional_calendar_operations.sql`
+6. `20261114_05_calendar_security_corrections.sql`
+7. `20261115_06_discovery_candidates.sql`
+8. `20261118_07_multitenant_foundation.sql`
+9. `20261118_08_tenant_safe_calendar_operations.sql`
+
+Steps 8 and 9 assign the current data to a single legacy workspace and change
+the authorization model. Do not apply them until the owner assignment and
+duplicate checks in `docs/SAAS_READINESS.md` are reviewed. Migration 07 gives the
+oldest existing account the owner role by default; update that migration’s
+owner-selection rule before applying if a different account should own it.
 
 ## 1. Before applying anything
 

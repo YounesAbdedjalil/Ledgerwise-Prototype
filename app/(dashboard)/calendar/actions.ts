@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { getWritableSessionUser, type ServerSupabase } from "@/lib/server/auth";
 import { isSuppressed } from "@/lib/suppression";
 import { isValidEmail, isUuid, normalizeEmail, trimText } from "@/lib/validation";
 import {
@@ -150,7 +150,7 @@ export async function createSlot(input: {
   timezone: string;
 }): Promise<CalendarActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
 
   const validation = validateSlotInput(input);
@@ -175,7 +175,7 @@ export async function createSlot(input: {
 
 export async function deleteSlot(slotId: string): Promise<CalendarActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(slotId)) return { ok: false, error: "Invalid slot ID." };
 
@@ -202,7 +202,7 @@ export async function bookSlot(input: {
   timezone: string;
 }): Promise<CalendarActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(input.slotId)) return { ok: false, error: "Invalid slot ID." };
   if (input.companyId && !isUuid(input.companyId)) {
@@ -322,7 +322,7 @@ export async function confirmBooking(
   bookingId: string
 ): Promise<CalendarActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
 
@@ -372,7 +372,7 @@ export async function cancelBooking(
   reason: string
 ): Promise<CalendarActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(bookingId)) return { ok: false, error: "Invalid booking ID." };
 
@@ -427,7 +427,7 @@ export async function rescheduleBooking(
   reason: string
 ): Promise<CalendarActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(bookingId) || !isUuid(newSlotId)) {
     return { ok: false, error: "Invalid booking or slot ID." };

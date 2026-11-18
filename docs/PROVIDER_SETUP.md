@@ -1,5 +1,19 @@
 # Email provider setup
 
+## Supabase Auth and organization onboarding
+
+For the multi-tenant rollout, set `NEXT_PUBLIC_SITE_URL` to the deployed
+application origin and `SUPABASE_SERVICE_ROLE_KEY` as a server-only encrypted
+environment value. The team invitation action needs the service key; never name
+it with a `NEXT_PUBLIC_` prefix or send it to the browser.
+
+In Supabase Auth, configure the production Site URL and allow-list the callback
+and invite destinations ending in `/auth/callback` and `/onboarding`. Configure
+email confirmation and a production SMTP provider before enabling public signup.
+The login page hides account creation unless `NEXT_PUBLIC_SIGNUP_ENABLED=1` is
+set; public signup also needs to be enabled in Supabase Auth. Keep both disabled
+until signup abuse controls, usage limits, and billing decisions are ready.
+
 ## Brevo transactional email
 
 1. In Brevo, open **Settings → SMTP & API → API Keys & MCP** and create an API key for Ledgerwise. Store it securely; do not commit it or expose it in browser code.

@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getWritableSessionUser } from "@/lib/server/auth";
 import { newImportFields } from "@/lib/sources/verification";
 import { validateRow, type RawRow, type ValidRow } from "@/lib/import-schema";
 
@@ -24,9 +25,7 @@ export async function importRows(
   source: "csv" | "autonomous_discovery" = "csv",
 ): Promise<ImportResult> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ...empty, error: "Not signed in." };
   if (rows.length === 0) return { ...empty, error: "The file has no rows." };
   if (rows.length > 2000) return { ...empty, error: "Max 2000 rows per import." };

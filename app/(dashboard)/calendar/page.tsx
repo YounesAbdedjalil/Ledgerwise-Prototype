@@ -9,6 +9,10 @@ import SlotCreator from "@/components/calendar/SlotCreator";
 import SlotDeleteButton from "@/components/calendar/SlotDeleteButton";
 import BookSlotForm from "@/components/calendar/BookSlotForm";
 import BookingActions from "@/components/calendar/BookingActions";
+import CalendarMonthView, {
+  type CalendarBookingEvent,
+} from "@/components/calendar/CalendarMonthView";
+import { DEFAULT_TIMEZONE, localDateKey } from "@/lib/calendar/time";
 
 type Slot = {
   id: string;
@@ -31,6 +35,19 @@ type Booking = {
   calendar_sync_status: string;
   company_id: string | null;
   conversation_id: string | null;
+  companies: { name: string } | { name: string }[] | null;
+};
+
+type CalendarBookingRow = {
+  id: string;
+  status: string;
+  prospect_name: string | null;
+  prospect_email: string;
+  timezone: string;
+  calendar_slots:
+    | { start_time: string; end_time: string; timezone: string }
+    | { start_time: string; end_time: string; timezone: string }[]
+    | null;
   companies: { name: string } | { name: string }[] | null;
 };
 
@@ -72,6 +89,7 @@ export default async function CalendarPage({
   const [
     { data: slotData, error: slotError },
     { data: bookingData },
+    { data: upcomingBookingData },
     { data: companyData },
     { data: conversationData },
   ] = await Promise.all([
@@ -89,6 +107,14 @@ export default async function CalendarPage({
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
+      .from("bookings")
+      .select(
+        "id,status,prospect_name,prospect_email,timezone,calendar_slots!inner(start_time,end_time,timezone),companies(name)"
+      )
+      .in("status", ["pending", "confirmed", "needs_human"])
+      .gte("calendar_slots.start_time", now)
+      .limit(1000),
+    supabase
       .from("companies")
       .select("id,name,contact_name,contact_email")
       .order("name")
@@ -102,6 +128,7 @@ export default async function CalendarPage({
 
   const slots = (slotData ?? []) as Slot[];
   const bookings = (bookingData ?? []) as unknown as Booking[];
+  const upcomingBookingRows = (upcomingBookingData ?? []) as unknown as CalendarBookingRow[];
   const companies = (companyData ?? []) as Company[];
   const conversations = (conversationData ?? []) as unknown as Conversation[];
   const google = googleCalendarStatus();
@@ -125,16 +152,42 @@ export default async function CalendarPage({
       label: formatSlotRange(slot.start_time, slot.end_time, slot.timezone),
     }));
 
+  const calendarEvents: CalendarBookingEvent[] = upcomingBookingRows.flatMap((booking) => {
+    const slot = Array.isArray(booking.calendar_slots)
+      ? booking.calendar_slots[0]
+      : booking.calendar_slots;
+    if (!slot) return [];
+    return [{
+      id: booking.id,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      timezone: slot.timezone || booking.timezone || DEFAULT_TIMEZONE,
+      status: booking.status,
+      prospectName: booking.prospect_name,
+      prospectEmail: booking.prospect_email,
+      companyName: companyName(booking.companies),
+    }];
+  });
+  const calendarTimezone = calendarEvents[0]?.timezone ?? DEFAULT_TIMEZONE;
+  const initialCalendarDate = localDateKey(new Date(now), calendarTimezone);
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Calendar / Bookings</h1>
+        <h1 className="text-2xl font-semibold">Calendar &amp; Bookings</h1>
         <p className="mt-1 max-w-3xl text-sm text-gray-600">
           The internal calendar is the source of truth. Defaults are America/New_York,
           30-minute slots, 9:00–17:00 local time, with durations from 15 to 120 minutes.
           Only pending, confirmed, and needs-human bookings hold a slot.
         </p>
       </div>
+
+      <CalendarMonthView
+        events={calendarEvents}
+        initialDate={initialCalendarDate}
+        initialTimezone={calendarTimezone}
+        currentInstant={now}
+      />
 
       <div
         className={`rounded border p-4 text-sm ${

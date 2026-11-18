@@ -86,9 +86,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
+  const { data: organizationId } = await supabase.rpc("current_organization_id");
+  const { data: canDiscover } = organizationId
+    ? await supabase.rpc("has_org_role", {
+        p_org: organizationId,
+        p_roles: ["owner", "admin", "member"],
+      })
+    : { data: false };
+  if (!canDiscover) {
+    return NextResponse.json({ error: "You do not have permission to run discovery." }, { status: 403 });
+  }
+
   if (!process.env.TAVILY_API_KEY) {
     return NextResponse.json({ error: "TAVILY_API_KEY is not configured." }, { status: 503 });
   }
+
+  const { data: quotaAllowed, error: quotaError } = await supabase.rpc("consume_organization_quota", {
+    p_meter: "discovery",
+  });
+  if (quotaError) return NextResponse.json({ error: "Could not check organization usage." }, { status: 503 });
+  if (!quotaAllowed) return NextResponse.json({ error: "Daily organization discovery limit reached." }, { status: 429 });
 
   const body = await request.json().catch(() => ({}));
   const requested = Number.parseInt(String(body?.target ?? ""), 10);
@@ -190,7 +207,7 @@ export async function POST(request: Request) {
               checked_at: new Date().toISOString(),
               checked_by: user.id,
             })),
-            { onConflict: "host" }
+            { onConflict: "organization_id,host" }
           );
           if (error) {
             negativeCache = "unavailable";

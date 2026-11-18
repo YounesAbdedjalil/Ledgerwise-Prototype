@@ -1,82 +1,36 @@
 # Security model
 
-## Scope
+## Tenant boundary
 
-This is a single-team internal prototype. It is not a multi-tenant product. The
-Supabase policies use the `authenticated` role and `using (true)` checks. Any
-signed-in user can read and, where allowed, write the same rows.
+Ledgerwise uses a shared Supabase database with organization-scoped rows. Every customer-owned table has a non-null `organization_id`: companies, sources, scores, drafts, email events, conversations, messages, calendar slots, bookings, suppression records, audit logs, and discovery candidates.
 
-Do not present this as per-user or per-tenant isolation. If the prototype is ever
-opened to more than one team, add an organization/team column, store the caller's
-team, and scope every policy and query to it.
+A signed-in user's active organization is stored in `public.users.active_organization_id`. The database resolves it only when the user has a membership. The organization switch RPC verifies membership before changing it. RLS limits reads and writes to that active organization, and database triggers reject tenant changes and cross-organization foreign references, including writes through SECURITY DEFINER calendar and suppression RPCs.
 
-## Authentication
+Never add a customer-owned table without an organization key, RLS policies, explicit grants, and cross-tenant relationship checks. Do not use a service-role client for tenant data unless every operation explicitly scopes organization IDs.
 
-- Supabase email/password login is required by the proxy for every route except
-  `/login`.
-- New signups are expected to be disabled in Supabase.
-- The app never uses the `service_role` key in browser code.
+## Roles
 
-## Row-level security
+Organization roles are `owner`, `admin`, `member`, and `viewer`.
 
-Migration 01 enables RLS and replaces policies on:
+- Owners and admins can manage team membership; only owners can grant admin access.
+- Members can use the prospect, email, conversation, and calendar workflows.
+- Viewers are read-only. Server actions and the discovery endpoint check write permission before doing provider work, and database policies enforce it again.
+- Audit records and email events are append-only. Suppression records can only be added through the authenticated RPC and are append-only.
 
-`companies`, `company_sources`, `qualification_scores`, `email_drafts`,
-`email_events`, `conversations`, `messages`, `calendar_slots`, `bookings`,
-`suppressed_contacts`, `audit_logs`.
+The migration assigns existing rows and users to one legacy organization. The oldest existing public user becomes its owner. Review that account assignment before rollout.
 
-The rules are deliberately narrow where the product requires it:
+## Authentication and invitations
 
-- `email_events`, `audit_logs`, and `suppressed_contacts` allow select and insert
-  only. There is no update or delete policy.
-- `bookings` allows select, insert, and update. There is no delete policy;
-  cancellation is the supported path.
-- `calendar_slots` allows delete, but the application refuses to delete a slot
-  with an active booking.
+Supabase Auth handles passwords and email confirmation. The app includes an auth callback route and organization onboarding. Team invitations use the server-only `SUPABASE_SERVICE_ROLE_KEY`; never expose or log it. Configure Auth email delivery and redirect allow-list entries for `/auth/callback` and `/onboarding`.
 
-Database triggers also reject update/delete on `suppressed_contacts` and
-`audit_logs`, so a future policy mistake does not silently rewrite an opt-out or
-audit record.
+Configure signup confirmation, CAPTCHA / abuse protection, password policy, session settings, and SMTP in Supabase Auth before enabling public registrations. Sign-up alone does not create a workspace until the user creates one or accepts an invitation.
 
-## Source verification
+## Secrets and providers
 
-Every imported source starts as `pending_review`. A source is eligible to support
-email personalization only when all of the following are true:
+Keep all credentials in encrypted host environment settings and local `.env.local`. The service-role key must remain server-only. Current AI, Tavily, Brevo, and Google Calendar credentials are application-wide environment values, not customer-specific integration credentials. Do not claim customer-managed integrations or independent provider billing until those are implemented.
 
-- `verification_status = 'verified'`;
-- `reviewed_by` and `reviewed_at` are set by a signed-in user;
-- the claim type is one of the email-usable types;
-- the URL is a real HTTP(S) URL and the evidence is non-empty.
+## Limits
 
-In addition, the recipient address must appear in a **verified `contact` source**
-for that company. Creating, revising, or sending a draft is blocked until that
-contact source is verified. A human editing `companies.contact_email` is not
-enough on its own.
+The application has no subscription billing, per-organization usage metering, distributed rate limiting, data export/deletion workflow, or organization deletion/ownership-transfer UI yet. These remain launch requirements for a commercial SaaS. Inbound email sync is also not connected, and email sending remains simulated unless the shared Brevo live-send switch is enabled.
 
-Rejection requires a note. Resetting a review requires a reason. Both actions are
-written to `audit_logs`.
-
-## Contact suppression
-
-`suppressed_contacts` is append-only. The `suppress_contact` RPC normalizes the
-email, inserts once, and records an audit row. `is_suppressed` is checked before
-creating or revising an email draft, before a simulated send, before approving an
-AI reply, and before creating, confirming, or rescheduling a booking. Inbound
-opt-out messages suppress the contact before any reply is generated. Cancelling a
-booking remains allowed so an existing hold can always be released.
-
-## Sending and calendar claims
-
-- No real email is sent. Approved drafts become `sent_simulated`, and every
-  message row is written with `is_simulated = true`.
-- The internal calendar is the source of truth for bookings. Google Calendar is
-  optional. The UI reports it as not operational until credentials are present,
-  the operator explicitly marks it verified, and sync is enabled. When enabled,
-  booking creation, rescheduling, and cancellation create, update, or delete the
-  linked Google event; failures never roll back the internal booking.
-
-## Secrets
-
-Keep Supabase, AI, and Google credentials in `.env.local` and in the hosting
-provider's environment settings. Never commit `.env.local`. The research and
-test code does not print keys.
+Apply database changes only through reviewed migrations. Verify policies and tenant isolation with at least two test organizations before production.

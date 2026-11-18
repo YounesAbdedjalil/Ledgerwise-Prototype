@@ -79,7 +79,7 @@ export default function DraftEditor({
           onChange={(event) => setSubjectValue(event.target.value)}
           disabled={locked || pending}
           maxLength={120}
-          className="w-full rounded border bg-white px-3 py-2 text-sm disabled:bg-gray-100"
+          className="email-draft-field w-full rounded border px-3 py-2 text-sm disabled:bg-gray-100"
         />
       </label>
 
@@ -93,7 +93,7 @@ export default function DraftEditor({
           disabled={locked || pending}
           rows={14}
           maxLength={4_000}
-          className="w-full rounded border bg-white px-3 py-2 text-sm leading-6 disabled:bg-gray-100"
+          className="email-draft-field w-full rounded border px-3 py-2 text-sm leading-6 disabled:bg-gray-100"
         />
       </label>
 

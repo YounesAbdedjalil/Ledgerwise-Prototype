@@ -28,11 +28,17 @@ Calendar sync. Cal.com remains a future integration option.
   review, scoring, email drafts and review, reply handling with guardrails,
   internal calendar and bookings, and optional Google Calendar create/update/
   delete sync.
+- Multi-tenant foundation is present in code: organizations, memberships, roles,
+  organization onboarding/switching, and tenant-scoped RLS. See
+  `docs/SAAS_READINESS.md`; this foundation is not active until its migrations
+  are applied and validated in staging.
 - Email sending is simulated. No real provider is connected.
 - Google Calendar is optional and is not claimed operational until real OAuth,
   event create/update/delete sync, and an external check have been verified.
 - Cal.com is not integrated. The internal calendar provides real stored slots,
   occupancy rules, and bookings for the prototype.
+- Billing, organization usage limits, customer-managed integrations, inbound
+  email synchronization, and export/deletion workflows are not implemented.
 
 ## Email sending
 Approval queue only. Any send is labeled "Simulated send: demo path"

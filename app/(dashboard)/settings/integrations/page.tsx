@@ -77,12 +77,12 @@ export default function IntegrationsPage() {
 
       <section className="rounded-xl border border-blue-200 bg-blue-50 p-5">
         <h2 className="font-semibold text-blue-950">Setup instructions</h2>
-        <p className="mt-1 text-sm text-blue-900">Follow the account-creation, API-key, endpoint, and environment-variable checklist in <code>docs/PROVIDER_SETUP.md</code>. Keep all secret keys in <code>.env.local</code> and your hosting provider's encrypted environment settings.</p>
+        <p className="mt-1 text-sm text-blue-900">Follow the account-creation, API-key, endpoint, and environment-variable checklist in <code>docs/PROVIDER_SETUP.md</code>. Keep all secret keys in <code>.env.local</code> and your hosting provider&apos;s encrypted environment settings.</p>
       </section>
 
       <section className="rounded-xl border border-amber-200 bg-amber-50 p-5">
         <h2 className="font-semibold text-amber-950">Not yet connected</h2>
-        <p className="mt-1 text-sm text-amber-900">Inbound email synchronization, Cal.com, subscription billing, and multi-organization membership still require the database schema and provider setup described in the project documentation. Do not treat this page as a production readiness certification.</p>
+        <p className="mt-1 text-sm text-amber-900">Inbound email synchronization, Cal.com, subscription billing, and per-organization provider credentials are not connected. Basic daily quotas are enforced per organization; plan-based limits are not connected. Organization membership and role enforcement are available after database migrations 07 and 08. This page checks environment-variable presence only; it is not a production readiness certification.</p>
       </section>
     </div>
   );

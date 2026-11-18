@@ -1,5 +1,5 @@
 -- Ledgerwise migration 04
--- Transactional calendar operations and restricted table mutations.
+-- Transactional, tenant-scoped calendar operations and restricted mutations.
 --
 -- Apply only after reviewing this migration alongside migrations 01-03.
 -- All calendar mutations use one transaction-scoped advisory lock.
@@ -62,7 +62,8 @@ begin
   if exists (
     select 1
     from public.calendar_slots s
-    where s.is_available = true
+    where s.organization_id = public.current_organization_id()
+      and s.is_available = true
       and s.start_time < p_end_time
       and s.end_time > p_start_time
   ) then
@@ -139,6 +140,7 @@ begin
   into v_slot
   from public.calendar_slots
   where id = p_slot_id
+    and organization_id = public.current_organization_id()
   for update;
 
   if not found then
@@ -148,7 +150,8 @@ begin
   if exists (
     select 1
     from public.bookings b
-    where b.slot_id = p_slot_id
+    where b.organization_id = public.current_organization_id()
+      and b.slot_id = p_slot_id
       and b.status in ('pending', 'confirmed', 'needs_human')
   ) then
     raise exception 'Cannot delete a slot with an active booking';
@@ -157,13 +160,15 @@ begin
   if exists (
     select 1
     from public.bookings b
-    where b.slot_id = p_slot_id
+    where b.organization_id = public.current_organization_id()
+      and b.slot_id = p_slot_id
   ) then
     raise exception 'Cannot delete a slot referenced by booking history';
   end if;
 
   delete from public.calendar_slots
-  where id = p_slot_id;
+  where id = p_slot_id
+    and organization_id = public.current_organization_id();
 
   insert into public.audit_logs (
     actor_id, action, entity_type, entity_id, detail
@@ -239,7 +244,8 @@ begin
   if exists (
     select 1
     from public.suppressed_contacts s
-    where lower(s.email) = v_email
+    where s.organization_id = public.current_organization_id()
+      and lower(s.email) = v_email
   ) then
     raise exception 'This contact is suppressed';
   end if;
@@ -249,6 +255,7 @@ begin
     into v_conversation_company_id, v_conversation_email, v_conversation_status
     from public.conversations c
     where c.id = p_conversation_id
+      and c.organization_id = public.current_organization_id()
     for update;
 
     if not found then
@@ -274,6 +281,7 @@ begin
   into v_slot
   from public.calendar_slots
   where id = p_slot_id
+    and organization_id = public.current_organization_id()
   for update;
 
   if not found then
@@ -292,7 +300,8 @@ begin
     select 1
     from public.bookings b
     join public.calendar_slots s on s.id = b.slot_id
-    where b.status in ('pending', 'confirmed', 'needs_human')
+    where b.organization_id = public.current_organization_id()
+      and b.status in ('pending', 'confirmed', 'needs_human')
       and s.start_time < v_slot.end_time
       and s.end_time > v_slot.start_time
   ) then
@@ -323,7 +332,8 @@ begin
     update public.conversations
     set status = 'human_takeover',
         booking_request = false
-    where id = p_conversation_id;
+    where id = p_conversation_id
+      and organization_id = public.current_organization_id();
   end if;
 
   insert into public.audit_logs (
@@ -379,6 +389,7 @@ begin
   into v_booking
   from public.bookings
   where id = p_booking_id
+    and organization_id = public.current_organization_id()
   for update;
 
   if not found then
@@ -392,7 +403,8 @@ begin
   if exists (
     select 1
     from public.suppressed_contacts s
-    where lower(s.email) = lower(v_booking.prospect_email)
+    where s.organization_id = public.current_organization_id()
+      and lower(s.email) = lower(v_booking.prospect_email)
   ) then
     raise exception 'This contact is suppressed';
   end if;
@@ -405,6 +417,7 @@ begin
   into v_slot
   from public.calendar_slots
   where id = v_booking.slot_id
+    and organization_id = public.current_organization_id()
   for update;
 
   if not found or not v_slot.is_available or v_slot.start_time <= now() then
@@ -415,7 +428,8 @@ begin
     select 1
     from public.bookings b
     join public.calendar_slots s on s.id = b.slot_id
-    where b.id <> p_booking_id
+    where b.organization_id = public.current_organization_id()
+      and b.id <> p_booking_id
       and b.status in ('pending', 'confirmed', 'needs_human')
       and s.start_time < v_slot.end_time
       and s.end_time > v_slot.start_time
@@ -425,7 +439,8 @@ begin
 
   update public.bookings
   set status = 'confirmed'
-  where id = p_booking_id;
+  where id = p_booking_id
+    and organization_id = public.current_organization_id();
 
   insert into public.audit_logs (
     actor_id, action, entity_type, entity_id, detail
@@ -479,6 +494,7 @@ begin
   into v_booking
   from public.bookings
   where id = p_booking_id
+    and organization_id = public.current_organization_id()
   for update;
 
   if not found then
@@ -491,7 +507,8 @@ begin
 
   update public.bookings
   set status = 'cancelled'
-  where id = p_booking_id;
+  where id = p_booking_id
+    and organization_id = public.current_organization_id();
 
   insert into public.audit_logs (
     actor_id, action, entity_type, entity_id, detail
@@ -552,6 +569,7 @@ begin
   into v_booking
   from public.bookings
   where id = p_booking_id
+    and organization_id = public.current_organization_id()
   for update;
 
   if not found then
@@ -569,7 +587,8 @@ begin
   if exists (
     select 1
     from public.suppressed_contacts s
-    where lower(s.email) = lower(v_booking.prospect_email)
+    where s.organization_id = public.current_organization_id()
+      and lower(s.email) = lower(v_booking.prospect_email)
   ) then
     raise exception 'This contact is suppressed';
   end if;
@@ -580,13 +599,15 @@ begin
   perform s.id
   from public.calendar_slots s
   where s.id in (v_old_slot_id, p_new_slot_id)
+    and s.organization_id = public.current_organization_id()
   order by s.id
   for update;
 
   select *
   into v_new_slot
   from public.calendar_slots
-  where id = p_new_slot_id;
+  where id = p_new_slot_id
+    and organization_id = public.current_organization_id();
 
   if not found then
     raise exception 'New calendar slot not found';
@@ -600,7 +621,8 @@ begin
     select 1
     from public.bookings b
     join public.calendar_slots s on s.id = b.slot_id
-    where b.id <> p_booking_id
+    where b.organization_id = public.current_organization_id()
+      and b.id <> p_booking_id
       and b.status in ('pending', 'confirmed', 'needs_human')
       and s.start_time < v_new_slot.end_time
       and s.end_time > v_new_slot.start_time
@@ -611,7 +633,8 @@ begin
   update public.bookings
   set slot_id = p_new_slot_id,
       status = 'pending'
-  where id = p_booking_id;
+  where id = p_booking_id
+    and organization_id = public.current_organization_id();
 
   insert into public.audit_logs (
     actor_id, action, entity_type, entity_id, detail
@@ -677,7 +700,8 @@ begin
       end,
       calendar_sync_status = p_status,
       calendar_synced_at = now()
-  where id = p_booking_id;
+  where id = p_booking_id
+    and organization_id = public.current_organization_id();
 
   if not found then
     raise exception 'Booking not found';

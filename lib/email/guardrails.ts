@@ -4,7 +4,9 @@ export type GuardrailIssue = {
 };
 
 const PRICE_RE =
-  /(\$|€|£|\busd\b|\bprice|\bpricing|\bcost|\bcosts|\bfee|\bfees|\bquote|\bquotes|\brates?\b|\bdiscount|\bbudget|\bper month\b|\bmonthly\b)/i;
+  /(\$|€|£|\busd\b|\bprices?\b|\bpricing\b|\bquotes?\b|\bdiscounts?\b|\bbudget\b|\bper month\b)/i;
+const SERVICE_PRICE_RE =
+  /\b(?:our|your|ledgerwise(?:'s)?|the service(?:'s)?)\s+(?:costs?|fees?|rates?)\b|\b(?:costs?|fees?|rates?)\s+(?:for\s+(?:ledgerwise|our service)|to\s+(?:use|work with)|per\s+(?:month|hour))\b|\b(?:charge|charges|charged|charging)\s+(?:(?:you|customers?)\s+)?(?:a\s+)?(?:fee|rate)\b/i;
 const PROMISE_RE =
   /\bguarantee|\bguaranteed|\bpromise|\bpromised|\brisk[- ]free|\b100%\b|\bno[- ]risk\b/i;
 const HUMAN_CLAIM_RE =
@@ -14,11 +16,11 @@ const PRESSURE_RE =
 
 export function scanOutboundMessage(text: string): GuardrailIssue[] {
   const issues: GuardrailIssue[] = [];
-  if (PRICE_RE.test(text)) {
+  if (PRICE_RE.test(text) || SERVICE_PRICE_RE.test(text)) {
     issues.push({
       code: "pricing",
       message:
-        "Pricing language is blocked. Never quote, estimate, or discuss price, fees, rates, discounts, or budget in an automated message.",
+        "Ledgerwise pricing language is blocked. Never quote, estimate, or discuss our price, fees, rates, discounts, or budget in an automated message.",
     });
   }
   if (PROMISE_RE.test(text)) {

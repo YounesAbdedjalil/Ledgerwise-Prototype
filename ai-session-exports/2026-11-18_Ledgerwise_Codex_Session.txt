@@ -1,0 +1,171 @@
+LEDGERWISE — CODEX SESSION EXPORT
+================================
+
+Date: 2026-11-18
+Repository: ledgerwise-prototype
+Export type: Conversation and work summary
+
+This is a readable export of the work and decisions in this Codex session. It is
+not a raw platform transcript. The long Supabase schema supplied during the
+session is preserved separately at:
+  supabase/schema_databaseschema.sql
+
+
+SESSION SUMMARY
+---------------
+
+The user asked for an initial app analysis, guidance on retrieving a Supabase
+schema dump, a SaaS-readiness assessment, and implementation of the multi-tenant
+SaaS foundation. The user chose the oldest existing account to own the legacy
+workspace. They later applied migrations 07 and 08 in Supabase, confirmed the
+application still worked, and deferred deployment until last.
+
+The user then requested a UI redesign based on a dark navy/cyan visual reference,
+a calendar view above the Calendar & Bookings page, a fix for bright AI reply
+bubbles, stronger AI-generated outreach emails, and improved text contrast in the
+email editor.
+
+
+CONVERSATION AND WORK LOG
+-------------------------
+
+1. Supabase schema and initial analysis
+
+User: Asked for an app feature/core-function analysis and how to retrieve the
+Supabase schema, first without the CLI and then with the CLI.
+
+User: Supplied the app's public schema and RLS policy information, followed by a
+full SQL schema dump. The schema dump is preserved in the file listed above.
+
+Assistant: Reviewed the schema and repository in preparation for a SaaS
+readiness assessment.
+
+2. SaaS foundation
+
+User: Asked whether the app was ready for SaaS deployment, then asked to perform
+the steps required to make it SaaS-ready.
+
+User: Selected “Use the oldest existing account” as the legacy workspace owner.
+
+Assistant/work completed: Added organization onboarding and switching, team
+membership/invitations and role management, tenant organization IDs, database
+RLS and RPC protections, per-organization daily quotas, server-side write-role
+checks, repeatable migration files, and rollout/security documentation. The
+legacy data migration assigns existing rows to one workspace and makes the
+oldest account the owner by default.
+
+Validation at that stage: TypeScript, lint, diff checks, and a production build
+passed. No database migrations were applied by Codex and no deployment was made.
+
+3. Migration rollout and append-only trigger correction
+
+User: Asked which migrations to apply through Supabase SQL Editor.
+
+Assistant: Based on the supplied schema dump, recommended applying only:
+  20261118_07_multitenant_foundation.sql
+  20261118_08_tenant_safe_calendar_operations.sql
+in that order, after backup and duplicate checks. The earlier migrations 01–06
+were already reflected in the supplied schema.
+
+User: Reported migration 07 failed because updating audit_logs was blocked by its
+append-only trigger.
+
+Assistant/work completed: Corrected migration 07 to temporarily disable the
+append-only triggers on audit_logs and suppressed_contacts only while backfilling
+organization metadata, and to restore them before commit. Added migration failure
+guidance to the SaaS readiness documentation.
+
+User: Ran a rollback verification query. It showed organizations_table was NULL
+and both organization_id column checks were false, confirming a clean rollback.
+
+User: Later confirmed both migrations 07 and 08 had been applied and that the
+application appeared intact.
+
+4. UI redesign
+
+User: Shared a visual reference and requested a similar interface, colors, and
+buttons.
+
+Assistant/work completed: Restyled the dashboard with a deep navy workspace,
+cyan highlights, compact vertical icon rail, glass-like surfaces, updated
+navigation, and matching primary actions. Updated integration setup copy to
+reflect current organization migration and quota state.
+
+Validation: Lint, TypeScript, production build, and diff checks passed.
+
+5. Calendar view
+
+User: Asked to add a calendar at the top of Calendar & Bookings to see upcoming
+bookings.
+
+Assistant/work completed: Added a month view for upcoming pending, confirmed,
+and needs-human bookings, with previous/next month controls, day selection,
+booking details, and timezone selection. The view uses a tenant-scoped Supabase
+query joining bookings to their calendar slots.
+
+Validation: Lint, TypeScript, production build, and diff checks passed.
+
+6. Conversation message contrast
+
+User: Shared a screenshot showing bright white AI reply bubbles and asked for a
+fix.
+
+Assistant/work completed: Replaced light message bubble styles with dark,
+distinct surfaces for prospect, AI, and human messages, with readable text.
+
+Validation: Lint, TypeScript, and production build passed.
+
+7. AI email drafting improvements
+
+User: Said email drafting should better appeal to target prospects.
+
+Assistant/work completed: Improved verified-source selection to favor pain and
+growth signals and maintain fact diversity; strengthened the drafting prompt to
+use one grounded hook, connect it cautiously to bookkeeping relevance, use a
+low-pressure next step, avoid invented claims, and ignore instructions embedded
+in source text. Improved the fallback email. Refined pricing checks so Ledgerwise
+pricing remains blocked while relevant verified payment-processor or marketplace
+fee references are allowed.
+
+Validation: Lint, TypeScript, and production build passed.
+
+8. Email editor text contrast
+
+User: Reported that generated email text was too dark to read and asked for white
+body text.
+
+Assistant/work completed: Styled the draft subject and body fields with dark
+backgrounds and white text, including disabled/read-only fields.
+
+Validation: Lint, TypeScript, production build, and diff checks passed.
+
+9. Session export
+
+User: Asked to export this AI session to a TXT file.
+
+Assistant: Created this file.
+
+
+CURRENT DELIVERABLES
+--------------------
+
+Key SaaS implementation and rollout artifacts:
+  supabase/migrations/20261118_07_multitenant_foundation.sql
+  supabase/migrations/20261118_08_tenant_safe_calendar_operations.sql
+  docs/SAAS_READINESS.md
+  docs/MIGRATION_INSTRUCTIONS.md
+
+Key UI and email improvements:
+  app/(dashboard)/layout.tsx
+  app/globals.css
+  app/(dashboard)/calendar/page.tsx
+  components/calendar/CalendarMonthView.tsx
+  app/(dashboard)/conversations/[id]/page.tsx
+  components/emails/DraftEditor.tsx
+  lib/email/draft.ts
+  lib/email/guardrails.ts
+
+Database rollout: The user reported applying migrations 07 and 08.
+Application deployment: Not performed; the user said deployment should be last.
+Billing: Not implemented, by user preference.
+

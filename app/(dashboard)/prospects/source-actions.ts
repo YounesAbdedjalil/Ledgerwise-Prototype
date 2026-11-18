@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser } from "@/lib/server/auth";
+import { getWritableSessionUser } from "@/lib/server/auth";
 import { writeAudit } from "@/lib/server/audit";
 import { isUuid, trimText } from "@/lib/validation";
 import {
@@ -54,7 +54,7 @@ function revalidateSourcePages(companyId: string) {
 
 export async function verifySource(sourceId: string): Promise<SourceActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
 
@@ -147,7 +147,7 @@ export async function rejectSource(
   note: string
 ): Promise<SourceActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
 
@@ -198,7 +198,7 @@ export async function resetSourceToPending(
   reason: string
 ): Promise<SourceActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(sourceId)) return { ok: false, error: "Invalid source ID." };
 

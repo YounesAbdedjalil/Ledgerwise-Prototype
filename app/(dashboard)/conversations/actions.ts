@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { generate } from "@/lib/ai";
 import { createClient } from "@/lib/supabase/server";
-import { getSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { getWritableSessionUser, type ServerSupabase } from "@/lib/server/auth";
+import { consumeOrganizationQuota } from "@/lib/server/quota";
 import { writeAudit } from "@/lib/server/audit";
 import { isSuppressed, suppressContact } from "@/lib/suppression";
 import { isUuid, trimText } from "@/lib/validation";
@@ -177,7 +178,7 @@ export async function addProspectReply(
   body: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
 
@@ -401,6 +402,13 @@ export async function addProspectReply(
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
 
+  const quota = await consumeOrganizationQuota(supabase, "ai_generation");
+  if (!quota.allowed) {
+    await supabase.from("conversations").update({ status: "needs_human" }).eq("id", conversationId);
+    revalidateConversation(conversationId);
+    return { ok: false, error: quota.error };
+  }
+
   let composition;
   try {
     composition = await composeReply(
@@ -469,7 +477,7 @@ export async function approveAiMessage(
   messageId: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(messageId)) return { ok: false, error: "Invalid message ID." };
 
@@ -558,7 +566,7 @@ export async function discardAiMessage(
   messageId: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(messageId)) return { ok: false, error: "Invalid message ID." };
 
@@ -607,7 +615,7 @@ export async function takeoverConversation(
   conversationId: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
 
@@ -646,7 +654,7 @@ export async function sendHumanReply(
   body: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
 
@@ -729,7 +737,7 @@ export async function closeConversation(
   conversationId: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
 
@@ -762,7 +770,7 @@ export async function suppressConversation(
   reason: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
 
@@ -817,7 +825,7 @@ export async function resolveBookingRequest(
   conversationId: string
 ): Promise<ConversationActionResult> {
   const supabase = await createClient();
-  const user = await getSessionUser(supabase);
+  const user = await getWritableSessionUser(supabase);
   if (!user) return { ok: false, error: "Not signed in." };
   if (!isUuid(conversationId)) return { ok: false, error: "Invalid conversation ID." };
 
